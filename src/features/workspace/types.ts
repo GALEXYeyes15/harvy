@@ -1,0 +1,17 @@
+export type FileNode = {
+  name: string;
+  path: string;
+  kind: "file" | "directory";
+  children?: FileNode[];
+};
+
+export type WorkspaceDocument = {
+  id: string;
+  title: string;
+  content: string;
+  /** Filesystem path when the tab is backed by a real file (same as `id` for opened files). */
+  sourcePath: string;
+  kind: "text" | "placeholder";
+  /** Markdown (or legacy HTML) last successfully written to disk for this tab (`sourcePath`). */
+  lastSavedContent: string;
+};

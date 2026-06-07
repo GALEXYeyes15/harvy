@@ -1,0 +1,425 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /*
+   * Sidebar text/inputs align to the visible left edge of the workspace toggle icon:
+   * toggle wrapper uses left-2; button is h-8 w-8; PanelLeft uses size={17} (see AppShell).
+   * Icon is centered in the hit target: inset = 0.5rem + (2rem - 17px) / 2.
+   */
+  :root {
+    --harvy-sidebar-content-inset: calc(0.5rem + (2rem - 17px) / 2);
+    --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-content:
+      "Libre Baskerville", "Baskerville", "Baskerville Old Face", "Palatino", "Palatino Linotype",
+      "Book Antiqua", Georgia, serif;
+    /* Light: unified warm paper canvas (editor, tabs, sidebars share one surface). */
+    --color-canvas: #faf7f2;
+    --color-panel: #faf7f2;
+    --color-stage: #faf7f2;
+    --color-mist: #f6f2eb;
+    --color-page: #faf7f2;
+    /* Type — soft charcoal, not pure black */
+    --color-ink: #2a2622;
+    --color-muted: #6e6860;
+    /* Structure — warm, low-contrast rules */
+    --color-line: #e0d8cf;
+    /* Focus: dusty blue-gray — use for focus-visible / active affordances only */
+    --color-focus-ring: #5f6a7a;
+    color-scheme: light;
+  }
+
+  html.dark {
+    /* Deep charcoal dark mode with gentle tonal separation (no near-black base). */
+    --color-canvas: #121212;
+    --color-panel: #151515;
+    --color-stage: #1a1a1a;
+    --color-mist: #171717;
+    --color-page: #1d1d1d;
+    --color-ink: #e5e5e5;
+    --color-muted: #a1a1a1;
+    --color-line: #ffffff14;
+    --color-focus-ring: #6a7588;
+    color-scheme: dark;
+  }
+
+  html {
+    font-family: var(--font-ui);
+    transition: background-color 0.15s ease-out, color 0.15s ease-out;
+  }
+
+  html,
+  body,
+  #root {
+    @apply h-full min-h-0 antialiased;
+  }
+
+  /* Shell fills the window; scroll lives inside the editor column only */
+  #root {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  body {
+    @apply bg-canvas text-ink;
+    font-family: var(--font-ui);
+  }
+
+  /* Main writing surface — Baskerville / Libre Baskerville stack */
+  .editor-content {
+    font-family: var(--font-content);
+    line-height: 1.75;
+    letter-spacing: 0.2px;
+  }
+
+  /* TipTap / ProseMirror rich text (matches former textarea rhythm) */
+  .ProseMirror-harvy p {
+    margin-top: 0.35em;
+    margin-bottom: 0.35em;
+  }
+
+  .ProseMirror-harvy h1,
+  .ProseMirror-harvy h2,
+  .ProseMirror-harvy h3 {
+    font-family: var(--font-content);
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: 0.02em;
+    margin-top: 0.65em;
+    margin-bottom: 0.35em;
+  }
+
+  .ProseMirror-harvy h1 {
+    font-size: 1.65rem;
+  }
+
+  .ProseMirror-harvy h2 {
+    font-size: 1.35rem;
+  }
+
+  .ProseMirror-harvy h3 {
+    font-size: 1.15rem;
+  }
+
+  .ProseMirror-harvy ul,
+  .ProseMirror-harvy ol {
+    margin: 0.45em 0;
+    padding-left: 1.35rem;
+  }
+
+  .ProseMirror-harvy li {
+    margin: 0.2em 0;
+  }
+
+  .ProseMirror-harvy blockquote {
+    margin: 0.5em 0;
+    padding-left: 1rem;
+    border-left: 2px solid color-mix(in oklab, var(--color-line) 80%, transparent);
+    color: color-mix(in oklab, var(--color-ink) 88%, var(--color-muted));
+  }
+
+  /* Outline placeholders — Create Outline Mode: definitional text (editable body). */
+  .ProseMirror-harvy.ProseMirror-harvy--outline-authoring p.harvy-outline-placeholder {
+    margin-top: 0.35em;
+    margin-bottom: 0.35em;
+    font-style: italic;
+    color: color-mix(in oklab, var(--color-muted) 82%, var(--color-ink));
+  }
+
+  /* Writing mode: structural placeholders (empty body; hint via `data-placeholder` + .is-empty). */
+  .ProseMirror-harvy:not(.ProseMirror-harvy--outline-authoring) p.harvy-outline-placeholder {
+    margin-top: 0.35em;
+    margin-bottom: 0.35em;
+    font-style: italic;
+    color: color-mix(in oklab, var(--color-muted) 88%, var(--color-ink));
+  }
+
+  .ProseMirror-harvy:not(.ProseMirror-harvy--outline-authoring) p.harvy-outline-placeholder.is-empty::before {
+    color: color-mix(in oklab, var(--color-muted) 92%, var(--color-ink));
+    font-style: italic;
+    opacity: 0.92;
+  }
+
+  .ProseMirror-harvy p.harvy-outline-instruction {
+    position: relative;
+    margin-top: 0.45em;
+    margin-bottom: 0.45em;
+    padding-left: 0.65rem;
+    border-left: 2px solid color-mix(in oklab, var(--color-line) 70%, transparent);
+    font-size: 0.92em;
+    line-height: 1.55;
+    color: color-mix(in oklab, var(--color-muted) 90%, var(--color-ink));
+  }
+
+  .ProseMirror-harvy p.harvy-outline-instruction::before {
+    content: "Instruction";
+    display: block;
+    margin-bottom: 0.2em;
+    font-size: 0.72em;
+    font-style: normal;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: color-mix(in oklab, var(--color-muted) 95%, var(--color-ink));
+    opacity: 0.85;
+  }
+
+  .ProseMirror-harvy strong {
+    font-weight: 600;
+  }
+
+  .ProseMirror-harvy a.harvy-editor-link {
+    color: color-mix(in oklab, var(--color-focus-ring) 92%, var(--color-ink));
+  }
+
+  html.dark .ProseMirror-harvy a.harvy-editor-link {
+    color: color-mix(in oklab, var(--color-focus-ring) 75%, #fff);
+  }
+
+  .ProseMirror-harvy p.is-empty::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+    color: #6f6f6f;
+    font-style: normal;
+    font-weight: 400;
+  }
+
+  /*
+   * Hide empty-paragraph cue while focused (default doc placeholder).
+   * Outline writing scaffolds (`.harvy-outline-placeholder`) stay visible until the user types;
+   * promotion then removes `is-empty` / replaces the block with a real paragraph.
+   */
+  .ProseMirror-harvy.ProseMirror-focused p.is-empty:not(.harvy-outline-placeholder)::before {
+    content: none;
+  }
+
+  .ProseMirror-harvy ::selection {
+    background-color: color-mix(in oklab, var(--color-ink) 10%, var(--color-page));
+    color: var(--color-ink);
+  }
+
+  html.dark .ProseMirror-harvy ::selection {
+    background-color: color-mix(in oklab, var(--color-ink) 14%, transparent);
+    color: var(--color-ink);
+  }
+
+  /* Native webview spellcheck (Chromium/WebKit `::spelling-error`) — red wavy, minimal layout impact */
+  .ProseMirror-harvy ::spelling-error {
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+    text-decoration-thickness: max(1px, 0.055em);
+    text-decoration-color: #c62828;
+    text-underline-offset: 2px;
+    text-decoration-skip-ink: auto;
+  }
+
+  html.dark .ProseMirror-harvy ::spelling-error {
+    text-decoration-color: #e57373;
+  }
+
+  /*
+   * Readability highlights (Hemingway-style): adverbs, passive voice, complex sentences.
+   */
+  .ProseMirror-harvy {
+    --harvy-underline-pad: 4px;
+    --harvy-underline-proofread-offset: 2px;
+  }
+
+  /* AI proofread annotations (GPT issues → TipTap decorations; Edit mode only) */
+  .ProseMirror-harvy .spelling-underline {
+    text-decoration: underline wavy #e5484d;
+    text-underline-offset: var(--harvy-underline-proofread-offset);
+    text-decoration-thickness: max(1px, 0.055em);
+    padding-bottom: var(--harvy-underline-pad);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .ProseMirror-harvy .grammar-underline {
+    text-decoration: underline wavy rgb(58, 123, 213);
+    text-underline-offset: var(--harvy-underline-proofread-offset);
+    text-decoration-thickness: max(1px, 0.055em);
+    padding-bottom: var(--harvy-underline-pad);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .ProseMirror-harvy .suggestion-underline {
+    text-decoration: underline wavy #2fbf71;
+    text-underline-offset: var(--harvy-underline-proofread-offset);
+    text-decoration-thickness: max(1px, 0.055em);
+    padding-bottom: var(--harvy-underline-pad);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .proofread-label {
+    --proofread-dot-color: #e5484d;
+    position: relative;
+    display: inline-block;
+    padding-bottom: 10px;
+  }
+
+  .proofread-label::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 3px;
+    bottom: 0;
+    height: 6px;
+    background-image: radial-gradient(circle, var(--proofread-dot-color) 1.5px, transparent 1.5px);
+    background-size: 6px 6px;
+    background-repeat: repeat-x;
+    background-position: 0 100%;
+    pointer-events: none;
+  }
+
+  .proofread-label-spelling {
+    --proofread-dot-color: #e5484d;
+  }
+
+  .proofread-label-spelling::after {
+    background-image: radial-gradient(circle, #e5484d 1.5px, transparent 1.5px);
+  }
+
+  .proofread-label-grammar {
+    --proofread-dot-color: #3a7bd5;
+  }
+
+  .proofread-label-grammar::after {
+    background-image: radial-gradient(circle, #3a7bd5 1.5px, transparent 1.5px);
+  }
+
+  .proofread-label-suggestion {
+    --proofread-dot-color: #2fbf71;
+  }
+
+  .proofread-label-suggestion::after {
+    background-image: radial-gradient(circle, #2fbf71 1.5px, transparent 1.5px);
+  }
+
+  /* Outline instructions: hidden via class on ProseMirror root (document model unchanged). */
+  .ProseMirror-harvy.ProseMirror-harvy--hide-outline-instructions .harvy-outline-instruction {
+    display: none;
+  }
+
+  .ProseMirror-harvy .harvy-grammar {
+    --harvy-grammar-highlight: color-mix(in oklab, #e0a800 30%, transparent);
+    text-decoration: none;
+    background-color: var(--harvy-grammar-highlight);
+    border-radius: 0.15em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .ProseMirror-harvy .harvy-grammar.harvy-grammar-passive-voice {
+    --harvy-grammar-highlight: color-mix(in oklab, #2fbf71 30%, transparent);
+  }
+
+  /*
+   * Grammar highlight priority when classes coexist on one span:
+   * adverb > passive > complex sentence.
+   */
+  .ProseMirror-harvy .harvy-grammar.harvy-grammar-adverb-hint {
+    --harvy-grammar-highlight: color-mix(in oklab, #8b5cf6 30%, transparent);
+  }
+
+  .ProseMirror-harvy .harvy-grammar.harvy-grammar-complex-sentence {
+    --harvy-grammar-highlight: color-mix(in oklab, #f08c2e 30%, transparent);
+  }
+
+  .ProseMirror-harvy .harvy-sentence-complexity {
+    --harvy-sentence-highlight: color-mix(in oklab, #f08c2e 30%, transparent);
+    text-decoration: none;
+    background-color: var(--harvy-sentence-highlight);
+    border-radius: 0.15em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .ProseMirror-harvy .harvy-sentence-complexity.harvy-sentence-complex {
+    --harvy-sentence-highlight: color-mix(in oklab, #f08c2e 30%, transparent);
+  }
+
+  /* Rare overlap (e.g. editorial flags): grammar color wins over sentence orange. */
+  .ProseMirror-harvy .harvy-sentence-complexity.harvy-grammar {
+    background-color: var(--harvy-grammar-highlight);
+  }
+
+  html.dark .ProseMirror-harvy .harvy-grammar,
+  html.dark .ProseMirror-harvy .harvy-sentence-complexity {
+    --harvy-grammar-highlight: color-mix(in oklab, #e0a800 38%, transparent);
+    --harvy-sentence-highlight: color-mix(in oklab, #f08c2e 38%, transparent);
+  }
+
+  html.dark .ProseMirror-harvy .harvy-grammar.harvy-grammar-passive-voice {
+    --harvy-grammar-highlight: color-mix(in oklab, #2fbf71 38%, transparent);
+  }
+
+  html.dark .ProseMirror-harvy .harvy-grammar.harvy-grammar-adverb-hint {
+    --harvy-grammar-highlight: color-mix(in oklab, #8b5cf6 38%, transparent);
+  }
+
+  html.dark .ProseMirror-harvy .harvy-grammar.harvy-grammar-complex-sentence {
+    --harvy-grammar-highlight: color-mix(in oklab, #f08c2e 38%, transparent);
+  }
+
+  html.dark .ProseMirror-harvy .harvy-sentence-complexity.harvy-sentence-complex {
+    --harvy-sentence-highlight: color-mix(in oklab, #f08c2e 38%, transparent);
+  }
+
+  /* Edit sidebar — prose legend matches in-editor highlight colors */
+  .harvy-sidebar-prose-legend {
+    border-radius: 0.15em;
+    padding: 0 0.125em;
+    background-color: color-mix(in oklab, var(--harvy-legend-color) 30%, transparent);
+  }
+
+  html.dark .harvy-sidebar-prose-legend {
+    background-color: color-mix(in oklab, var(--harvy-legend-color) 38%, transparent);
+  }
+
+  html.dark body {
+    color-scheme: dark;
+  }
+
+  /* Editorial focus — avoids default system blue on controls (not on the writing textarea: ring reads as horizontal lines). */
+  button:focus-visible,
+  [role="button"]:focus-visible,
+  [role="tab"]:focus-visible,
+  [role="radio"]:focus-visible,
+  [role="switch"]:focus-visible,
+  a:focus-visible,
+  input:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-canvas), 0 0 0 4px color-mix(in oklab, var(--color-focus-ring) 55%, transparent);
+  }
+
+  textarea {
+    @apply focus:outline-none;
+  }
+
+  textarea:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+
+  textarea::selection {
+    background-color: color-mix(in oklab, var(--color-ink) 10%, var(--color-page));
+    color: var(--color-ink);
+  }
+
+  html.dark textarea::selection {
+    background-color: color-mix(in oklab, var(--color-ink) 14%, transparent);
+    color: var(--color-ink);
+  }
+
+  /* Subtle theme morph for surfaces using semantic + common utility colors */
+  :where(#root) :where(*) {
+    transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+    transition-duration: 120ms;
+    transition-timing-function: ease-out;
+  }
+}

@@ -1,0 +1,185 @@
+{
+  "version": 1,
+  "adverbs": {
+    "lyPattern": "\\b[a-z]{3,}ly\\b",
+    "lyFlags": "gi",
+    "ignoreLyWords": [
+      "early",
+      "daily",
+      "family",
+      "ugly",
+      "silly",
+      "jolly",
+      "holly",
+      "supply"
+    ],
+    "nonLyAdverbs": [],
+    "hedgingPhrases": [
+      {
+        "pattern": "(\\bI feel\\b)",
+        "flags": "gi"
+      },
+      {
+        "pattern": "(\\bI think\\b)",
+        "flags": "gi"
+      },
+      {
+        "pattern": "(\\bI believe\\b)",
+        "flags": "gi"
+      },
+      {
+        "pattern": "(\\bI guess\\b)",
+        "flags": "gi"
+      },
+      {
+        "pattern": "(\\bjust\\b)",
+        "flags": "gi"
+      },
+      {
+        "pattern": "(\\bkind of\\b)",
+        "flags": "gi"
+      },
+      {
+        "pattern": "(\\bsort of\\b)",
+        "flags": "gi"
+      },
+      {
+        "pattern": "(\\breally\\b)",
+        "flags": "gi"
+      },
+      {
+        "pattern": "(\\bvery\\b)",
+        "flags": "gi"
+      }
+    ]
+  },
+  "passive": {
+    "beForms": [
+      "am",
+      "is",
+      "are",
+      "was",
+      "were",
+      "be",
+      "been",
+      "being"
+    ],
+    "irregularParticiples": [
+      "paid",
+      "given",
+      "known",
+      "shown",
+      "written",
+      "driven",
+      "built",
+      "found",
+      "made",
+      "taken",
+      "seen",
+      "left",
+      "read",
+      "put",
+      "done"
+    ],
+    "allowedFollowers": [
+      "by",
+      "to",
+      "in",
+      "on",
+      "for",
+      "with",
+      "at",
+      "from",
+      "as",
+      "through",
+      "because",
+      "when",
+      "while",
+      "although",
+      "even",
+      "though",
+      "soon",
+      "now",
+      "then",
+      "still",
+      "not",
+      "never",
+      "already",
+      "yet"
+    ],
+    "participleSuffixPattern": "(ed|en)$",
+    "exceptionPhrases": []
+  },
+  "complexity": {
+    "thresholds": {
+      "minWordsUnlessStructured": 10,
+      "minWordsForRelativeOnlyComplex": 10,
+      "minStructuralPivotsForComplex": 1
+    },
+    "weights": {
+      "structuralPivotSubordinator": 1,
+      "structuralPivotConjunction": 1,
+      "structuralPivotClauseAnd": 1,
+      "relativeCountsTowardStructural": 0
+    },
+    "clauseWords": {
+      "subordinators": [
+        "when",
+        "because",
+        "although",
+        "though",
+        "if",
+        "since",
+        "while",
+        "unless",
+        "until"
+      ],
+      "coordinatingConjunctions": [
+        "but",
+        "yet",
+        "or",
+        "so"
+      ],
+      "relatives": [
+        "that",
+        "which",
+        "who"
+      ],
+      "clauseLinkingAnd": "and"
+    },
+    "clauseLinkingHints": {
+      "verbTailPattern": "\\b(am|is|are|was|were|be|been|being|have|has|had|do|does|did|can|could|will|would|should|might|must)\\b|(?:ed|ing)\\b",
+      "verbTailFlags": "i",
+      "subjectHeadPattern": "\\b(i|you|we|they|he|she|it|this|that|these|those)\\b",
+      "subjectHeadFlags": "i"
+    },
+    "punctuation": {
+      "comma": ",",
+      "sentenceEndChars": ".!?",
+      "splitTailWords": 6,
+      "splitHeadWords": 6
+    },
+    "layeredPatterns": {
+      "repeatedFramingPattern": "\\b(when|if|while|since|because|although|though|unless|until)\\b[\\s\\S]*?,\\s*and\\s+\\1\\b",
+      "repeatedFramingFlags": "i",
+      "doubleFrontedSubordinationPattern": "\\b(when|because|although|though|if|since|while|unless|until)\\b[^.!?]*,\\s*(?!and\\s)(when|because|although|though|if|since|while|unless|until)\\b",
+      "doubleFrontedSubordinationFlags": "i",
+      "deepRelativeMinGap": 12
+    },
+    "sentenceScoring": {
+      "wordCountComplex": 18,
+      "wordCountVeryComplex": 25,
+      "punctuationDensityMin": 2,
+      "complexityThreshold": 3,
+      "fkNormalization": {
+        "easyMax": 5,
+        "moderateMax": 8,
+        "hardMax": 12,
+        "easyPoints": 0,
+        "moderatePoints": 1,
+        "hardPoints": 2,
+        "veryHardPoints": 3
+      }
+    }
+  }
+}
