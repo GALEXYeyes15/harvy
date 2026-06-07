@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { EditorCommand } from "../features/editor/commands";
 import type { LinkFormatOptions } from "../features/editor/editorFormatActions";
+import { isTextFormattingSelection } from "../features/editor/floatingTextMenuSelection";
 import { getEditorSelectionViewportRect } from "../features/editor/tiptapSelectionRect";
 
 /** Wait this long after the last selection change (and after pointer release) before showing the menu. */
@@ -114,7 +115,7 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
   const anchorFromCurrentSelection = useCallback((): Anchor | null => {
     const ed = editor;
     if (!ed || !isEditable || !ed.isEditable || !ed.isFocused) return null;
-    if (ed.state.selection.empty) return null;
+    if (!isTextFormattingSelection(ed)) return null;
     const rect = getEditorSelectionViewportRect(ed);
     if (!rect || rect.width === 0) return null;
     return {
@@ -150,7 +151,7 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
       setAnchor(null);
       return;
     }
-    if (ed.state.selection.empty) {
+    if (!isTextFormattingSelection(ed)) {
       setAnchor(null);
       return;
     }
@@ -169,8 +170,12 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
         return;
       }
       if (pointerSelectingRef.current) return;
+      if (!isTextFormattingSelection(e2)) {
+        setAnchor(null);
+        return;
+      }
       const s = e2.state.selection;
-      if (s.empty || s.from !== from || s.to !== to) return;
+      if (s.from !== from || s.to !== to) return;
       const rect = getEditorSelectionViewportRect(e2);
       if (!rect || rect.width === 0) {
         setAnchor(null);

@@ -10,6 +10,7 @@ pub fn run() {
             commands::get_workspace_tree,
             commands::get_volume_display_name_for_path,
             commands::read_workspace_text_file,
+            commands::import_workspace_image,
             commands::write_text_file,
             commands::create_unique_directory,
             commands::rename_fs_path,

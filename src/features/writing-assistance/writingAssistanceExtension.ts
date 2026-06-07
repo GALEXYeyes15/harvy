@@ -54,6 +54,13 @@ function isProseGrammarHighlightKind(kind: string): boolean {
   return kind === "adverb-hint" || kind === "passive-voice";
 }
 
+/** ProseMirror's `Decoration.copy` exists at runtime but is not in the public TS types. */
+function cloneInlineDecoration(deco: Decoration, from: number, to: number): Decoration {
+  const attrs =
+    (deco as Decoration & { type: { attrs?: Record<string, string> } }).type.attrs ?? {};
+  return Decoration.inline(from, to, attrs);
+}
+
 function buildDecorationSet(doc: ProseMirrorNode): DecorationSet {
   const showEdit = writingAssistanceViewRef.showReadabilityHighlights;
   if (!showEdit) {
@@ -124,7 +131,7 @@ function buildDecorationSet(doc: ProseMirrorNode): DecorationSet {
     const pieces = subtractRanges({ from: deco.from, to: deco.to }, proseHighlightRanges);
     for (const piece of pieces) {
       if (piece.from >= piece.to) continue;
-      decos.push(deco.copy(piece.from, piece.to));
+      decos.push(cloneInlineDecoration(deco, piece.from, piece.to));
     }
   }
   if (import.meta.env.DEV && showEdit) {

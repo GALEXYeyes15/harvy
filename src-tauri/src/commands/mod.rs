@@ -342,6 +342,55 @@ pub fn rename_fs_path(app: AppHandle, from_path: String, to_path: String) -> Res
     fs::rename(&from, &to).map_err(|e| format!("Rename failed: {}", e))
 }
 
+/// Copy a user-selected image into `{workspace}/.harvy/assets/` and return a workspace-relative path.
+#[tauri::command]
+pub fn import_workspace_image(app: AppHandle, source_path: String) -> Result<String, String> {
+    let source = PathBuf::from(source_path.trim());
+    if !source.is_file() {
+        return Err("Selected file is not a readable image.".to_string());
+    }
+
+    let root = canonical(&workspace_root_dir(&app)?)?;
+    let assets_dir = root.join(".harvy").join("assets");
+    fs::create_dir_all(&assets_dir).map_err(|e| {
+        format!(
+            "Could not create image assets folder '{}': {}",
+            assets_dir.display(),
+            e
+        )
+    })?;
+
+    let ext = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .filter(|e| {
+            matches!(
+                e.as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "webp" | "heic" | "heif" | "bmp" | "tif" | "tiff"
+            )
+        })
+        .unwrap_or_else(|| "png".to_string());
+
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let filename = format!("img_{}.{}", stamp, ext);
+    let dest = assets_dir.join(&filename);
+
+    fs::copy(&source, &dest).map_err(|e| {
+        format!(
+            "Could not copy image to '{}': {}",
+            dest.display(),
+            e
+        )
+    })?;
+    ensure_within_workspace_root(&app, &dest)?;
+
+    Ok(format!(".harvy/assets/{}", filename))
+}
+
 #[tauri::command]
 pub fn write_text_file(app: AppHandle, path: String, contents: String) -> Result<(), String> {
     let p = PathBuf::from(&path);

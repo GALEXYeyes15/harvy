@@ -40,6 +40,17 @@ turndown.addRule("harvyOutlineParagraph", {
 });
 
 /** Round-trip promoted-then-empty placeholder metadata on normal `<p>` nodes. */
+/** Preserve Harvy image blocks as inline HTML in Markdown (src + caption + width). */
+turndown.addRule("harvyImageBlock", {
+  filter(node) {
+    return node.nodeName === "FIGURE" && Boolean((node as HTMLElement).getAttribute?.("data-harvy-image"));
+  },
+  replacement(_content, node) {
+    const el = node as HTMLElement;
+    return `\n\n${el.outerHTML}\n\n`;
+  },
+});
+
 turndown.addRule("harvyRestorableParagraph", {
   filter(node) {
     return (
@@ -94,7 +105,9 @@ export type ComplexitySourceBlock = { text: string; kind: "paragraph" | "heading
 
 /** Best-effort HTML parse without DOM (e.g. non-browser contexts). */
 function complexitySourceBlocksFromHtmlStringSSR(html: string): ComplexitySourceBlock[] {
-  const stripped = html.replace(/<li\b[^>]*>[\s\S]*?<\/li>/gi, "");
+  const stripped = html
+    .replace(/<figure\b[^>]*data-harvy-image[^>]*>[\s\S]*?<\/figure>/gi, "")
+    .replace(/<li\b[^>]*>[\s\S]*?<\/li>/gi, "");
   const blocks: ComplexitySourceBlock[] = [];
   const re = /<(h[1-3]|p)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
   let m: RegExpExecArray | null;

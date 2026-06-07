@@ -28,6 +28,13 @@ import { setFileMenuHandlers } from "../features/menu/fileMenuBridge";
 import { setupNativeAppMenu } from "../features/menu/setupNativeAppMenu";
 import { runEditorFormat, type LinkFormatOptions } from "../features/editor/editorFormatActions";
 import { calculateEditorStats } from "../features/editor/stats";
+import { pickAndImportWorkspaceImage } from "../features/editor/imageAssets";
+import { copyDocumentToClipboard } from "../features/editor/documentClipboard";
+import type { HarvyImageLoadAttrs } from "../features/editor/harvyImageAttribution";
+import {
+  insertHarvyImagePlaceholderAtCursor,
+  loadHarvyImageAt,
+} from "../features/editor/insertHarvyImage";
 import {
   countSentenceComplexityFromStoredDocument,
   countSentenceComplexityInDoc,
@@ -1222,12 +1229,35 @@ export function AppShell() {
   const editorPlaceholder = editorEditable ? "Start writing..." : undefined;
   const editorInstanceKey = activeTabId ?? (openTabIds.length === 0 ? "scratch" : "browse");
 
-  /** Live Markdown from TipTap when mounted; same fallback chain as `editorText` for browse/scratch. */
-  const getMarkdownForCopy = useCallback(() => {
-    const fallback =
-      activeDocument?.content ?? (openTabIds.length === 0 ? scratchDraftContent : "");
-    return getDocumentMarkdown(tiptapEditor, fallback);
-  }, [tiptapEditor, activeDocument, openTabIds.length, scratchDraftContent]);
+  const copyDocumentFallbackMarkdown = useMemo(
+    () => activeDocument?.content ?? (openTabIds.length === 0 ? scratchDraftContent : ""),
+    [activeDocument?.content, openTabIds.length, scratchDraftContent],
+  );
+
+  const handleCopyDocument = useCallback(async () => {
+    return copyDocumentToClipboard(tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath);
+  }, [tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath]);
+
+  const handleInsertImage = useCallback(() => {
+    if (!tiptapEditor || !editorEditable) return;
+    insertHarvyImagePlaceholderAtCursor(tiptapEditor);
+  }, [tiptapEditor, editorEditable]);
+
+  const pickLocalImage = useCallback(async () => {
+    if (!hasWorkspaceFolder && isTauriRuntime()) {
+      window.alert("Choose a workspace folder before uploading images.");
+      return null;
+    }
+    return pickAndImportWorkspaceImage();
+  }, [hasWorkspaceFolder]);
+
+  const loadImageAtPos = useCallback(
+    (pos: number, attrs: HarvyImageLoadAttrs) => {
+      if (!tiptapEditor || !editorEditable || !attrs.src) return;
+      loadHarvyImageAt(tiptapEditor, pos, attrs);
+    },
+    [tiptapEditor, editorEditable],
+  );
 
   async function handleAiProofread() {
     if (!tiptapEditor || !editorEditable || mode !== "edit") return;
@@ -1475,6 +1505,10 @@ export function AppShell() {
           showReadabilityHighlights={showReadabilityHighlights}
           showOutlineInstructions={!createOutlineMode || outlineInstructionsVisible}
           createOutlineMode={createOutlineMode}
+          workspaceRootPath={workspaceRootPath}
+          pickLocalImage={pickLocalImage}
+          loadImageAt={loadImageAtPos}
+          onInsertImage={editorEditable ? () => void handleInsertImage() : undefined}
           onChangeText={updateActiveDocumentContent}
           onEditorReady={handleEditorReady}
           onTypingActivity={emitEditorTypingActivity}
@@ -1487,7 +1521,7 @@ export function AppShell() {
         <EditorAmbientControls
           activityHandlerRef={editorTypingActivityHandlerRef}
           onToggleBothSidebars={toggleBothSidebars}
-          getMarkdownForCopy={getMarkdownForCopy}
+          onCopyDocument={handleCopyDocument}
           syncWithChrome
           chromeHidden={isTopChromeHidden}
         />

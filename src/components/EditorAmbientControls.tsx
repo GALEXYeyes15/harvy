@@ -22,8 +22,8 @@ type EditorAmbientControlsProps = {
   activityHandlerRef: MutableRefObject<(() => void) | null>;
   /** Unified workspace + readability rail visibility (bottom bar first control). */
   onToggleBothSidebars: () => void;
-  /** Full document as Markdown (TipTap when available). */
-  getMarkdownForCopy: () => string;
+  /** Copy full document to clipboard (rich HTML + plain text when supported). */
+  onCopyDocument: () => Promise<boolean>;
   /** When true, use AppShell chrome visibility instead of local idle/typing reveal timing. */
   syncWithChrome?: boolean;
   /** Shared chrome hidden state from AppShell (top + bottom unified). */
@@ -36,7 +36,7 @@ type EditorAmbientControlsProps = {
 export function EditorAmbientControls({
   activityHandlerRef,
   onToggleBothSidebars,
-  getMarkdownForCopy,
+  onCopyDocument,
   syncWithChrome,
   chromeHidden,
 }: EditorAmbientControlsProps) {
@@ -88,10 +88,9 @@ export function EditorAmbientControls({
   }, []);
 
   const handleCopyClick = useCallback(async () => {
-    const text = getMarkdownForCopy();
     try {
-      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) return;
-      await navigator.clipboard.writeText(text);
+      const ok = await onCopyDocument();
+      if (!ok) return;
       setCopySuccess(true);
       if (copyResetTimerRef.current !== null) clearTimeout(copyResetTimerRef.current);
       copyResetTimerRef.current = setTimeout(() => {
@@ -101,7 +100,7 @@ export function EditorAmbientControls({
     } catch {
       setCopySuccess(false);
     }
-  }, [getMarkdownForCopy]);
+  }, [onCopyDocument]);
 
   const visibleInSyncedMode = syncWithChrome ? !chromeHidden : showControls;
 

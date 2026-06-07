@@ -18,6 +18,11 @@ import {
   proofreadDecorationsKey,
   proofreadDecorationsViewRef,
 } from "../features/proofread/proofreadDecorations";
+import { handleEditorContextMenuEvent } from "../features/editor/editorContextMenu";
+import { handleImageCaptionLinkPointerDown } from "../features/editor/editorImageCaptionLinks";
+import { HarvyImage } from "../features/editor/harvyImage";
+import type { HarvyImageLoadAttrs } from "../features/editor/harvyImageAttribution";
+import { resolveWorkspaceImageSrc } from "../features/editor/imageAssets";
 import { HarvyOutlineParagraph } from "../features/outline/harvyOutlineParagraph";
 import { syncOutlinePlaceholdersForAuthoringMode } from "../features/outline/syncOutlinePlaceholdersForAuthoringMode";
 import type { SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
@@ -44,6 +49,14 @@ type EditorCanvasProps = {
   showOutlineInstructions?: boolean;
   /** Create Outline Mode: 1px muted frame around the editor canvas (not the toolbar). */
   createOutlineMode?: boolean;
+  /** Workspace root for resolving `.harvy/assets/...` image paths in the Tauri app. */
+  workspaceRootPath?: string | null;
+  /** Local file picker → workspace-relative `src`. */
+  pickLocalImage?: () => Promise<string | null>;
+  /** Load image `src` onto the block at `pos`. */
+  loadImageAt?: (pos: number, attrs: HarvyImageLoadAttrs) => void;
+  /** Insert image block at cursor (same flow as context menu action). */
+  onInsertImage?: () => void | Promise<void>;
 };
 
 export function EditorCanvas({
@@ -61,7 +74,21 @@ export function EditorCanvas({
   onTypingActivity,
   showOutlineInstructions = true,
   createOutlineMode = false,
+  workspaceRootPath = null,
+  pickLocalImage,
+  loadImageAt,
+  onInsertImage,
 }: EditorCanvasProps) {
+  const pickLocalImageRef = useRef(pickLocalImage);
+  pickLocalImageRef.current = pickLocalImage;
+  const loadImageAtRef = useRef(loadImageAt);
+  loadImageAtRef.current = loadImageAt;
+  const onInsertImageRef = useRef(onInsertImage);
+  onInsertImageRef.current = onInsertImage;
+  const isEditableRef = useRef(isEditable);
+  isEditableRef.current = isEditable;
+  const workspaceRootPathRef = useRef(workspaceRootPath);
+  workspaceRootPathRef.current = workspaceRootPath;
   const onTypingActivityRef = useRef(onTypingActivity);
   onTypingActivityRef.current = onTypingActivity;
 
@@ -84,6 +111,7 @@ export function EditorCanvas({
           },
         }),
         HarvyOutlineParagraph,
+        HarvyImage,
         HarvyPlaceholder.configure({
           placeholder: placeholder ?? "",
         }),
@@ -161,6 +189,51 @@ export function EditorCanvas({
       dom.classList.remove("ProseMirror-harvy--outline-authoring");
     };
   }, [editor, createOutlineMode]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const storage = editor.storage.harvyImage;
+    if (storage) {
+      storage.resolveSrc = (storedSrc: string) =>
+        resolveWorkspaceImageSrc(workspaceRootPathRef.current, storedSrc);
+      storage.pickLocalImage = () => pickLocalImageRef.current?.() ?? Promise.resolve(null);
+      storage.loadImageAt = (pos: number, attrs: HarvyImageLoadAttrs) =>
+        loadImageAtRef.current?.(pos, attrs);
+    }
+  }, [editor, workspaceRootPath, pickLocalImage, loadImageAt]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const prior = editor.options.editorProps?.handleDOMEvents ?? {};
+    editor.setOptions({
+      editorProps: {
+        ...editor.options.editorProps,
+        handleDOMEvents: {
+          ...prior,
+          mousedown: (view, event) => {
+            if (handleImageCaptionLinkPointerDown(event as MouseEvent)) return true;
+            return prior.mousedown?.(view, event) ?? false;
+          },
+          contextmenu: (view, event) => {
+            if (!isEditableRef.current) return false;
+            return handleEditorContextMenuEvent(view, event as MouseEvent, {
+              canInsertImage: Boolean(onInsertImageRef.current),
+              onInsertImage: () => onInsertImageRef.current?.(),
+              placeCaret: true,
+            });
+          },
+          dblclick: (view, event) => {
+            if (!isEditableRef.current) return false;
+            return handleEditorContextMenuEvent(view, event as MouseEvent, {
+              canInsertImage: Boolean(onInsertImageRef.current),
+              onInsertImage: () => onInsertImageRef.current?.(),
+              placeCaret: false,
+            });
+          },
+        },
+      },
+    });
+  }, [editor, onInsertImage, isEditable]);
 
   useEffect(() => {
     if (!editor) return;
