@@ -1,20 +1,18 @@
-import type { MouseEvent } from "react";
-
 export type HarvyImageInsertionZonePosition = "before-image" | "after-image";
+
+const INSERTION_ZONE_LABELS: Record<HarvyImageInsertionZonePosition, string> = {
+  "before-image": "Insert Text Above",
+  "after-image": "Insert Text Below",
+};
 
 type HarvyImageInsertionZoneProps = {
   position: HarvyImageInsertionZonePosition;
-  onActivate: () => void;
 };
 
-export function HarvyImageInsertionZone({ position, onActivate }: HarvyImageInsertionZoneProps) {
+/** Click target with hover label — activation is handled in the harvyImage ProseMirror plugin. */
+export function HarvyImageInsertionZone({ position }: HarvyImageInsertionZoneProps) {
   const isBefore = position === "before-image";
-
-  const handleMouseDown = (event: MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    onActivate();
-  };
+  const label = INSERTION_ZONE_LABELS[position];
 
   return (
     <div
@@ -22,9 +20,14 @@ export function HarvyImageInsertionZone({ position, onActivate }: HarvyImageInse
         isBefore ? "harvy-image-node__insertion-zone--before" : "harvy-image-node__insertion-zone--after"
       }`}
       data-insertion-zone={position}
-      role="presentation"
-      aria-hidden
-      onMouseDown={handleMouseDown}
-    />
+      contentEditable={false}
+      suppressContentEditableWarning
+      aria-label={label}
+      role="group"
+    >
+      <span className="harvy-image-node__insertion-zone-label" aria-hidden>
+        {label}
+      </span>
+    </div>
   );
 }

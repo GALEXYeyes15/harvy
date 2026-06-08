@@ -1,10 +1,11 @@
 export const UNSPLASH_WEBSITE_URL = "https://unsplash.com";
 
-/** Referral URL stored in metadata when an explicit Unsplash URL is not provided. */
-export const DEFAULT_UNSPLASH_URL = "https://unsplash.com/?utm_source=harvy&utm_medium=referral";
+/** Canonical Unsplash homepage stored on image blocks and used in caption links. */
+export const DEFAULT_UNSPLASH_URL = UNSPLASH_WEBSITE_URL;
 
-export function resolveUnsplashWebsiteUrl(stored?: string | null): string {
-  return stored?.trim() || UNSPLASH_WEBSITE_URL;
+/** Caption “Unsplash” links always point to the homepage (ignore legacy stored URLs). */
+export function resolveUnsplashWebsiteUrl(_stored?: string | null): string {
+  return UNSPLASH_WEBSITE_URL;
 }
 
 export function openExternalHref(href: string, event: { preventDefault: () => void; stopPropagation: () => void }): void {
@@ -33,6 +34,32 @@ export type UnsplashAttributionInput = {
   photographerUrl: string;
   unsplashUrl?: string;
 };
+
+export function isUnsplashFigure(fig: HTMLElement): boolean {
+  return (
+    fig.getAttribute("data-image-source") === "unsplash" &&
+    Boolean(fig.getAttribute("data-photographer-name")?.trim())
+  );
+}
+
+/** Rebuild caption HTML from figure metadata (canonical Unsplash homepage link). */
+export function buildUnsplashCaptionHtmlFromFigure(fig: HTMLElement): string {
+  const photographerName = fig.getAttribute("data-photographer-name")?.trim() ?? "";
+  if (!photographerName) return "";
+  return buildUnsplashAttribution({
+    photographerName,
+    photographerUrl: fig.getAttribute("data-photographer-url")?.trim() ?? "#",
+  }).captionHtml;
+}
+
+/** Strip legacy referral/query params from stored Unsplash caption links. */
+export function sanitizeUnsplashCaptionHtml(html: string): string {
+  if (!html) return html;
+  return html.replace(
+    /(<a\b[^>]*\bhref=["'])https?:\/\/unsplash\.com\/?(?:\?[^"'#]*)?(["'])/gi,
+    "$1https://unsplash.com$2",
+  );
+}
 
 export function buildUnsplashAttribution(input: UnsplashAttributionInput): {
   caption: string;
@@ -75,7 +102,7 @@ export function buildUnsplashLoadAttrs(
     imageSource: "unsplash",
     photographerName: input.photographerName.trim(),
     photographerUrl: input.photographerUrl.trim(),
-    unsplashUrl: resolveUnsplashWebsiteUrl(input.unsplashUrl),
+    unsplashUrl: UNSPLASH_WEBSITE_URL,
     caption,
     captionHtml,
   };

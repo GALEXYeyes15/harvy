@@ -4,6 +4,8 @@ import type { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
+import { handleBackspaceOnEmptyTextBlockKeyDown } from "../features/editor/emptyTextBlockDeletion";
+import { EmptyTextBlockBackspace } from "../features/editor/emptyTextBlockBackspace";
 import { HarvyParagraph } from "../features/editor/harvyParagraph";
 import { HarvyPlaceholder } from "../features/editor/harvyPlaceholder";
 import { editorHtmlToMarkdown, toEditorHtml } from "../features/editor/documentMarkdown";
@@ -13,11 +15,9 @@ import {
   writingAssistanceViewRef,
 } from "../features/writing-assistance/writingAssistanceExtension";
 import {
-  clearProofreadDecorations,
-  ProofreadDecorations,
-  proofreadDecorationsKey,
-  proofreadDecorationsViewRef,
-} from "../features/proofread/proofreadDecorations";
+  MechanicsUnderlineLayer,
+  setMechanicsUnderlinesVisible,
+} from "../features/proofread/mechanicsUnderlineLayer";
 import { handleEditorContextMenuEvent } from "../features/editor/editorContextMenu";
 import { handleImageCaptionLinkPointerDown } from "../features/editor/editorImageCaptionLinks";
 import { HarvyImage } from "../features/editor/harvyImage";
@@ -40,6 +40,8 @@ type EditorCanvasProps = {
   spellcheckEnabled: boolean;
   grammarChecksEnabled: boolean;
   showReadabilityHighlights: boolean;
+  /** Mechanics dotted underlines — visible only when the Edit sidebar is open. */
+  showMechanicsUnderlines: boolean;
   onChangeText: (value: string) => void;
   /** Fires when the TipTap instance is created or destroyed (null on unmount). */
   onEditorReady: (editor: Editor | null) => void;
@@ -69,6 +71,7 @@ export function EditorCanvas({
   spellcheckEnabled,
   grammarChecksEnabled,
   showReadabilityHighlights,
+  showMechanicsUnderlines,
   onChangeText,
   onEditorReady,
   onTypingActivity,
@@ -100,7 +103,9 @@ export function EditorCanvas({
           heading: { levels: [1, 2, 3] },
           codeBlock: false,
           paragraph: false,
+          gapcursor: false,
         }),
+        EmptyTextBlockBackspace,
         HarvyParagraph,
         Underline,
         Link.configure({
@@ -116,7 +121,7 @@ export function EditorCanvas({
           placeholder: placeholder ?? "",
         }),
         WritingAssistance,
-        ProofreadDecorations,
+        MechanicsUnderlineLayer,
       ],
       content: toEditorHtml(text, { sourcePath: contentSourcePath }),
       editable: isEditable,
@@ -130,6 +135,7 @@ export function EditorCanvas({
             "editor-content ProseMirror-harvy block min-h-0 w-full max-w-none resize-none bg-transparent py-10 text-[18px] font-normal text-ink caret-muted outline-none focus:outline-none placeholder:text-muted/45 sm:py-11 " +
             (isEditable ? "" : "cursor-default select-text opacity-75"),
         },
+        handleKeyDown: (view, event) => handleBackspaceOnEmptyTextBlockKeyDown(view, event),
       },
       onUpdate: ({ editor: ed }) => {
         onChangeText(editorHtmlToMarkdown(ed.getHTML()));
@@ -164,13 +170,8 @@ export function EditorCanvas({
 
   useEffect(() => {
     if (!editor) return;
-    proofreadDecorationsViewRef.enabled = showReadabilityHighlights;
-    const tr = editor.state.tr.setMeta(proofreadDecorationsKey, true);
-    editor.view.dispatch(tr);
-    if (!showReadabilityHighlights) {
-      clearProofreadDecorations(editor.view);
-    }
-  }, [editor, showReadabilityHighlights]);
+    setMechanicsUnderlinesVisible(editor.view, showMechanicsUnderlines);
+  }, [editor, showMechanicsUnderlines]);
 
   useEffect(() => {
     if (!editor) return;

@@ -176,7 +176,10 @@ export const HarvyOutlineParagraph = Node.create({
                 return true;
               }
 
-              const hint = ((node.attrs.writingScaffold as string | null) ?? "").trim() || "…";
+              const hint = ((node.attrs.writingScaffold as string | null) ?? "").trim();
+              if (!hint) {
+                return true;
+              }
 
               decorations.push(
                 Decoration.node(pos, pos + node.nodeSize, {

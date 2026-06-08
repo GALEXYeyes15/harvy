@@ -1,5 +1,9 @@
 import type { Editor } from "@tiptap/core";
-import { buildUnsplashAttribution } from "./harvyImageAttribution";
+import {
+  buildUnsplashCaptionHtmlFromFigure,
+  isUnsplashFigure,
+  sanitizeUnsplashCaptionHtml,
+} from "./harvyImageAttribution";
 import { resolveWorkspaceImageSrc } from "./imageAssets";
 import { editorHtmlToMarkdown, markdownToEditorHtml } from "./documentMarkdown";
 import { getDocumentMarkdown } from "../save/saveRuntime";
@@ -33,37 +37,40 @@ async function resolveImageSrcForClipboard(
   }
 }
 
-function buildCopyCaptionHtml(fig: HTMLElement): string {
-  const photographerName = fig.getAttribute("data-photographer-name")?.trim() ?? "";
-  if (!photographerName) return "";
-  return buildUnsplashAttribution({
-    photographerName,
-    photographerUrl: fig.getAttribute("data-photographer-url")?.trim() ?? "#",
-    unsplashUrl: fig.getAttribute("data-unsplash-url") ?? undefined,
-  }).captionHtml;
-}
-
 function normalizeUnsplashCaptionHtml(html: string, fig: HTMLElement): string {
-  if (html.includes("</a>")) return html;
-  return buildCopyCaptionHtml(fig) || html;
+  if (isUnsplashFigure(fig)) {
+    return buildUnsplashCaptionHtmlFromFigure(fig) || sanitizeUnsplashCaptionHtml(html);
+  }
+  return sanitizeUnsplashCaptionHtml(html);
 }
 
 function readImageCaption(fig: HTMLElement): { plain: string; html: string | null } {
+  if (isUnsplashFigure(fig)) {
+    const html = buildUnsplashCaptionHtmlFromFigure(fig);
+    if (html) {
+      const host = document.createElement("div");
+      host.innerHTML = html;
+      return { plain: host.textContent?.trim() ?? "", html };
+    }
+  }
+
   const figcaption = fig.querySelector("figcaption");
   if (figcaption?.querySelector("a")) {
+    const html = sanitizeUnsplashCaptionHtml(figcaption.innerHTML.trim());
     return {
       plain: figcaption.textContent?.trim() ?? "",
-      html: figcaption.innerHTML.trim(),
+      html,
     };
   }
 
   const captionHtml = fig.getAttribute("data-caption-html")?.trim();
   if (captionHtml) {
+    const html = sanitizeUnsplashCaptionHtml(captionHtml);
     const host = document.createElement("div");
-    host.innerHTML = captionHtml;
+    host.innerHTML = html;
     return {
       plain: host.textContent?.trim() ?? "",
-      html: captionHtml,
+      html,
     };
   }
 
@@ -145,11 +152,8 @@ export async function editorHtmlToCopyHtml(
       const cap = document.createElement("figcaption");
       if (caption.html) {
         cap.innerHTML = normalizeUnsplashCaptionHtml(caption.html, fig);
-      } else if (
-        fig.getAttribute("data-image-source") === "unsplash" &&
-        fig.getAttribute("data-photographer-name")
-      ) {
-        cap.innerHTML = buildCopyCaptionHtml(fig);
+      } else if (isUnsplashFigure(fig)) {
+        cap.innerHTML = buildUnsplashCaptionHtmlFromFigure(fig);
       } else {
         cap.textContent = caption.plain;
       }

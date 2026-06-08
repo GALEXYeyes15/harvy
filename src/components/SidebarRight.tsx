@@ -149,7 +149,7 @@ function AiProofreadSidebarButton({
       onClick={() => void onProofread()}
     >
       <SpellCheck size={17} strokeWidth={1.65} className="shrink-0 text-muted/75" aria-hidden />
-      <span>{busy ? "Proofreading…" : "AI Proofread"}</span>
+      <span>{busy ? "Proofreading…" : "Proofread"}</span>
     </button>
   );
 }

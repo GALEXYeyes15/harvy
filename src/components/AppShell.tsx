@@ -71,19 +71,13 @@ import {
   writeWritingAssistancePrefs,
 } from "../features/writing-assistance/writingAssistanceSettings";
 import type { SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
-import {
-  clearProofreadDecorations,
-  dispatchProofreadDecorations,
-  proofreadDecorationsKey,
-  proofreadDecorationsViewRef,
-} from "../features/proofread/proofreadDecorations";
+import { setMechanicsUnderlinesVisible } from "../features/proofread/mechanicsUnderlineLayer";
 import {
   grammarDecorationsKey,
   writingAssistanceViewRef,
 } from "../features/writing-assistance/writingAssistanceExtension";
-import { proofreadIssuesToDecorationSet } from "../features/proofread/issueDecorations";
 import { proofreadPlainTextAndPositions } from "../features/proofread/proofreadPlainMap";
-import { requestProofread } from "../features/proofread/proofreadClient";
+import { syncMechanicsProofread } from "../features/proofread/mechanics/syncMechanicsProofread";
 import type { ProofreadIssue } from "../features/proofread/types";
 import { ensureUserRulesFile, loadEditorRules } from "../features/writing-assistance/editorRules";
 
@@ -1208,23 +1202,47 @@ export function AppShell() {
         ? "Select a tab above or pick a file from your workspace."
         : "Choose a workspace folder to open and save files.");
   const showReadabilityHighlights = readabilityPanelOpen && mode === "edit";
+  const showMechanicsUnderlines = readabilityPanelOpen && mode === "edit";
   /** Native misspelling underlines: same gate as grammar highlights (Edit tab + readability rail open + user pref). */
   const showEditModeSpellcheck =
     writingAssistancePrefs.spellcheck && readabilityPanelOpen && mode === "edit";
 
   useEffect(() => {
     writingAssistanceViewRef.showReadabilityHighlights = showReadabilityHighlights;
-    proofreadDecorationsViewRef.enabled = showReadabilityHighlights;
     if (!tiptapEditor) return;
     const tr = tiptapEditor.state.tr.setMeta(grammarDecorationsKey, true);
     tiptapEditor.view.dispatch(tr);
-    if (!showReadabilityHighlights) {
-      clearProofreadDecorations(tiptapEditor.view);
+  }, [showReadabilityHighlights, tiptapEditor]);
+
+  useEffect(() => {
+    if (!tiptapEditor) return;
+    setMechanicsUnderlinesVisible(tiptapEditor.view, showMechanicsUnderlines);
+  }, [showMechanicsUnderlines, tiptapEditor]);
+
+  /** Live rule-based mechanics (Spelling / Grammar / Suggestions) — runs in Edit mode regardless of sidebar. */
+  useEffect(() => {
+    if (!tiptapEditor || mode !== "edit" || !editorEditable) {
       return;
     }
-    const proofreadTr = tiptapEditor.state.tr.setMeta(proofreadDecorationsKey, true);
-    tiptapEditor.view.dispatch(proofreadTr);
-  }, [showReadabilityHighlights, tiptapEditor]);
+
+    const runSync = () => {
+      syncMechanicsProofread(tiptapEditor, setProofreadIssues);
+    };
+
+    runSync();
+
+    let debounceId: ReturnType<typeof setTimeout> | null = null;
+    const onUpdate = () => {
+      if (debounceId) clearTimeout(debounceId);
+      debounceId = setTimeout(runSync, 200);
+    };
+
+    tiptapEditor.on("update", onUpdate);
+    return () => {
+      tiptapEditor.off("update", onUpdate);
+      if (debounceId) clearTimeout(debounceId);
+    };
+  }, [tiptapEditor, mode, editorEditable]);
   /** TipTap Placeholder extension only renders when the doc is empty; no real document text. */
   const editorPlaceholder = editorEditable ? "Start writing..." : undefined;
   const editorInstanceKey = activeTabId ?? (openTabIds.length === 0 ? "scratch" : "browse");
@@ -1268,15 +1286,7 @@ export function AppShell() {
     }
     setProofreadBusy(true);
     try {
-      const issues = await requestProofread(snapshot.text);
-      const now = proofreadPlainTextAndPositions(tiptapEditor.state.doc);
-      if (now.text !== snapshot.text) {
-        window.alert("Document changed while proofreading. Run AI Proofread again.");
-        return;
-      }
-      setProofreadIssues(issues);
-      const set = proofreadIssuesToDecorationSet(tiptapEditor.state.doc, issues, now.charToPmPos, now.text);
-      dispatchProofreadDecorations(tiptapEditor.view, set);
+      syncMechanicsProofread(tiptapEditor, setProofreadIssues);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Proofread failed";
       window.alert(msg);
@@ -1503,6 +1513,7 @@ export function AppShell() {
             writingAssistancePrefs.grammarChecks && readabilityPanelOpen && mode === "edit"
           }
           showReadabilityHighlights={showReadabilityHighlights}
+          showMechanicsUnderlines={showMechanicsUnderlines}
           showOutlineInstructions={!createOutlineMode || outlineInstructionsVisible}
           createOutlineMode={createOutlineMode}
           workspaceRootPath={workspaceRootPath}

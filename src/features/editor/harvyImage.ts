@@ -1,14 +1,18 @@
 import { Node, mergeAttributes } from "@tiptap/core";
 import type { DOMOutputSpec } from "@tiptap/pm/model";
-import { NodeSelection } from "@tiptap/pm/state";
+import { NodeSelection, Plugin } from "@tiptap/pm/state";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import { HarvyImageNodeView } from "./HarvyImageNodeView";
 import {
+  buildUnsplashAttribution,
   type HarvyImageLoadAttrs,
   type HarvyImageSource,
   isManuallyEditedUnsplashCaption,
   resolveUnsplashWebsiteUrl,
+  sanitizeUnsplashCaptionHtml,
+  UNSPLASH_WEBSITE_URL,
 } from "./harvyImageAttribution";
+import { handleHarvyImageAdjacentPointerDown, isHarvyImageInteractiveTarget } from "./harvyImageAdjacentFocus";
 import {
   focusParagraphAfterHarvyImageAtPos,
   focusParagraphAfterHarvyImageInTr,
@@ -26,11 +30,44 @@ export type HarvyImageStorage = {
 };
 
 function readCaptionHtmlFromFigure(element: HTMLElement): string {
+  const imageSource = element.getAttribute("data-image-source");
+  const photographerName = element.getAttribute("data-photographer-name")?.trim();
+  if (imageSource === "unsplash" && photographerName) {
+    return buildUnsplashAttribution({
+      photographerName,
+      photographerUrl: element.getAttribute("data-photographer-url") ?? "",
+    }).captionHtml;
+  }
+
   const stored = element.getAttribute("data-caption-html")?.trim();
-  if (stored) return stored;
+  if (stored) return sanitizeUnsplashCaptionHtml(stored);
   const cap = element.querySelector("figcaption");
-  if (cap?.querySelector("a")) return cap.innerHTML.trim();
+  if (cap?.querySelector("a")) return sanitizeUnsplashCaptionHtml(cap.innerHTML.trim());
   return "";
+}
+
+function normalizeLegacyUnsplashNodeAttrs(
+  attrs: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (attrs.imageSource !== "unsplash") return null;
+  const unsplashUrl = String(attrs.unsplashUrl ?? "");
+  const captionHtml = String(attrs.captionHtml ?? "");
+  const hasLegacyLink = unsplashUrl.includes("utm_") || captionHtml.includes("utm_source=harvy");
+  if (!hasLegacyLink && unsplashUrl === UNSPLASH_WEBSITE_URL) return null;
+
+  const photographerName = String(attrs.photographerName ?? "").trim();
+  if (!photographerName) return null;
+
+  const attribution = buildUnsplashAttribution({
+    photographerName,
+    photographerUrl: String(attrs.photographerUrl ?? ""),
+  });
+
+  return {
+    ...attrs,
+    unsplashUrl: UNSPLASH_WEBSITE_URL,
+    captionHtml: attribution.captionHtml,
+  };
 }
 
 function readFigureAttrs(el: HTMLElement) {
@@ -46,7 +83,7 @@ function readFigureAttrs(el: HTMLElement) {
     imageSource: (el.getAttribute("data-image-source") as HarvyImageSource) || null,
     photographerName: el.getAttribute("data-photographer-name") ?? "",
     photographerUrl: el.getAttribute("data-photographer-url") ?? "",
-    unsplashUrl: el.getAttribute("data-unsplash-url") ?? "",
+    unsplashUrl: resolveUnsplashWebsiteUrl(el.getAttribute("data-unsplash-url")),
   };
 }
 
@@ -100,15 +137,19 @@ function mergeLoadedImageAttrs(
   };
 
   if (attrs.imageSource === "unsplash") {
+    const attribution = buildUnsplashAttribution({
+      photographerName: attrs.photographerName ?? "",
+      photographerUrl: attrs.photographerUrl ?? "",
+    });
     return {
       ...next,
       imageSource: "unsplash",
       photographerName: attrs.photographerName ?? "",
       photographerUrl: attrs.photographerUrl ?? "",
-      unsplashUrl: resolveUnsplashWebsiteUrl(attrs.unsplashUrl),
-      caption: attrs.caption ?? "",
-      captionHtml: attrs.captionHtml ?? "",
-      alt: attrs.caption ?? "",
+      unsplashUrl: UNSPLASH_WEBSITE_URL,
+      caption: attrs.caption ?? attribution.caption,
+      captionHtml: attribution.captionHtml,
+      alt: attrs.caption ?? attribution.caption,
       ...(attrs.width !== undefined ? { width: attrs.width } : {}),
     };
   }
@@ -246,8 +287,18 @@ export const HarvyImage = Node.create({
         default: "",
         parseHTML: (element) => readCaptionHtmlFromFigure(element as HTMLElement),
         renderHTML: (attributes) => {
+          if (attributes.imageSource === "unsplash" && attributes.photographerName) {
+            return {
+              "data-caption-html": buildUnsplashAttribution({
+                photographerName: attributes.photographerName as string,
+                photographerUrl: (attributes.photographerUrl as string) ?? "",
+              }).captionHtml,
+            };
+          }
           if (!attributes.captionHtml) return {};
-          return { "data-caption-html": attributes.captionHtml as string };
+          return {
+            "data-caption-html": sanitizeUnsplashCaptionHtml(attributes.captionHtml as string),
+          };
         },
       },
       imageSource: {
@@ -279,10 +330,14 @@ export const HarvyImage = Node.create({
       },
       unsplashUrl: {
         default: "",
-        parseHTML: (element) => (element as HTMLElement).getAttribute("data-unsplash-url") ?? "",
+        parseHTML: (element) =>
+          resolveUnsplashWebsiteUrl((element as HTMLElement).getAttribute("data-unsplash-url")),
         renderHTML: (attributes) => {
-          if (!attributes.unsplashUrl) return {};
-          return { "data-unsplash-url": attributes.unsplashUrl as string };
+          if (attributes.imageSource !== "unsplash" && !attributes.unsplashUrl) return {};
+          if (attributes.imageSource === "unsplash") {
+            return { "data-unsplash-url": UNSPLASH_WEBSITE_URL };
+          }
+          return { "data-unsplash-url": UNSPLASH_WEBSITE_URL };
         },
       },
       width: {
@@ -351,6 +406,57 @@ export const HarvyImage = Node.create({
 
   addNodeView() {
     return ReactNodeViewRenderer(HarvyImageNodeView);
+  },
+
+  onCreate() {
+    const { editor } = this;
+    const { state } = editor;
+    let tr = state.tr;
+    let changed = false;
+
+    state.doc.descendants((node, pos) => {
+      if (node.type.name !== "harvyImage") return;
+      const nextAttrs = normalizeLegacyUnsplashNodeAttrs(node.attrs);
+      if (!nextAttrs) return;
+      tr = tr.setNodeMarkup(pos, undefined, nextAttrs);
+      changed = true;
+    });
+
+    if (changed) editor.view.dispatch(tr);
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          handleDOMEvents: {
+            mousedown: (view, event) =>
+              handleHarvyImageAdjacentPointerDown(view, event as MouseEvent),
+          },
+          handleClick: (view, _pos, event) => {
+            if (!(event.target instanceof Element)) return false;
+            if (isHarvyImageInteractiveTarget(event.target)) return false;
+            const figure = event.target.closest("[data-harvy-image]");
+            if (!figure || !view.dom.contains(figure)) return false;
+            return true;
+          },
+        },
+        appendTransaction(transactions, _oldState, newState) {
+          if (!transactions.some((tr) => tr.docChanged)) return null;
+
+          let tr: import("@tiptap/pm/state").Transaction | null = null;
+
+          newState.doc.descendants((node, pos) => {
+            if (node.type.name !== "harvyImage") return;
+            const nextAttrs = normalizeLegacyUnsplashNodeAttrs(node.attrs);
+            if (!nextAttrs) return;
+            tr = (tr ?? newState.tr).setNodeMarkup(pos, undefined, nextAttrs);
+          });
+
+          return tr;
+        },
+      }),
+    ];
   },
 
   addKeyboardShortcuts() {

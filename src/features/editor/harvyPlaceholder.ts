@@ -3,6 +3,9 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
+/** Normal body blocks use the caret only — no left-side pseudo placeholder. */
+const PLACEHOLDER_SKIP_NODE_TYPES = new Set(["paragraph", "heading", "blockquote"]);
+
 /**
  * TipTap Placeholder, but empty `harvyOutlineParagraph` placeholders in **writing** mode are decorated
  * by {@link HarvyOutlineParagraph}'s plugin instead (scaffold hint from `writingScaffold`).
@@ -25,6 +28,10 @@ export const HarvyPlaceholder = Placeholder.extend({
             const isEmptyDoc = this.editor.isEmpty;
 
             doc.descendants((node, pos) => {
+              if (PLACEHOLDER_SKIP_NODE_TYPES.has(node.type.name)) {
+                return this.options.includeChildren;
+              }
+
               /* Outline placeholder blocks use HarvyOutlineParagraph’s decoration (writing) or stay bare (authoring). */
               if (
                 node.type.name === "harvyOutlineParagraph" &&

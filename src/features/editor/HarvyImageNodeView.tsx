@@ -129,18 +129,6 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
     captionRef.current?.focus();
   }, [captionOpen]);
 
-  const activateInsertionBefore = useCallback(() => {
-    const pos = getPos();
-    if (typeof pos !== "number") return;
-    editor.commands.focusParagraphBeforeHarvyImage(pos);
-  }, [editor, getPos]);
-
-  const activateInsertionAfter = useCallback(() => {
-    const pos = getPos();
-    if (typeof pos !== "number") return;
-    editor.commands.focusParagraphAfterHarvyImage(pos);
-  }, [editor, getPos]);
-
   const showChrome = !isPlaceholder && (selected || hovered);
 
   if (isPlaceholder) {
@@ -157,7 +145,7 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
         onMouseLeave={() => setHovered(false)}
         contentEditable={false}
       >
-        <HarvyImageInsertionZone position="before-image" onActivate={activateInsertionBefore} />
+        <HarvyImageInsertionZone position="before-image" />
         <div className="harvy-image-node__content">
           <div className="harvy-image-node__frame harvy-image-node__frame--full">
             <button
@@ -192,7 +180,7 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
             ) : null}
           </div>
         </div>
-        <HarvyImageInsertionZone position="after-image" onActivate={activateInsertionAfter} />
+        <HarvyImageInsertionZone position="after-image" />
 
         {sourceOpen && pickerBtnRef.current
           ? (
@@ -222,7 +210,7 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
       onMouseLeave={() => setHovered(false)}
       contentEditable={false}
     >
-      <HarvyImageInsertionZone position="before-image" onActivate={activateInsertionBefore} />
+      <HarvyImageInsertionZone position="before-image" />
       <div className="harvy-image-node__content">
         <div className={`harvy-image-node__frame harvy-image-node__frame--${width}`}>
           {showChrome ? (
@@ -307,7 +295,7 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
           />
         ) : null}
       </div>
-      <HarvyImageInsertionZone position="after-image" onActivate={activateInsertionAfter} />
+      <HarvyImageInsertionZone position="after-image" />
 
       {replaceSourceOpen && replaceBtnRef.current
         ? (

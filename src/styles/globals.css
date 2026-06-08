@@ -134,16 +134,84 @@
   }
 
   .ProseMirror-harvy .harvy-image-node__insertion-zone {
-    display: block;
+    display: flex;
     width: 100%;
-    min-height: 1.75rem;
+    min-height: 2rem;
     flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    margin-inline: auto;
+    border: 1px solid transparent;
+    border-radius: 0.35rem;
     cursor: text;
     background: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-user-modify: read-only;
+    caret-color: transparent;
+    outline: none;
+    pointer-events: auto;
+    transition:
+      background-color 0.15s ease-out,
+      border-color 0.15s ease-out;
   }
 
-  .ProseMirror-harvy .harvy-image-node__insertion-zone:hover {
-    background: color-mix(in oklab, var(--color-ink) 2%, transparent);
+  .ProseMirror-harvy .harvy-image-node[data-width="small"] .harvy-image-node__insertion-zone {
+    width: 55%;
+    max-width: 55%;
+  }
+
+  .ProseMirror-harvy .harvy-image-node[data-width="medium"] .harvy-image-node__insertion-zone {
+    width: 82%;
+    max-width: 82%;
+  }
+
+  .ProseMirror-harvy .harvy-image-node__insertion-zone-label {
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+    text-align: center;
+    color: color-mix(in oklab, var(--color-muted) 72%, var(--color-ink));
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease-out;
+  }
+
+  .ProseMirror-harvy .harvy-image-node__insertion-zone:hover,
+  .ProseMirror-harvy .harvy-image-node__insertion-zone:focus-visible {
+    border-color: color-mix(in oklab, var(--color-line) 70%, transparent);
+    background: color-mix(in oklab, var(--color-ink) 4%, transparent);
+  }
+
+  .ProseMirror-harvy .harvy-image-node__insertion-zone:hover .harvy-image-node__insertion-zone-label,
+  .ProseMirror-harvy .harvy-image-node__insertion-zone:focus-visible .harvy-image-node__insertion-zone-label {
+    opacity: 1;
+  }
+
+  .ProseMirror-harvy .harvy-image-node__insertion-zone:focus {
+    outline: none;
+    caret-color: transparent;
+  }
+
+  html.dark .ProseMirror-harvy .harvy-image-node__insertion-zone:hover,
+  html.dark .ProseMirror-harvy .harvy-image-node__insertion-zone:focus-visible {
+    border-color: color-mix(in oklab, var(--color-line) 55%, transparent);
+    background: color-mix(in oklab, var(--color-ink) 7%, transparent);
+  }
+
+  html.dark .ProseMirror-harvy .harvy-image-node__insertion-zone-label {
+    color: color-mix(in oklab, var(--color-muted) 58%, var(--color-ink));
+  }
+
+  /* ProseMirror gap cursor: horizontal blinking line between blocks — disabled in Harvy. */
+  .ProseMirror-harvy .ProseMirror-gapcursor,
+  .ProseMirror-harvy .ProseMirror-gapcursor::after {
+    display: none !important;
+    visibility: hidden !important;
+    border: 0 !important;
+    animation: none !important;
   }
 
   .ProseMirror-harvy .harvy-image-node__frame {
@@ -551,7 +619,7 @@
     color: color-mix(in oklab, var(--color-muted) 82%, var(--color-ink));
   }
 
-  /* Writing mode: structural placeholders (empty body; hint via `data-placeholder` + .is-empty). */
+  /* Writing mode: structural placeholders (empty body; optional scaffold hint only when non-empty). */
   .ProseMirror-harvy:not(.ProseMirror-harvy--outline-authoring) p.harvy-outline-placeholder {
     margin-top: 0.35em;
     margin-bottom: 0.35em;
@@ -559,7 +627,12 @@
     color: color-mix(in oklab, var(--color-muted) 88%, var(--color-ink));
   }
 
-  .ProseMirror-harvy:not(.ProseMirror-harvy--outline-authoring) p.harvy-outline-placeholder.is-empty::before {
+  .ProseMirror-harvy:not(.ProseMirror-harvy--outline-authoring)
+    p.harvy-outline-placeholder.is-empty[data-placeholder]:not([data-placeholder=""])::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
     color: color-mix(in oklab, var(--color-muted) 92%, var(--color-ink));
     font-style: italic;
     opacity: 0.92;
@@ -600,25 +673,6 @@
     color: color-mix(in oklab, var(--color-focus-ring) 75%, #fff);
   }
 
-  .ProseMirror-harvy p.is-empty::before {
-    content: attr(data-placeholder);
-    float: left;
-    height: 0;
-    pointer-events: none;
-    color: #6f6f6f;
-    font-style: normal;
-    font-weight: 400;
-  }
-
-  /*
-   * Hide empty-paragraph cue while focused (default doc placeholder).
-   * Outline writing scaffolds (`.harvy-outline-placeholder`) stay visible until the user types;
-   * promotion then removes `is-empty` / replaces the block with a real paragraph.
-   */
-  .ProseMirror-harvy.ProseMirror-focused p.is-empty:not(.harvy-outline-placeholder)::before {
-    content: none;
-  }
-
   .ProseMirror-harvy ::selection {
     background-color: color-mix(in oklab, var(--color-ink) 10%, var(--color-page));
     color: var(--color-ink);
@@ -647,36 +701,54 @@
    * Readability highlights (Hemingway-style): adverbs, passive voice, complex sentences.
    */
   .ProseMirror-harvy {
+    position: relative;
     --harvy-underline-pad: 4px;
     --harvy-underline-proofread-offset: 2px;
   }
 
-  /* AI proofread annotations (GPT issues → TipTap decorations; Edit mode only) */
-  .ProseMirror-harvy .spelling-underline {
-    text-decoration: underline wavy #e5484d;
-    text-underline-offset: var(--harvy-underline-proofread-offset);
-    text-decoration-thickness: max(1px, 0.055em);
-    padding-bottom: var(--harvy-underline-pad);
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
+  /*
+   * Mechanics dotted underlines — independent overlay layer (not inline spans).
+   * Prose highlights remain continuous because mechanics never nest inside them.
+   * Layer is sized/positioned to match the ProseMirror root on each paint.
+   */
+  .harvy-mechanics-underline-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 2;
   }
 
-  .ProseMirror-harvy .grammar-underline {
-    text-decoration: underline wavy rgb(58, 123, 213);
-    text-underline-offset: var(--harvy-underline-proofread-offset);
-    text-decoration-thickness: max(1px, 0.055em);
-    padding-bottom: var(--harvy-underline-pad);
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
+  .harvy-mechanics-underline-layer--hidden {
+    display: none;
   }
 
-  .ProseMirror-harvy .suggestion-underline {
-    text-decoration: underline wavy #2fbf71;
-    text-underline-offset: var(--harvy-underline-proofread-offset);
-    text-decoration-thickness: max(1px, 0.055em);
-    padding-bottom: var(--harvy-underline-pad);
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
+  .harvy-mechanics-underline-layer .harvy-mechanics-underline {
+    position: absolute;
+    height: 3px;
+    pointer-events: none;
+    background-repeat: repeat-x;
+    background-position: 0 100%;
+    border: none;
+    outline: none;
+    box-shadow: none;
+    background-color: transparent;
+  }
+
+  .harvy-mechanics-underline-layer .harvy-mechanics-underline--spelling {
+    background-image: radial-gradient(circle, #e5484d 1.5px, transparent 1.6px);
+    background-size: 6px 3px;
+  }
+
+  .harvy-mechanics-underline-layer .harvy-mechanics-underline--grammar {
+    background-image: radial-gradient(circle, #3a7bd5 1.5px, transparent 1.6px);
+    background-size: 6px 3px;
+  }
+
+  .harvy-mechanics-underline-layer .harvy-mechanics-underline--suggestion {
+    background-image: radial-gradient(circle, #2fbf71 1.5px, transparent 1.6px);
+    background-size: 6px 3px;
   }
 
   .proofread-label {
