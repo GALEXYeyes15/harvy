@@ -11,7 +11,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
     <CenteredOverlayModal
       open={open}
       onClose={onClose}
-      title="Tribute"
+      title="About"
       titleId="about-dialog-title"
       backdropLabel="Dismiss about"
       closeLabel="Close about"

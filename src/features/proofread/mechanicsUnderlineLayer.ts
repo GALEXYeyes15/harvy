@@ -19,6 +19,9 @@ export const proofreadDecorationsViewRef = {
   visible: false,
 };
 
+/** Set when overlay mounting/painting fails — keeps the editor usable without underlines. */
+let mechanicsOverlayDisabled = false;
+
 type MechanicsUnderlineMeta =
   | { set: MechanicsUnderlineRange[] }
   | { clear: true }
@@ -26,6 +29,7 @@ type MechanicsUnderlineMeta =
 
 const UNDERLINE_HEIGHT_PX = 3;
 const UNDERLINE_OFFSET_PX = 2;
+const LAYER_CLASS = "harvy-mechanics-underline-layer";
 
 type LocalRect = {
   left: number;
@@ -40,27 +44,50 @@ type ViewportRect = {
   bottom: number;
 };
 
-function findScrollParent(el: HTMLElement | null): HTMLElement | null {
-  let node: HTMLElement | null = el;
+function logOverlayError(scope: string, error: unknown): void {
+  mechanicsOverlayDisabled = true;
+  proofreadDecorationsViewRef.visible = false;
+  if (import.meta.env.DEV) {
+    console.error(`[HarvyMechanics] overlay ${scope}`, error);
+  }
+}
+
+function isDomEnvironmentReady(): boolean {
+  return typeof window !== "undefined" && typeof document !== "undefined";
+}
+
+function isViewDomReady(view: EditorView | null | undefined): view is EditorView {
+  if (!view?.dom) return false;
+  if (!isDomEnvironmentReady()) return false;
+  return document.body.contains(view.dom);
+}
+
+function isValidPmRange(view: EditorView, from: number, to: number): boolean {
+  if (from < 0 || to <= from) return false;
+  const size = view.state.doc.content.size;
+  return from <= size && to <= size;
+}
+
+function isScrollableOverflow(value: string): boolean {
+  return value === "auto" || value === "scroll" || value === "overlay";
+}
+
+function findScrollableAncestors(el: HTMLElement): HTMLElement[] {
+  const ancestors: HTMLElement[] = [];
+  let node: HTMLElement | null = el.parentElement;
   while (node) {
     const { overflowY, overflowX } = window.getComputedStyle(node);
-    if (
-      overflowY === "auto" ||
-      overflowY === "scroll" ||
-      overflowY === "overlay" ||
-      overflowX === "auto" ||
-      overflowX === "scroll"
-    ) {
-      return node;
+    if (isScrollableOverflow(overflowY) || isScrollableOverflow(overflowX)) {
+      ancestors.push(node);
     }
     node = node.parentElement;
   }
-  return null;
+  return ancestors;
 }
 
 /** Viewport rectangles for a document range (single line via coordsAtPos, multi-line via DOM Range). */
 function viewportRectsForRange(view: EditorView, from: number, to: number): ViewportRect[] {
-  if (from >= to) return [];
+  if (!isValidPmRange(view, from, to)) return [];
 
   try {
     const start = view.coordsAtPos(from, 1);
@@ -102,116 +129,210 @@ function viewportRectsForRange(view: EditorView, from: number, to: number): View
   }
 }
 
-/** Convert a viewport text rect into editor-local coordinates for the overlay layer. */
-function toEditorLocalRect(view: EditorView, rect: ViewportRect): LocalRect {
-  const editorEl = view.dom;
-  const editorRect = editorEl.getBoundingClientRect();
+/** Map viewport coords into ProseMirror-root document space. */
+function toEditorContentRect(view: EditorView, rect: ViewportRect): LocalRect | null {
+  const root = view.dom;
+  if (!root) return null;
+
+  const rootRect = root.getBoundingClientRect();
+  const width = rect.right - rect.left;
+  if (!Number.isFinite(width) || width <= 0) return null;
 
   return {
-    left: rect.left - editorRect.left + editorEl.scrollLeft,
-    top: rect.bottom - editorRect.top + editorEl.scrollTop - UNDERLINE_OFFSET_PX,
-    width: rect.right - rect.left,
+    left: rect.left - rootRect.left,
+    top: rect.bottom - rootRect.top - UNDERLINE_OFFSET_PX,
+    width,
   };
 }
 
-function alignLayerToEditor(layerEl: HTMLDivElement, editorEl: HTMLElement): void {
-  layerEl.style.left = `${editorEl.offsetLeft}px`;
-  layerEl.style.top = `${editorEl.offsetTop}px`;
-  layerEl.style.width = `${editorEl.offsetWidth}px`;
-  layerEl.style.height = `${editorEl.offsetHeight}px`;
+type PluginViewLike = {
+  update: (view: EditorView) => void;
+  destroy: () => void;
+};
+
+function createNoopPluginView(): PluginViewLike {
+  return {
+    update: () => {},
+    destroy: () => {},
+  };
 }
 
-class MechanicsUnderlineLayerView {
-  private readonly layerEl: HTMLDivElement;
-  private readonly scrollParent: HTMLElement | null;
+class MechanicsUnderlineLayerView implements PluginViewLike {
+  private readonly layerEl: HTMLDivElement | null;
+  private readonly scrollCleanups: Array<() => void> = [];
   private readonly onLayoutChange: () => void;
+  private readonly onScroll: () => void;
   private resizeObserver: ResizeObserver | null = null;
   private view: EditorView;
+  private mounted = false;
+  private painting = false;
 
   constructor(view: EditorView) {
     this.view = view;
-    this.layerEl = document.createElement("div");
-    this.layerEl.className = "harvy-mechanics-underline-layer";
-    this.layerEl.setAttribute("aria-hidden", "true");
+    this.layerEl = isDomEnvironmentReady() ? document.createElement("div") : null;
 
-    const editorEl = view.dom;
-    const mount = editorEl.parentElement;
-    if (mount) {
-      if (window.getComputedStyle(mount).position === "static") {
-        mount.style.position = "relative";
-      }
-      mount.appendChild(this.layerEl);
-      alignLayerToEditor(this.layerEl, editorEl);
+    if (this.layerEl) {
+      this.layerEl.className = LAYER_CLASS;
+      this.layerEl.setAttribute("aria-hidden", "true");
+      this.layerEl.setAttribute("contenteditable", "false");
     }
+
+    this.onScroll = () => {
+      this.safePaint(this.view);
+    };
 
     this.onLayoutChange = () => {
       requestAnimationFrame(() => {
-        alignLayerToEditor(this.layerEl, this.view.dom);
-        this.paint(this.view);
+        this.safeSyncAndPaint(this.view);
       });
     };
 
-    this.scrollParent = findScrollParent(editorEl);
-    this.scrollParent?.addEventListener("scroll", this.onLayoutChange, { passive: true });
-    window.addEventListener("resize", this.onLayoutChange);
+    if (isDomEnvironmentReady()) {
+      window.addEventListener("resize", this.onLayoutChange);
 
-    if (typeof ResizeObserver !== "undefined") {
-      this.resizeObserver = new ResizeObserver(this.onLayoutChange);
-      this.resizeObserver.observe(editorEl);
-      if (mount) this.resizeObserver.observe(mount);
+      if (this.layerEl && isViewDomReady(view)) {
+        try {
+          if (typeof ResizeObserver !== "undefined") {
+            this.resizeObserver = new ResizeObserver(this.onLayoutChange);
+            this.resizeObserver.observe(view.dom);
+          }
+
+          for (const scrollEl of findScrollableAncestors(view.dom)) {
+            scrollEl.addEventListener("scroll", this.onScroll, { passive: true });
+            this.scrollCleanups.push(() => scrollEl.removeEventListener("scroll", this.onScroll));
+          }
+
+          if (document.fonts?.ready) {
+            void document.fonts.ready.then(this.onLayoutChange);
+          }
+        } catch (error) {
+          logOverlayError("init listeners", error);
+        }
+      }
+
+      requestAnimationFrame(() => {
+        this.safeSyncAndPaint(this.view);
+      });
     }
-
-    if (document.fonts?.ready) {
-      void document.fonts.ready.then(this.onLayoutChange);
-    }
-
-    this.paint(view);
   }
 
   update(view: EditorView): void {
     this.view = view;
-    alignLayerToEditor(this.layerEl, view.dom);
-    this.paint(view);
+    if (mechanicsOverlayDisabled) return;
+    this.safeSyncAndPaint(view);
   }
 
   destroy(): void {
-    this.scrollParent?.removeEventListener("scroll", this.onLayoutChange);
-    window.removeEventListener("resize", this.onLayoutChange);
+    if (isDomEnvironmentReady()) {
+      window.removeEventListener("resize", this.onLayoutChange);
+    }
+    for (const cleanup of this.scrollCleanups) cleanup();
     this.resizeObserver?.disconnect();
-    this.layerEl.remove();
+    this.layerEl?.remove();
+  }
+
+  private safeSyncAndPaint(view: EditorView): void {
+    if (mechanicsOverlayDisabled) return;
+    try {
+      if (!this.mountLayer(view)) return;
+      this.safePaint(view);
+    } catch (error) {
+      logOverlayError("sync", error);
+    }
+  }
+
+  private safePaint(view: EditorView): void {
+    if (mechanicsOverlayDisabled || this.painting) return;
+    this.painting = true;
+    try {
+      if (!this.layerEl || !isViewDomReady(view) || !this.mounted) return;
+      this.paint(view);
+    } catch (error) {
+      logOverlayError("paint", error);
+    } finally {
+      this.painting = false;
+    }
+  }
+
+  /**
+   * Mount as sibling of ProseMirror (never inside view.dom — foreign nodes break PM DOM sync).
+   */
+  private mountLayer(view: EditorView): boolean {
+    if (!this.layerEl || mechanicsOverlayDisabled) return false;
+    if (!isViewDomReady(view)) return false;
+
+    const editorEl = view.dom;
+    const mount = editorEl.parentElement;
+    if (!mount) return false;
+
+    try {
+      mount.classList.add("harvy-mechanics-underline-mount");
+      if (window.getComputedStyle(mount).position === "static") {
+        mount.style.position = "relative";
+      }
+
+      if (!mount.contains(this.layerEl)) {
+        mount.insertBefore(this.layerEl, editorEl);
+      } else if (this.layerEl.nextSibling !== editorEl) {
+        mount.insertBefore(this.layerEl, editorEl);
+      }
+
+      this.syncLayerSize(editorEl);
+      this.mounted = true;
+      return true;
+    } catch (error) {
+      logOverlayError("mount", error);
+      return false;
+    }
+  }
+
+  private syncLayerSize(editorEl: HTMLElement): void {
+    if (!this.layerEl) return;
+    this.layerEl.style.top = `${editorEl.offsetTop}px`;
+    this.layerEl.style.left = `${editorEl.offsetLeft}px`;
+    this.layerEl.style.width = `${editorEl.offsetWidth}px`;
+    this.layerEl.style.height = `${editorEl.offsetHeight}px`;
   }
 
   private syncLayerVisibility(): void {
+    if (!this.layerEl) return;
     this.layerEl.classList.toggle(
       "harvy-mechanics-underline-layer--hidden",
-      !proofreadDecorationsViewRef.visible,
+      !proofreadDecorationsViewRef.visible || mechanicsOverlayDisabled,
     );
   }
 
   private paint(view: EditorView): void {
+    if (!this.layerEl || !isViewDomReady(view)) return;
+
     const state = mechanicsUnderlineLayerKey.getState(view.state);
-    const editorEl = view.dom;
     this.syncLayerVisibility();
 
-    if (!proofreadDecorationsViewRef.visible) {
+    if (!proofreadDecorationsViewRef.visible || mechanicsOverlayDisabled) {
       return;
     }
 
+    this.syncLayerSize(view.dom);
     this.layerEl.replaceChildren();
 
     if (!state?.ranges.length) {
       return;
     }
 
-    alignLayerToEditor(this.layerEl, editorEl);
-
     for (const range of state.ranges) {
-      if (range.from >= range.to) continue;
+      if (!isValidPmRange(view, range.from, range.to)) continue;
 
-      const viewportRects = viewportRectsForRange(view, range.from, range.to);
+      let viewportRects: ViewportRect[] = [];
+      try {
+        viewportRects = viewportRectsForRange(view, range.from, range.to);
+      } catch {
+        continue;
+      }
 
       for (const viewportRect of viewportRects) {
-        const local = toEditorLocalRect(view, viewportRect);
+        const local = toEditorContentRect(view, viewportRect);
+        if (!local) continue;
+        if (!Number.isFinite(local.left) || !Number.isFinite(local.top)) continue;
 
         const el = document.createElement("div");
         el.className = `harvy-mechanics-underline harvy-mechanics-underline--${range.type}`;
@@ -264,7 +385,13 @@ export const MechanicsUnderlineLayer = Extension.create({
           },
         },
         view(view) {
-          return new MechanicsUnderlineLayerView(view);
+          if (!isDomEnvironmentReady()) return createNoopPluginView();
+          try {
+            return new MechanicsUnderlineLayerView(view);
+          } catch (error) {
+            logOverlayError("construct", error);
+            return createNoopPluginView();
+          }
         },
       }),
     ];
@@ -278,18 +405,36 @@ export function dispatchProofreadDecorations(
   view: EditorView,
   ranges: MechanicsUnderlineRange[],
 ): void {
-  const tr = view.state.tr.setMeta(mechanicsUnderlineLayerKey, { set: ranges } satisfies MechanicsUnderlineMeta);
-  view.dispatch(tr);
+  if (mechanicsOverlayDisabled || !isViewDomReady(view)) return;
+  try {
+    const tr = view.state.tr.setMeta(mechanicsUnderlineLayerKey, { set: ranges } satisfies MechanicsUnderlineMeta);
+    view.dispatch(tr);
+  } catch (error) {
+    logOverlayError("dispatch", error);
+  }
 }
 
 export function clearProofreadDecorations(view: EditorView): void {
-  const tr = view.state.tr.setMeta(mechanicsUnderlineLayerKey, { clear: true } satisfies MechanicsUnderlineMeta);
-  view.dispatch(tr);
+  if (!view?.dom) return;
+  try {
+    const tr = view.state.tr.setMeta(mechanicsUnderlineLayerKey, { clear: true } satisfies MechanicsUnderlineMeta);
+    view.dispatch(tr);
+  } catch (error) {
+    logOverlayError("clear", error);
+  }
 }
 
 /** Show or hide mechanics underlines without clearing stored ranges/issues. */
-export function setMechanicsUnderlinesVisible(view: EditorView, visible: boolean): void {
-  proofreadDecorationsViewRef.visible = visible;
-  const tr = view.state.tr.setMeta(mechanicsUnderlineLayerKey, true);
-  view.dispatch(tr);
+export function setMechanicsUnderlinesVisible(view: EditorView | null | undefined, visible: boolean): void {
+  if (mechanicsOverlayDisabled || !isViewDomReady(view)) {
+    proofreadDecorationsViewRef.visible = false;
+    return;
+  }
+  try {
+    proofreadDecorationsViewRef.visible = visible;
+    const tr = view.state.tr.setMeta(mechanicsUnderlineLayerKey, true);
+    view.dispatch(tr);
+  } catch (error) {
+    logOverlayError("visibility", error);
+  }
 }

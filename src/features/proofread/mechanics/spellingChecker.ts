@@ -1,10 +1,12 @@
-import { isCommonWord } from "./commonWordList";
+import { isWordSpellingExempt } from "./spellingDictionary";
+import { getHunspell } from "./hunspellDictionary";
 import type { MechanicsRuleHit } from "./types";
 
 /**
- * Placeholder spelling checker — swap this module for nspell, Hunspell, or LanguageTool later.
- * Flags known typos and unknown words (not in `commonWordList`).
+ * Hunspell (nspell) spelling mechanics with a typo-map fast path for obvious fixes.
  */
+
+/** High-confidence typo replacements (case-insensitive lookup). Checked before Hunspell. */
 const COMMON_TYPOS: Readonly<Record<string, string>> = {
   het: "the",
   teh: "the",
@@ -25,7 +27,32 @@ function applyReplacementCase(original: string, replacement: string): string {
   return replacement;
 }
 
-/** Scan plain document text for misspellings (typos + unknown words). */
+function casingVariants(word: string): string[] {
+  const lower = word.toLowerCase();
+  const variants = new Set<string>([word, lower]);
+  if (word.length > 1) {
+    variants.add(word[0]!.toUpperCase() + word.slice(1).toLowerCase());
+    variants.add(word.toUpperCase());
+  }
+  return [...variants];
+}
+
+/** True when Hunspell considers the word correctly spelled (any common casing variant). */
+function isCorrectByHunspell(word: string): boolean {
+  const checker = getHunspell();
+  if (!checker) return true;
+
+  return casingVariants(word).some((variant) => checker.correct(variant));
+}
+
+function suggestionForWord(word: string): string | undefined {
+  const checker = getHunspell();
+  if (!checker) return undefined;
+  const suggestions = checker.suggest(word);
+  return suggestions[0];
+}
+
+/** Scan plain document text for misspellings (typo map + Hunspell). */
 export function scanSpellingIssues(text: string): MechanicsRuleHit[] {
   if (!text.trim()) return [];
 
@@ -37,6 +64,7 @@ export function scanSpellingIssues(text: string): MechanicsRuleHit[] {
     const word = match[0];
     const lower = word.toLowerCase();
     if (lower.length <= 2) continue;
+    if (isWordSpellingExempt(word)) continue;
 
     const typoFix = COMMON_TYPOS[lower];
     if (typoFix) {
@@ -51,15 +79,17 @@ export function scanSpellingIssues(text: string): MechanicsRuleHit[] {
       continue;
     }
 
-    if (!isCommonWord(word)) {
-      hits.push({
-        category: "spelling",
-        message: `Unknown word: “${word}”`,
-        start: match.index,
-        end: match.index + word.length,
-        severity: "high",
-      });
-    }
+    if (isCorrectByHunspell(word)) continue;
+
+    const replacement = suggestionForWord(word);
+    hits.push({
+      category: "spelling",
+      message: `Possible misspelling: “${word}”`,
+      ...(replacement ? { replacement: applyReplacementCase(word, replacement) } : {}),
+      start: match.index,
+      end: match.index + word.length,
+      severity: "high",
+    });
   }
 
   return hits;

@@ -1,5 +1,11 @@
 import { TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
+import {
+  addWordToCustomDictionary,
+  ignoreSpellingWordForDocument,
+} from "../proofread/mechanics/spellingDictionary";
+import { getSpellingIssueAtClick } from "../proofread/spellingIssueAtClick";
+import { spellingContextMenuRef } from "../proofread/spellingContextMenuRef";
 
 let menuEl: HTMLDivElement | null = null;
 
@@ -65,9 +71,10 @@ export function openEditorContextMenu(opts: {
   view: EditorView;
   canInsertImage: boolean;
   onInsertImage: () => void | Promise<void>;
+  spellingWord?: string | null;
 }): void {
   removeEditorContextMenu();
-  const { clientX, clientY, view, canInsertImage, onInsertImage } = opts;
+  const { clientX, clientY, view, canInsertImage, onInsertImage, spellingWord } = opts;
   const { from, to, empty } = view.state.selection;
   const hasSelection = !empty && from !== to;
 
@@ -105,6 +112,18 @@ export function openEditorContextMenu(opts: {
     hr.setAttribute("aria-hidden", "true");
     wrap.appendChild(hr);
   };
+
+  if (spellingWord) {
+    mkBtn("Add to Dictionary", () => {
+      addWordToCustomDictionary(spellingWord);
+      spellingContextMenuRef.onRefresh();
+    });
+    mkBtn("Ignore", () => {
+      ignoreSpellingWordForDocument(spellingWord, spellingContextMenuRef.documentKey);
+      spellingContextMenuRef.onRefresh();
+    });
+    mkDivider();
+  }
 
   if (canInsertImage) {
     mkBtn("Insert image", () => {
@@ -150,12 +169,20 @@ export function handleEditorContextMenuEvent(
     event.preventDefault();
     focusViewAtCoords(view, event.clientX, event.clientY);
   }
+
+  let spellingWord: string | null = null;
+  if (spellingContextMenuRef.enabled) {
+    const anchor = getSpellingIssueAtClick(view, event, spellingContextMenuRef.issues);
+    spellingWord = anchor?.word ?? null;
+  }
+
   openEditorContextMenu({
     clientX: event.clientX,
     clientY: event.clientY,
     view,
     canInsertImage: opts.canInsertImage,
     onInsertImage: opts.onInsertImage,
+    spellingWord,
   });
   return true;
 }

@@ -707,17 +707,19 @@
   }
 
   /*
-   * Mechanics dotted underlines — independent overlay layer (not inline spans).
-   * Prose highlights remain continuous because mechanics never nest inside them.
-   * Layer is sized/positioned to match the ProseMirror root on each paint.
+   * Mechanics dotted underlines — sibling overlay in the editor mount (never inside ProseMirror DOM).
    */
+  .harvy-mechanics-underline-mount {
+    position: relative;
+  }
+
   .harvy-mechanics-underline-layer {
     position: absolute;
     top: 0;
     left: 0;
     pointer-events: none;
     overflow: visible;
-    z-index: 2;
+    z-index: 5;
   }
 
   .harvy-mechanics-underline-layer--hidden {

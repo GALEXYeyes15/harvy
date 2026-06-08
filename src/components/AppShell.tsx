@@ -19,6 +19,8 @@ import { EditorToolbar } from "./EditorToolbar";
 import { EditorAmbientControls } from "./EditorAmbientControls";
 import { EditorCanvas } from "./EditorCanvas";
 import { FloatingTextMenu } from "./FloatingTextMenu";
+import { setSpellingDocumentKey } from "../features/proofread/mechanics/spellingDictionary";
+import { syncSpellingContextMenuRef } from "../features/proofread/spellingContextMenuRef";
 import { EditorDocumentHeader } from "./EditorDocumentHeader";
 import { OpenWindowsBar } from "./OpenWindowsBar";
 import { SaveAsModal, type SaveAsOrganizeMode } from "./SaveAsModal";
@@ -77,6 +79,7 @@ import {
   writingAssistanceViewRef,
 } from "../features/writing-assistance/writingAssistanceExtension";
 import { proofreadPlainTextAndPositions } from "../features/proofread/proofreadPlainMap";
+import { ensureHunspellLoaded } from "../features/proofread/mechanics/hunspellDictionary";
 import { syncMechanicsProofread } from "../features/proofread/mechanics/syncMechanicsProofread";
 import type { ProofreadIssue } from "../features/proofread/types";
 import { ensureUserRulesFile, loadEditorRules } from "../features/writing-assistance/editorRules";
@@ -1219,6 +1222,10 @@ export function AppShell() {
     setMechanicsUnderlinesVisible(tiptapEditor.view, showMechanicsUnderlines);
   }, [showMechanicsUnderlines, tiptapEditor]);
 
+  useEffect(() => {
+    void ensureHunspellLoaded();
+  }, []);
+
   /** Live rule-based mechanics (Spelling / Grammar / Suggestions) — runs in Edit mode regardless of sidebar. */
   useEffect(() => {
     if (!tiptapEditor || mode !== "edit" || !editorEditable) {
@@ -1226,7 +1233,7 @@ export function AppShell() {
     }
 
     const runSync = () => {
-      syncMechanicsProofread(tiptapEditor, setProofreadIssues);
+      void syncMechanicsProofread(tiptapEditor, setProofreadIssues);
     };
 
     runSync();
@@ -1246,6 +1253,30 @@ export function AppShell() {
   /** TipTap Placeholder extension only renders when the doc is empty; no real document text. */
   const editorPlaceholder = editorEditable ? "Start writing..." : undefined;
   const editorInstanceKey = activeTabId ?? (openTabIds.length === 0 ? "scratch" : "browse");
+
+  const refreshMechanicsProofread = useCallback(() => {
+    if (!tiptapEditor) return;
+    void syncMechanicsProofread(tiptapEditor, setProofreadIssues);
+  }, [tiptapEditor]);
+
+  useEffect(() => {
+    setSpellingDocumentKey(editorInstanceKey);
+  }, [editorInstanceKey]);
+
+  useEffect(() => {
+    syncSpellingContextMenuRef({
+      enabled: showMechanicsUnderlines && editorEditable,
+      issues: proofreadIssues,
+      documentKey: editorInstanceKey,
+      onRefresh: refreshMechanicsProofread,
+    });
+  }, [
+    showMechanicsUnderlines,
+    editorEditable,
+    proofreadIssues,
+    editorInstanceKey,
+    refreshMechanicsProofread,
+  ]);
 
   const copyDocumentFallbackMarkdown = useMemo(
     () => activeDocument?.content ?? (openTabIds.length === 0 ? scratchDraftContent : ""),
@@ -1286,7 +1317,7 @@ export function AppShell() {
     }
     setProofreadBusy(true);
     try {
-      syncMechanicsProofread(tiptapEditor, setProofreadIssues);
+      await syncMechanicsProofread(tiptapEditor, setProofreadIssues);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Proofread failed";
       window.alert(msg);

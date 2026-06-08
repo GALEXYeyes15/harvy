@@ -3,6 +3,7 @@ import { dispatchProofreadDecorations } from "../mechanicsUnderlineLayer";
 import { proofreadIssuesToPmRanges } from "../mechanicsUnderlineRanges";
 import { proofreadPlainTextAndPositions } from "../proofreadPlainMap";
 import type { ProofreadIssue } from "../types";
+import { ensureHunspellLoaded } from "./hunspellDictionary";
 import { runMechanicsProofread } from "./mechanicsEngine";
 
 function countByType(issues: ProofreadIssue[]): Record<ProofreadIssue["type"], number> {
@@ -15,31 +16,41 @@ function countByType(issues: ProofreadIssue[]): Record<ProofreadIssue["type"], n
 
 /**
  * Run the local mechanics engine, update React state, and paint overlay underlines.
- * Temporary logging — remove once mechanics pipeline is verified in production.
  */
-export function syncMechanicsProofread(
+export async function syncMechanicsProofread(
   editor: Editor,
   setProofreadIssues: (issues: ProofreadIssue[]) => void,
-): ProofreadIssue[] {
+): Promise<ProofreadIssue[]> {
+  try {
+    await ensureHunspellLoaded();
+  } catch {
+    // Typo-map spelling still works if dictionary load fails.
+  }
+
   const snapshot = proofreadPlainTextAndPositions(editor.state.doc);
 
-  console.log("[HarvyMechanics] engine run", { text: snapshot.text });
+  if (import.meta.env.DEV) {
+    console.log("[HarvyMechanics] engine run", { text: snapshot.text });
+  }
 
   const issues = runMechanicsProofread(snapshot.text);
 
-  console.log("[HarvyMechanics] raw results", issues);
-
-  const counts = countByType(issues);
-  console.log("[HarvyMechanics] sidebar counts", counts);
+  if (import.meta.env.DEV) {
+    console.log("[HarvyMechanics] raw results", issues);
+    console.log("[HarvyMechanics] sidebar counts", countByType(issues));
+  }
 
   setProofreadIssues(issues);
 
   const ranges = proofreadIssuesToPmRanges(issues, snapshot.charToPmPos, snapshot.text);
-  console.log("[HarvyMechanics] overlay underline ranges", {
-    issueCount: issues.length,
-    rangeCount: ranges.length,
-    ranges,
-  });
+
+  if (import.meta.env.DEV) {
+    console.log("[HarvyMechanics] overlay underline ranges", {
+      issueCount: issues.length,
+      rangeCount: ranges.length,
+      ranges,
+    });
+  }
 
   dispatchProofreadDecorations(editor.view, ranges);
 

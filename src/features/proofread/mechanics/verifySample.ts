@@ -1,5 +1,8 @@
+import { ensureHunspellLoaded } from "./hunspellDictionary";
 import { runMechanicsProofread } from "./mechanicsEngine";
 import { MECHANICS_SAMPLE_PARAGRAPH } from "./sampleParagraph";
+
+await ensureHunspellLoaded();
 
 const issues = runMechanicsProofread(MECHANICS_SAMPLE_PARAGRAPH);
 
