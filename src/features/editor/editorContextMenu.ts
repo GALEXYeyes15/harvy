@@ -4,42 +4,38 @@ import {
   addWordToCustomDictionary,
   ignoreSpellingWordForDocument,
 } from "../proofread/mechanics/spellingDictionary";
-import { getSpellingIssueAtClick } from "../proofread/spellingIssueAtClick";
+import { getSpellingIssueAtClick, type SpellingPopoverAnchor } from "../proofread/spellingIssueAtClick";
 import { spellingContextMenuRef } from "../proofread/spellingContextMenuRef";
-
-let menuEl: HTMLDivElement | null = null;
-
-const MENU_WRAP_CLASS =
-  "harvy-editor-menu fixed z-[9999] min-w-[10.5rem] rounded-md border border-line/25 bg-page py-0.5 text-[12px] shadow-md dark:border-white/[0.12] dark:bg-[#252525]";
-
-const MENU_BTN_CLASS =
-  "block w-full px-3 py-1.5 text-left text-[12px] text-ink/90 transition hover:bg-ink/[0.06] dark:text-ink/88";
-
-const MENU_BTN_DISABLED_CLASS =
-  "block w-full cursor-default px-3 py-1.5 text-left text-[12px] text-muted/45";
-
-const MENU_DIVIDER_CLASS = "my-0.5 h-px bg-line/30 dark:bg-white/[0.08]";
+import {
+  closeHarvyContextMenu,
+  openHarvyContextMenu,
+  type HarvyContextMenuAnchorRange,
+  type HarvyContextMenuSection,
+} from "./harvyContextMenu";
 
 export function removeEditorContextMenu(): void {
-  menuEl?.remove();
-  menuEl = null;
+  closeHarvyContextMenu();
 }
 
-if (typeof document !== "undefined") {
-  document.addEventListener(
-    "pointerdown",
-    (e) => {
-      if (!menuEl) return;
-      if (e.target instanceof Node && menuEl.contains(e.target)) return;
-      removeEditorContextMenu();
-    },
-    true,
-  );
-}
+function resolveMenuAnchor(
+  view: EditorView,
+  event: MouseEvent,
+  spellingAnchor: SpellingPopoverAnchor | null,
+): HarvyContextMenuAnchorRange {
+  const { from, to, empty } = view.state.selection;
+  if (!empty && to > from) {
+    return { from, to };
+  }
+  if (spellingAnchor) {
+    return { from: spellingAnchor.pmFrom, to: spellingAnchor.pmTo };
+  }
 
-function placeMenuAtCursor(wrap: HTMLDivElement, clientX: number, clientY: number): void {
-  wrap.style.left = `${Math.min(clientX, window.innerWidth - 200)}px`;
-  wrap.style.top = `${Math.min(clientY + 4, window.innerHeight - 180)}px`;
+  const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
+  if (hit) {
+    return { from: hit.pos, to: hit.pos };
+  }
+
+  return { from, to: from };
 }
 
 function focusViewAtCoords(view: EditorView, clientX: number, clientY: number): void {
@@ -66,92 +62,64 @@ export function shouldOpenEditorContextMenu(target: EventTarget | null, view: Ed
 }
 
 export function openEditorContextMenu(opts: {
-  clientX: number;
-  clientY: number;
+  event: MouseEvent;
   view: EditorView;
   canInsertImage: boolean;
   onInsertImage: () => void | Promise<void>;
   spellingWord?: string | null;
+  spellingAnchor?: SpellingPopoverAnchor | null;
 }): void {
-  removeEditorContextMenu();
-  const { clientX, clientY, view, canInsertImage, onInsertImage, spellingWord } = opts;
+  const { event, view, canInsertImage, onInsertImage, spellingWord, spellingAnchor } = opts;
   const { from, to, empty } = view.state.selection;
   const hasSelection = !empty && from !== to;
 
-  const wrap = document.createElement("div");
-  wrap.className = MENU_WRAP_CLASS;
-  placeMenuAtCursor(wrap, clientX, clientY);
+  const anchor = resolveMenuAnchor(view, event, spellingAnchor ?? null);
 
-  const runMenuAction = (onClick: () => void) => {
-    removeEditorContextMenu();
-    onClick();
-    view.focus();
-  };
-
-  const mkBtn = (label: string, onClick: () => void, disabled = false) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = disabled ? MENU_BTN_DISABLED_CLASS : MENU_BTN_CLASS;
-    b.textContent = label;
-    b.disabled = disabled;
-    if (!disabled) {
-      // pointerdown + preventDefault: click is often lost when the editor blurs on mousedown.
-      b.addEventListener("pointerdown", (e) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        e.stopPropagation();
-        runMenuAction(onClick);
-      });
-    }
-    wrap.appendChild(b);
-  };
-
-  const mkDivider = () => {
-    const hr = document.createElement("div");
-    hr.className = MENU_DIVIDER_CLASS;
-    hr.setAttribute("aria-hidden", "true");
-    wrap.appendChild(hr);
-  };
-
-  if (spellingWord) {
-    mkBtn("Add to Dictionary", () => {
-      addWordToCustomDictionary(spellingWord);
-      spellingContextMenuRef.onRefresh();
-    });
-    mkBtn("Ignore", () => {
-      ignoreSpellingWordForDocument(spellingWord, spellingContextMenuRef.documentKey);
-      spellingContextMenuRef.onRefresh();
-    });
-    mkDivider();
-  }
+  const sections: HarvyContextMenuSection[] = [
+    [
+      {
+        label: "Cut",
+        onClick: () => runClipboardCommand(view, "cut"),
+        disabled: !hasSelection,
+      },
+      {
+        label: "Copy",
+        onClick: () => runClipboardCommand(view, "copy"),
+        disabled: !hasSelection,
+      },
+      { label: "Paste", onClick: () => runClipboardCommand(view, "paste") },
+    ],
+  ];
 
   if (canInsertImage) {
-    mkBtn("Insert image", () => {
-      void onInsertImage();
-    });
-    mkDivider();
+    sections.push([{ label: "Insert image", onClick: () => void onInsertImage() }]);
   }
 
-  mkBtn(
-    "Cut",
-    () => {
-      runClipboardCommand(view, "cut");
-    },
-    !hasSelection,
-  );
-  mkBtn(
-    "Copy",
-    () => {
-      runClipboardCommand(view, "copy");
-    },
-    !hasSelection,
-  );
-  mkBtn("Paste", () => {
-    runClipboardCommand(view, "paste");
-  });
+  if (spellingWord) {
+    sections.push([
+      {
+        label: "Ignore",
+        onClick: () => {
+          ignoreSpellingWordForDocument(spellingWord, spellingContextMenuRef.documentKey);
+          spellingContextMenuRef.onRefresh();
+        },
+      },
+      {
+        label: "Add to Dictionary",
+        onClick: () => {
+          addWordToCustomDictionary(spellingWord);
+          spellingContextMenuRef.onRefresh();
+        },
+      },
+    ]);
+  }
 
-  document.body.appendChild(wrap);
-  menuEl = wrap;
+  openHarvyContextMenu({
+    view,
+    anchor,
+    sections,
+    placement: "below-start",
+  });
 }
 
 export function handleEditorContextMenuEvent(
@@ -171,18 +139,19 @@ export function handleEditorContextMenuEvent(
   }
 
   let spellingWord: string | null = null;
+  let spellingAnchor: SpellingPopoverAnchor | null = null;
   if (spellingContextMenuRef.enabled) {
-    const anchor = getSpellingIssueAtClick(view, event, spellingContextMenuRef.issues);
-    spellingWord = anchor?.word ?? null;
+    spellingAnchor = getSpellingIssueAtClick(view, event, spellingContextMenuRef.issues);
+    spellingWord = spellingAnchor?.word ?? null;
   }
 
   openEditorContextMenu({
-    clientX: event.clientX,
-    clientY: event.clientY,
+    event,
     view,
     canInsertImage: opts.canInsertImage,
     onInsertImage: opts.onInsertImage,
     spellingWord,
+    spellingAnchor,
   });
   return true;
 }
