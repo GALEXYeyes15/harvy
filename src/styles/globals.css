@@ -866,6 +866,60 @@
     background: color-mix(in oklab, var(--color-ink) 18%, transparent);
   }
 
+  /* Format section — centered preview workspace */
+  .harvy-format-workspace {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    flex: 1;
+    padding-top: 24px;
+    background: var(--color-stage);
+  }
+
+  /* Format section — miniature document preview card */
+  .harvy-format-preview-card {
+    --harvy-format-preview-bg: color-mix(in oklab, var(--color-ink) 5%, var(--color-stage));
+    position: relative;
+    width: 120px;
+    height: 180px;
+    overflow: hidden;
+    border-radius: 10px;
+    border: 1px solid color-mix(in oklab, var(--color-line) 45%, transparent);
+    background: var(--harvy-format-preview-bg);
+  }
+
+  html.dark .harvy-format-preview-card {
+    --harvy-format-preview-bg: color-mix(in oklab, white 4%, var(--color-stage));
+    border-color: rgba(255, 255, 255, 0.14);
+    background: var(--harvy-format-preview-bg);
+  }
+
+  .harvy-format-preview-content {
+    font-family: var(--font-content);
+    font-size: 4px;
+    line-height: 1.35;
+    padding: 10px;
+    color: color-mix(in oklab, var(--color-ink) 82%, transparent);
+  }
+
+  html.dark .harvy-format-preview-content {
+    color: rgba(255, 255, 255, 0.82);
+  }
+
+  .harvy-format-preview-card::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 45%;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent, var(--harvy-format-preview-bg));
+  }
+
   /* Image source popover — portaled near placeholder (Notion-style) */
   .harvy-image-source-popover {
     position: fixed;

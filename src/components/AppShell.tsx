@@ -23,6 +23,7 @@ import { setSpellingDocumentKey } from "../features/proofread/mechanics/spelling
 import { syncSpellingContextMenuRef } from "../features/proofread/spellingContextMenuRef";
 import { EditorDocumentHeader } from "./EditorDocumentHeader";
 import { OpenWindowsBar } from "./OpenWindowsBar";
+import { FormatPreview } from "./FormatPreview";
 import {
   WorkspaceSectionPlaceholder,
   WorkspaceSectionSwitcher,
@@ -1504,7 +1505,9 @@ export function AppShell() {
         aria-labelledby={activeTabId ? `harvy-tab-${activeTabId}` : undefined}
       >
         {activeWorkspaceSection === "collect" ? <WorkspaceSectionPlaceholder title="Collect" /> : null}
-        {activeWorkspaceSection === "format" ? <WorkspaceSectionPlaceholder title="Format" /> : null}
+        {activeWorkspaceSection === "format" ? (
+          <FormatPreview editor={tiptapEditor} fallbackText={editorText} />
+        ) : null}
         <div
           className={
             activeWorkspaceSection === "write"
