@@ -78,7 +78,6 @@ import {
   grammarDecorationsKey,
   writingAssistanceViewRef,
 } from "../features/writing-assistance/writingAssistanceExtension";
-import { proofreadPlainTextAndPositions } from "../features/proofread/proofreadPlainMap";
 import { ensureHunspellLoaded } from "../features/proofread/mechanics/hunspellDictionary";
 import { syncMechanicsProofread } from "../features/proofread/mechanics/syncMechanicsProofread";
 import type { ProofreadIssue } from "../features/proofread/types";
@@ -182,31 +181,18 @@ export function AppShell() {
   const [saveAsDestinationPath, setSaveAsDestinationPath] = useState<string | null>(null);
   const [saveAsSubmitting, setSaveAsSubmitting] = useState(false);
   const [isTopChromeHidden, setIsTopChromeHidden] = useState(false);
-  /** Outline tab: show outline NOTE: instruction blocks in the editor (CSS toggle only; only while Create Outline Mode is on). */
+  /** Outline tab: show outline NOTE: instruction blocks in the editor (CSS toggle only). */
   const [outlineInstructionsVisible, setOutlineInstructionsVisible] = useState(true);
-  const [createOutlineMode, setCreateOutlineMode] = useState(false);
   const [readabilityPanelOpen, setReadabilityPanelOpen] = useState(true);
+  /** Outline Mode: right sidebar open AND Outline tab selected. */
+  const isOutlineModeActive = readabilityPanelOpen && mode === "outline";
 
-  const exitCreateOutlineMode = useCallback(() => {
-    setCreateOutlineMode(false);
-    setOutlineInstructionsVisible(true);
-  }, []);
-
-  const handleSidebarModeChange = useCallback(
-    (next: SidebarToolsMode) => {
-      setMode(next);
-      if (next === "edit") {
-        exitCreateOutlineMode();
-      }
-    },
-    [exitCreateOutlineMode],
-  );
-
-  useEffect(() => {
-    if (!readabilityPanelOpen) {
-      exitCreateOutlineMode();
+  const handleSidebarModeChange = useCallback((next: SidebarToolsMode) => {
+    setMode(next);
+    if (next === "edit") {
+      setOutlineInstructionsVisible(true);
     }
-  }, [readabilityPanelOpen, exitCreateOutlineMode]);
+  }, []);
   /** In-memory buffer when no tabs open — not a saved file until persistence exists. */
   const [scratchDraftContent, setScratchDraftContent] = useState("");
   /** When set, scratch buffer last wrote to this path. */
@@ -224,7 +210,6 @@ export function AppShell() {
 
   const [tiptapEditor, setTiptapEditor] = useState<Editor | null>(null);
   const [selectedWordCount, setSelectedWordCount] = useState<number | null>(null);
-  const [proofreadBusy, setProofreadBusy] = useState(false);
   const [proofreadIssues, setProofreadIssues] = useState<ProofreadIssue[]>([]);
   /** Sidebar inline rename for a newly created (or future: any) folder. */
   const [folderRename, setFolderRename] = useState<{
@@ -1308,24 +1293,6 @@ export function AppShell() {
     [tiptapEditor, editorEditable],
   );
 
-  async function handleAiProofread() {
-    if (!tiptapEditor || !editorEditable || mode !== "edit") return;
-    const snapshot = proofreadPlainTextAndPositions(tiptapEditor.state.doc);
-    if (!snapshot.text.trim()) {
-      window.alert("Nothing to proofread.");
-      return;
-    }
-    setProofreadBusy(true);
-    try {
-      await syncMechanicsProofread(tiptapEditor, setProofreadIssues);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Proofread failed";
-      window.alert(msg);
-    } finally {
-      setProofreadBusy(false);
-    }
-  }
-
   const commitActiveDocumentTitleRename = useCallback(
     async (rawBase: string): Promise<boolean> => {
       if (openTabIds.length === 0) {
@@ -1458,12 +1425,8 @@ export function AppShell() {
       onModeChange={handleSidebarModeChange}
       selectedWordCount={selectedWordCount}
       editor={tiptapEditor}
-      createOutlineMode={createOutlineMode}
-      onCreateOutlineModeChange={setCreateOutlineMode}
       outlineInstructionsVisible={outlineInstructionsVisible}
       onOutlineInstructionsVisibleChange={setOutlineInstructionsVisible}
-      onAiProofread={handleAiProofread}
-      proofreadBusy={proofreadBusy}
       proofreadIssues={proofreadIssues}
     />
   );
@@ -1545,8 +1508,8 @@ export function AppShell() {
           }
           showReadabilityHighlights={showReadabilityHighlights}
           showMechanicsUnderlines={showMechanicsUnderlines}
-          showOutlineInstructions={!createOutlineMode || outlineInstructionsVisible}
-          createOutlineMode={createOutlineMode}
+          showOutlineInstructions={!isOutlineModeActive || outlineInstructionsVisible}
+          createOutlineMode={isOutlineModeActive}
           workspaceRootPath={workspaceRootPath}
           pickLocalImage={pickLocalImage}
           loadImageAt={loadImageAtPos}

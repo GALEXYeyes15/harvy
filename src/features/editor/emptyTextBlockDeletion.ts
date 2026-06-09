@@ -3,6 +3,8 @@ import type { ResolvedPos } from "@tiptap/pm/model";
 import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
+import { isCursorAtStartOfListItemState } from "./harvyListKeyboard";
+import { joinParagraphWithPrecedingListOnBackspace } from "./joinParagraphWithPrecedingList";
 
 /** Temporary logging to verify Substack-style Backspace in the active editor. */
 function logSubstackBackspace(step: string, detail?: Record<string, unknown>): void {
@@ -197,6 +199,15 @@ export function handleBackspaceOnEmptyTextBlockKeyDown(view: EditorView, event: 
     event.preventDefault();
     view.dispatch(state.tr.deleteSelection().scrollIntoView());
     view.focus();
+    return true;
+  }
+
+  if (isCursorAtStartOfListItemState(state)) {
+    return false;
+  }
+
+  if (joinParagraphWithPrecedingListOnBackspace(view)) {
+    event.preventDefault();
     return true;
   }
 

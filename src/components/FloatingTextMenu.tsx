@@ -7,8 +7,6 @@ import {
   Heading3,
   Italic,
   Link2,
-  List,
-  ListOrdered,
   MessageSquare,
   Underline,
 } from "lucide-react";
@@ -22,7 +20,6 @@ import {
   type HarvyContextMenuAnchorRange,
 } from "../features/editor/harvyContextMenu";
 import {
-  HarvyContextMenuDivider,
   HarvyContextMenuPortal,
   HarvyContextMenuShell,
   useHarvyContextMenuPortal,
@@ -335,14 +332,6 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
             >
               <Link2 size={13} strokeWidth={1.6} aria-hidden />
             </button>
-            <button
-              type="button"
-              className={HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS}
-              aria-label="Comment"
-              onClick={() => run("comment")}
-            >
-              <MessageSquare size={13} strokeWidth={1.6} aria-hidden />
-            </button>
           </>,
         )}
         {linkOpen ? (
@@ -380,10 +369,16 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
             </div>
           </div>
         ) : (
-          <>
-            <HarvyContextMenuDivider />
-            {row(
+          row(
               <>
+                <button
+                  type="button"
+                  className={HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS}
+                  aria-label="Comment"
+                  onClick={() => run("comment")}
+                >
+                  <MessageSquare size={13} strokeWidth={1.6} aria-hidden />
+                </button>
                 <button
                   type="button"
                   className={`${HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS} ${act(!!ed?.isActive("heading", { level: 1 }))}`}
@@ -411,27 +406,8 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
                 >
                   <Heading3 size={13} strokeWidth={1.6} aria-hidden />
                 </button>
-                <button
-                  type="button"
-                  className={`${HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS} ${act(!!ed?.isActive("bulletList"))}`}
-                  aria-label="Bulleted list"
-                  aria-pressed={ed?.isActive("bulletList") ?? false}
-                  onClick={() => run("bullets")}
-                >
-                  <List size={13} strokeWidth={1.6} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className={`${HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS} ${act(!!ed?.isActive("orderedList"))}`}
-                  aria-label="Numbered list"
-                  aria-pressed={ed?.isActive("orderedList") ?? false}
-                  onClick={() => run("numbers")}
-                >
-                  <ListOrdered size={13} strokeWidth={1.6} aria-hidden />
-                </button>
               </>,
-            )}
-          </>
+            )
         )}
       </HarvyContextMenuShell>
     </HarvyContextMenuPortal>

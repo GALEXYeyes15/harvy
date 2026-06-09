@@ -8,8 +8,36 @@ import {
 } from "./harvyImageAttribution";
 import { HarvyImageSourcePopover } from "./HarvyImageSourcePopover";
 import { HarvyImageInsertionZone } from "./HarvyImageInsertionZone";
+import {
+  hasAdjacentTextBlockAfter,
+  hasAdjacentTextBlockBefore,
+} from "./harvyImageInsertion";
 import { UnsplashAttributionCaption } from "./UnsplashAttributionCaption";
 import type { HarvyImageStatus, HarvyImageWidth } from "./harvyImage";
+
+function useHarvyImageAdjacentTextBlocks(editor: NodeViewProps["editor"], getPos: NodeViewProps["getPos"]) {
+  const [adjacent, setAdjacent] = useState({ before: false, after: false });
+
+  useEffect(() => {
+    const sync = () => {
+      const pos = getPos();
+      if (typeof pos !== "number") return;
+      const doc = editor.state.doc;
+      setAdjacent({
+        before: hasAdjacentTextBlockBefore(doc, pos),
+        after: hasAdjacentTextBlockAfter(doc, pos),
+      });
+    };
+
+    sync();
+    editor.on("transaction", sync);
+    return () => {
+      editor.off("transaction", sync);
+    };
+  }, [editor, getPos]);
+
+  return adjacent;
+}
 
 function normalizeLoadAttrs(selection: string | HarvyImageLoadAttrs): HarvyImageLoadAttrs {
   return typeof selection === "string" ? { src: selection } : selection;
@@ -130,6 +158,7 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
   }, [captionOpen]);
 
   const showChrome = !isPlaceholder && (selected || hovered);
+  const adjacentText = useHarvyImageAdjacentTextBlocks(editor, getPos);
 
   if (isPlaceholder) {
     return (
@@ -145,7 +174,7 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
         onMouseLeave={() => setHovered(false)}
         contentEditable={false}
       >
-        <HarvyImageInsertionZone position="before-image" />
+        {!adjacentText.before ? <HarvyImageInsertionZone position="before-image" /> : null}
         <div className="harvy-image-node__content">
           <div className="harvy-image-node__frame harvy-image-node__frame--full">
             <button
@@ -180,7 +209,7 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
             ) : null}
           </div>
         </div>
-        <HarvyImageInsertionZone position="after-image" />
+        {!adjacentText.after ? <HarvyImageInsertionZone position="after-image" /> : null}
 
         {sourceOpen && pickerBtnRef.current
           ? (
@@ -210,7 +239,7 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
       onMouseLeave={() => setHovered(false)}
       contentEditable={false}
     >
-      <HarvyImageInsertionZone position="before-image" />
+      {!adjacentText.before ? <HarvyImageInsertionZone position="before-image" /> : null}
       <div className="harvy-image-node__content">
         <div className={`harvy-image-node__frame harvy-image-node__frame--${width}`}>
           {showChrome ? (
@@ -295,7 +324,7 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
           />
         ) : null}
       </div>
-      <HarvyImageInsertionZone position="after-image" />
+      {!adjacentText.after ? <HarvyImageInsertionZone position="after-image" /> : null}
 
       {replaceSourceOpen && replaceBtnRef.current
         ? (

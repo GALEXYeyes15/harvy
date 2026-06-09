@@ -105,11 +105,261 @@
   .ProseMirror-harvy ul,
   .ProseMirror-harvy ol {
     margin: 0.45em 0;
-    padding-left: 1.35rem;
+    padding-left: 1.5rem;
+    list-style-position: outside;
+  }
+
+  /*
+   * Ordered lists — depth cycle decimal → alpha → roman (repeat).
+   * Period: native list-style-type (reliable in WebKit/Tauri).
+   * Paren: li::before (absolute) — reliable counters; avoids block-paragraph line break.
+   */
+  .ProseMirror-harvy ol[data-delimiter="period"],
+  .ProseMirror-harvy ol:not([data-delimiter]) {
+    list-style-type: decimal;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="period"] ol,
+  .ProseMirror-harvy ol:not([data-delimiter]) ol {
+    list-style-type: lower-alpha;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="period"] ol ol,
+  .ProseMirror-harvy ol:not([data-delimiter]) ol ol {
+    list-style-type: lower-roman;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="period"] ol ol ol,
+  .ProseMirror-harvy ol:not([data-delimiter]) ol ol ol {
+    list-style-type: decimal;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="period"] ol ol ol ol,
+  .ProseMirror-harvy ol:not([data-delimiter]) ol ol ol ol {
+    list-style-type: lower-alpha;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="period"] ol ol ol ol ol,
+  .ProseMirror-harvy ol:not([data-delimiter]) ol ol ol ol ol {
+    list-style-type: lower-roman;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="period"] ol ol ol ol ol ol,
+  .ProseMirror-harvy ol:not([data-delimiter]) ol ol ol ol ol ol {
+    list-style-type: decimal;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] li::marker {
+    content: "";
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] li {
+    position: relative;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] li::before {
+    position: absolute;
+    left: -1.5rem;
+    top: 0;
+    width: 1.5rem;
+    text-align: right;
+    pointer-events: none;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] {
+    list-style: none;
+    counter-reset: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] > li {
+    counter-increment: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] > li::before {
+    content: counter(harvy-ol-paren) ") ";
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol {
+    list-style: none;
+    counter-reset: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol > li {
+    counter-increment: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol > li::before {
+    content: counter(harvy-ol-paren, lower-alpha) ") ";
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol {
+    list-style: none;
+    counter-reset: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol > li {
+    counter-increment: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol > li::before {
+    content: counter(harvy-ol-paren, lower-roman) ") ";
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol ol {
+    list-style: none;
+    counter-reset: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol ol > li {
+    counter-increment: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol ol > li::before {
+    content: counter(harvy-ol-paren) ") ";
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol ol ol {
+    list-style: none;
+    counter-reset: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol ol ol > li {
+    counter-increment: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol ol ol > li::before {
+    content: counter(harvy-ol-paren, lower-alpha) ") ";
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol ol ol ol {
+    list-style: none;
+    counter-reset: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol ol ol ol > li {
+    counter-increment: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol ol ol ol > li::before {
+    content: counter(harvy-ol-paren, lower-roman) ") ";
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol ol ol ol ol {
+    list-style: none;
+    counter-reset: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol ol ol ol ol > li {
+    counter-increment: harvy-ol-paren;
+  }
+
+  .ProseMirror-harvy ol[data-delimiter="paren"] ol ol ol ol ol ol > li::before {
+    content: counter(harvy-ol-paren) ") ";
+  }
+
+  /* Bullet depth cycle: ● → ○ → ■ → □, then repeat (native markers + @counter-style for □) */
+  @counter-style harvy-bullet-outline-square {
+    system: fixed;
+    symbols: "\25A1";
+    suffix: " ";
+  }
+
+  .ProseMirror-harvy ul {
+    list-style-type: disc;
+  }
+
+  .ProseMirror-harvy ul ul {
+    list-style-type: circle;
+  }
+
+  .ProseMirror-harvy ul ul ul {
+    list-style-type: square;
+  }
+
+  .ProseMirror-harvy ul ul ul ul,
+  .ProseMirror-harvy ul ul ul ul ul ul ul ul,
+  .ProseMirror-harvy ul ul ul ul ul ul ul ul ul ul ul ul {
+    list-style-type: harvy-bullet-outline-square;
+  }
+
+  .ProseMirror-harvy ul ul ul ul ul,
+  .ProseMirror-harvy ul ul ul ul ul ul ul ul ul {
+    list-style-type: disc;
+  }
+
+  .ProseMirror-harvy ul ul ul ul ul ul,
+  .ProseMirror-harvy ul ul ul ul ul ul ul ul ul ul {
+    list-style-type: circle;
+  }
+
+  .ProseMirror-harvy ul ul ul ul ul ul ul,
+  .ProseMirror-harvy ul ul ul ul ul ul ul ul ul ul ul {
+    list-style-type: square;
   }
 
   .ProseMirror-harvy li {
     margin: 0.2em 0;
+    display: list-item;
+  }
+
+  /* Virtual indent for first-in-list Tab nesting (no previous sibling for sinkListItem) */
+  .ProseMirror-harvy li[data-harvy-indent-level="1"] {
+    margin-inline-start: 1.5rem;
+  }
+
+  .ProseMirror-harvy li[data-harvy-indent-level="2"] {
+    margin-inline-start: 3rem;
+  }
+
+  .ProseMirror-harvy li[data-harvy-indent-level="3"] {
+    margin-inline-start: 4.5rem;
+  }
+
+  .ProseMirror-harvy li[data-harvy-indent-level="4"] {
+    margin-inline-start: 6rem;
+  }
+
+  .ProseMirror-harvy li[data-harvy-indent-level="5"] {
+    margin-inline-start: 7.5rem;
+  }
+
+  .ProseMirror-harvy li[data-harvy-indent-level="6"] {
+    margin-inline-start: 9rem;
+  }
+
+  .ProseMirror-harvy li[data-harvy-indent-level="7"] {
+    margin-inline-start: 10.5rem;
+  }
+
+  .ProseMirror-harvy li[data-harvy-indent-level="8"] {
+    margin-inline-start: 12rem;
+  }
+
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="2"],
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="6"],
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="10"],
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="14"] {
+    list-style-type: circle;
+  }
+
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="3"],
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="7"],
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="11"],
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="15"] {
+    list-style-type: square;
+  }
+
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="4"],
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="8"],
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="12"],
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="16"] {
+    list-style-type: harvy-bullet-outline-square;
+  }
+
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="5"],
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="9"],
+  .ProseMirror-harvy ul li[data-harvy-visual-depth="13"] {
+    list-style-type: disc;
   }
 
   .ProseMirror-harvy blockquote {

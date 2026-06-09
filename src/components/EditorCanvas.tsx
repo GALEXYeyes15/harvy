@@ -23,6 +23,10 @@ import { handleImageCaptionLinkPointerDown } from "../features/editor/editorImag
 import { HarvyImage } from "../features/editor/harvyImage";
 import type { HarvyImageLoadAttrs } from "../features/editor/harvyImageAttribution";
 import { resolveWorkspaceImageSrc } from "../features/editor/imageAssets";
+import { HarvyListItem } from "../features/editor/harvyListItem";
+import { HarvyOrderedList } from "../features/editor/harvyOrderedList";
+import { HarvyListKeyboard } from "../features/editor/harvyListKeyboard";
+import { HarvyMarkdownShortcuts } from "../features/editor/harvyMarkdownShortcuts";
 import { HarvyOutlineParagraph } from "../features/outline/harvyOutlineParagraph";
 import { syncOutlinePlaceholdersForAuthoringMode } from "../features/outline/syncOutlinePlaceholdersForAuthoringMode";
 import type { SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
@@ -103,10 +107,14 @@ export function EditorCanvas({
           heading: { levels: [1, 2, 3] },
           codeBlock: false,
           paragraph: false,
+          listItem: false,
+          orderedList: false,
           gapcursor: false,
         }),
         EmptyTextBlockBackspace,
         HarvyParagraph,
+        HarvyListItem,
+        HarvyOrderedList,
         Underline,
         Link.configure({
           openOnClick: false,
@@ -122,9 +130,12 @@ export function EditorCanvas({
         }),
         WritingAssistance,
         MechanicsUnderlineLayer,
+        HarvyMarkdownShortcuts,
+        HarvyListKeyboard,
       ],
       content: toEditorHtml(text, { sourcePath: contentSourcePath }),
       editable: isEditable,
+      enableInputRules: ["harvyMarkdownShortcuts"],
       editorProps: {
         attributes: {
           id: "harvy-editor",
@@ -246,11 +257,7 @@ export function EditorCanvas({
   }, [editor, createOutlineMode]);
 
   return (
-    <div
-      className={`box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent border border-solid ${
-        createOutlineMode ? "rounded-[30px] border-[#6f6f6f]" : "border-transparent"
-      }`}
-    >
+    <div className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent border border-solid border-transparent">
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
         <div className="min-h-full w-full px-10 pb-52 pt-2 sm:px-14 sm:pb-9 sm:pt-2.5">
           <label htmlFor="harvy-editor" className="sr-only">

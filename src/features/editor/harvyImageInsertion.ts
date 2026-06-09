@@ -113,6 +113,21 @@ export function focusParagraphAfterHarvyImageInTr(
   return selectBodyParagraphCursor(tr, mappedInsert + 1, 1);
 }
 
+/** True when a text block sits directly above the image (including empty paragraphs). */
+export function hasAdjacentTextBlockBefore(doc: PMNode, imagePos: number): boolean {
+  const node = doc.nodeAt(imagePos);
+  if (!node || node.type.name !== "harvyImage") return false;
+  return doc.resolve(imagePos).nodeBefore?.isTextblock ?? false;
+}
+
+/** True when a text block sits directly below the image (including empty paragraphs). */
+export function hasAdjacentTextBlockAfter(doc: PMNode, imagePos: number): boolean {
+  const node = doc.nodeAt(imagePos);
+  if (!node || node.type.name !== "harvyImage") return false;
+  const after = imagePos + node.nodeSize;
+  return doc.nodeAt(after)?.isTextblock ?? false;
+}
+
 export function findHarvyImagePosNearSelection(editor: Editor): number | null {
   const { selection, doc } = editor.state;
   if (selection instanceof NodeSelection && selection.node.type.name === "harvyImage") {

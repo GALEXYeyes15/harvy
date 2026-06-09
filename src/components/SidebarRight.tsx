@@ -1,5 +1,5 @@
 import type { Editor } from "@tiptap/core";
-import { Info, SpellCheck } from "lucide-react";
+import { Info } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import type { EditorStats } from "../features/editor/stats";
 import { SIDEBAR_TOOLS_MODES, type SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
@@ -35,12 +35,8 @@ export type SidebarRightProps = {
   selectedWordCount: number | null;
   /** TipTap instance for Outline-tab outline import (optional). */
   editor?: Editor | null;
-  createOutlineMode?: boolean;
-  onCreateOutlineModeChange?: (on: boolean) => void;
   outlineInstructionsVisible?: boolean;
   onOutlineInstructionsVisibleChange?: (visible: boolean) => void;
-  onAiProofread?: () => void | Promise<void>;
-  proofreadBusy?: boolean;
   proofreadIssues?: ProofreadIssue[];
 };
 
@@ -134,37 +130,13 @@ function SectionLabel({ text }: { text: string }) {
   return <p className="mb-[10px] text-[11px] font-medium uppercase tracking-[0.1em] text-muted/70">{text}</p>;
 }
 
-function AiProofreadSidebarButton({
-  onProofread,
-  busy = false,
-}: {
-  onProofread: () => void | Promise<void>;
-  busy?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={busy}
-      className="flex h-11 w-full items-center justify-center gap-2 rounded-[10px] border border-line/45 bg-ink/[0.03] px-3.5 text-[13px] font-medium text-ink/88 transition-colors hover:bg-ink/[0.05] hover:border-line/55 disabled:cursor-not-allowed disabled:opacity-55 dark:border-white/[0.12] dark:bg-white/[0.03] dark:text-ink/90 dark:hover:border-white/[0.16] dark:hover:bg-white/[0.05]"
-      onClick={() => void onProofread()}
-    >
-      <SpellCheck size={17} strokeWidth={1.65} className="shrink-0 text-muted/75" aria-hidden />
-      <span>{busy ? "Proofreading…" : "Proofread"}</span>
-    </button>
-  );
-}
-
 function EditSidebarView({
   stats,
   selectedWordCount,
-  onAiProofread,
-  proofreadBusy = false,
   proofreadIssues = [],
 }: {
   stats: EditorStats;
   selectedWordCount: number | null;
-  onAiProofread: () => void | Promise<void>;
-  proofreadBusy?: boolean;
   proofreadIssues?: ProofreadIssue[];
 }) {
   const spellings = proofreadIssues.filter((i) => i.type === "spelling").length;
@@ -231,13 +203,7 @@ function EditSidebarView({
             label={<ProofreadLabelAccent text="Suggestions" type="suggestion" />}
             value={suggestions}
           />
-
-          <div className="pt-4">
-            <AiProofreadSidebarButton onProofread={onAiProofread} busy={proofreadBusy} />
-          </div>
         </div>
-
-        <div className={`${DIVIDER} ${COMPACT_SECTION_GAP}`} aria-hidden />
       </div>
     </div>
   );
@@ -245,14 +211,10 @@ function EditSidebarView({
 
 function OutlineSidebarView({
   editor,
-  createOutlineMode = false,
-  onCreateOutlineModeChange,
   outlineInstructionsVisible = true,
   onOutlineInstructionsVisibleChange,
 }: {
   editor: Editor | null;
-  createOutlineMode?: boolean;
-  onCreateOutlineModeChange?: (on: boolean) => void;
   outlineInstructionsVisible?: boolean;
   onOutlineInstructionsVisibleChange?: (visible: boolean) => void;
 }) {
@@ -273,8 +235,6 @@ function OutlineSidebarView({
 
       <WriteOutlineTools
         editor={editor}
-        createOutlineMode={createOutlineMode}
-        onCreateOutlineModeChange={onCreateOutlineModeChange}
         outlineInstructionsVisible={outlineInstructionsVisible}
         onOutlineInstructionsVisibleChange={onOutlineInstructionsVisibleChange}
       />
@@ -288,12 +248,8 @@ export function SidebarRight({
   onModeChange,
   selectedWordCount,
   editor = null,
-  createOutlineMode = false,
-  onCreateOutlineModeChange = () => {},
   outlineInstructionsVisible = true,
   onOutlineInstructionsVisibleChange,
-  onAiProofread = () => {},
-  proofreadBusy = false,
   proofreadIssues = [],
 }: SidebarRightProps) {
   return (
@@ -320,8 +276,6 @@ export function SidebarRight({
         {mode === "outline" ? (
           <OutlineSidebarView
             editor={editor}
-            createOutlineMode={createOutlineMode}
-            onCreateOutlineModeChange={onCreateOutlineModeChange}
             outlineInstructionsVisible={outlineInstructionsVisible}
             onOutlineInstructionsVisibleChange={onOutlineInstructionsVisibleChange}
           />
@@ -329,8 +283,6 @@ export function SidebarRight({
           <EditSidebarView
             stats={stats}
             selectedWordCount={selectedWordCount}
-            onAiProofread={onAiProofread}
-            proofreadBusy={proofreadBusy}
             proofreadIssues={proofreadIssues}
           />
         )}
