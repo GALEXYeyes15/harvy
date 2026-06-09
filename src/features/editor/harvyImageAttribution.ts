@@ -1,3 +1,5 @@
+import { openSafeExternalUrl } from "./openExternalUrl";
+
 export const UNSPLASH_WEBSITE_URL = "https://unsplash.com";
 
 /** Canonical Unsplash homepage stored on image blocks and used in caption links. */
@@ -9,11 +11,7 @@ export function resolveUnsplashWebsiteUrl(_stored?: string | null): string {
 }
 
 export function openExternalHref(href: string, event: { preventDefault: () => void; stopPropagation: () => void }): void {
-  event.preventDefault();
-  event.stopPropagation();
-  const url = href.trim();
-  if (!url || url === "#") return;
-  window.open(url, "_blank", "noopener,noreferrer");
+  openSafeExternalUrl(href, event);
 }
 
 export type HarvyImageSource = "unsplash" | null;

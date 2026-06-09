@@ -16,5 +16,6 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2.10", features = ["protocol-asset"] }
 serde = { version = "1", features = ["derive"] }
 tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
 printpdf = "0.7"
 pulldown-cmark = "0.12"

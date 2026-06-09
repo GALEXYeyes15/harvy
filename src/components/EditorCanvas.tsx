@@ -19,6 +19,10 @@ import {
   setMechanicsUnderlinesVisible,
 } from "../features/proofread/mechanicsUnderlineLayer";
 import { handleEditorContextMenuEvent } from "../features/editor/editorContextMenu";
+import {
+  attachEditorLinkModifierCursor,
+  handleEditorLinkPointerDown,
+} from "../features/editor/editorLinkClick";
 import { handleImageCaptionLinkPointerDown } from "../features/editor/editorImageCaptionLinks";
 import { HarvyImage } from "../features/editor/harvyImage";
 import type { HarvyImageLoadAttrs } from "../features/editor/harvyImageAttribution";
@@ -26,6 +30,7 @@ import { resolveWorkspaceImageSrc } from "../features/editor/imageAssets";
 import { HarvyListItem } from "../features/editor/harvyListItem";
 import { HarvyOrderedList } from "../features/editor/harvyOrderedList";
 import { HarvyListKeyboard } from "../features/editor/harvyListKeyboard";
+import { LinkEditorSelectionHighlight } from "../features/editor/linkEditorSelectionHighlight";
 import { HarvyMarkdownShortcuts } from "../features/editor/harvyMarkdownShortcuts";
 import { HarvyOutlineParagraph } from "../features/outline/harvyOutlineParagraph";
 import { syncOutlinePlaceholdersForAuthoringMode } from "../features/outline/syncOutlinePlaceholdersForAuthoringMode";
@@ -130,6 +135,7 @@ export function EditorCanvas({
         }),
         WritingAssistance,
         MechanicsUnderlineLayer,
+        LinkEditorSelectionHighlight,
         HarvyMarkdownShortcuts,
         HarvyListKeyboard,
       ],
@@ -216,6 +222,13 @@ export function EditorCanvas({
 
   useEffect(() => {
     if (!editor) return;
+    const dom = editor.view.dom as HTMLElement;
+    const detachModifierCursor = attachEditorLinkModifierCursor(dom);
+    return detachModifierCursor;
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor) return;
     const prior = editor.options.editorProps?.handleDOMEvents ?? {};
     editor.setOptions({
       editorProps: {
@@ -223,6 +236,7 @@ export function EditorCanvas({
         handleDOMEvents: {
           ...prior,
           mousedown: (view, event) => {
+            if (handleEditorLinkPointerDown(event as MouseEvent)) return true;
             if (handleImageCaptionLinkPointerDown(event as MouseEvent)) return true;
             return prior.mousedown?.(view, event) ?? false;
           },

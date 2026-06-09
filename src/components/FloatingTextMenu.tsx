@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import type { Editor } from "@tiptap/core";
 import {
   Bold,
@@ -13,6 +20,11 @@ import {
 import type { EditorCommand } from "../features/editor/commands";
 import type { LinkFormatOptions } from "../features/editor/editorFormatActions";
 import { isTextFormattingSelection } from "../features/editor/floatingTextMenuSelection";
+import {
+  clearLinkEditorSelectionHighlight,
+  setLinkEditorSelectionHighlight,
+} from "../features/editor/linkEditorSelectionHighlight";
+import { parseLinkUrl } from "../features/editor/linkUrlValidation";
 import {
   HARVY_CONTEXT_MENU_TOOLBAR_BTN_ACTIVE_CLASS,
   HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS,
@@ -43,13 +55,49 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
   const [menuOpacityOn, setMenuOpacityOn] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
+  const [linkUrlError, setLinkUrlError] = useState("");
   const [commentNote, setCommentNote] = useState(false);
   const revealTimerRef = useRef<number | null>(null);
   const fadeOutTimerRef = useRef<number | null>(null);
   const pointerSelectingRef = useRef(false);
   const anchorVisibleRef = useRef(false);
+  const linkOpenRef = useRef(false);
+  const linkSelectionRef = useRef<HarvyContextMenuAnchorRange | null>(null);
+  const linkInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    linkOpenRef.current = linkOpen;
+    if (!linkOpen) setLinkUrlError("");
+  }, [linkOpen]);
+
+  useEffect(() => {
+    if (!linkOpen) return;
+    const input = linkInputRef.current;
+    if (!input) return;
+    requestAnimationFrame(() => {
+      input.focus();
+      if (input.value) input.select();
+    });
+  }, [linkOpen]);
+
+  useEffect(() => {
+    const view = editor?.view;
+    if (!view) return;
+    if (linkOpen && linkSelectionRef.current) {
+      const { from, to } = linkSelectionRef.current;
+      setLinkEditorSelectionHighlight(view, from, to);
+    } else {
+      clearLinkEditorSelectionHighlight(view);
+    }
+    return () => clearLinkEditorSelectionHighlight(view);
+  }, [linkOpen, editor]);
 
   const closeMenu = useCallback(() => {
+    if (linkOpenRef.current) {
+      setLinkOpen(false);
+      return;
+    }
+    linkSelectionRef.current = null;
     setLinkOpen(false);
     setAnchor(null);
   }, []);
@@ -60,7 +108,7 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
     placement: "beside-below-end",
     visible: panelAnchor !== null,
     onClose: closeMenu,
-    repositionDeps: [linkOpen, linkUrl, commentNote, menuOpacityOn],
+    repositionDeps: [linkOpen, linkUrl, linkUrlError, commentNote, menuOpacityOn],
   });
 
   useEffect(() => {
@@ -103,6 +151,9 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
   }, [anchor, clearFadeOutTimer, panelAnchor]);
 
   const anchorFromCurrentSelection = useCallback((): HarvyContextMenuAnchorRange | null => {
+    if (linkOpenRef.current && linkSelectionRef.current) {
+      return linkSelectionRef.current;
+    }
     const ed = editor;
     if (!ed || !isEditable || !ed.isEditable || !ed.isFocused) return null;
     if (!isTextFormattingSelection(ed)) return null;
@@ -113,12 +164,24 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
 
   const refreshAnchorPosition = useCallback(() => {
     if (pointerSelectingRef.current) return;
+    if (linkOpenRef.current && linkSelectionRef.current) {
+      setAnchor(linkSelectionRef.current);
+      reposition();
+      return;
+    }
     const next = anchorFromCurrentSelection();
     setAnchor(next);
     if (next) reposition();
   }, [anchorFromCurrentSelection, reposition]);
 
   const scheduleRevealFromStableSelection = useCallback(() => {
+    if (linkOpenRef.current) {
+      if (linkSelectionRef.current) {
+        setAnchor(linkSelectionRef.current);
+        reposition();
+      }
+      return;
+    }
     clearRevealTimer();
     const ed = editor;
     if (!ed || !isEditable || !ed.isEditable || !ed.isFocused || pointerSelectingRef.current) {
@@ -155,7 +218,7 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
       }
       setAnchor({ from: s.from, to: s.to });
     }, STABLE_SELECTION_MS);
-  }, [editor, isEditable, clearRevealTimer, refreshAnchorPosition]);
+  }, [editor, isEditable, clearRevealTimer, refreshAnchorPosition, reposition]);
 
   useEffect(() => {
     return () => {
@@ -176,6 +239,7 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
     const onBlur = () => {
       pointerSelectingRef.current = false;
       clearRevealTimer();
+      if (linkOpenRef.current) return;
       setAnchor(null);
     };
     ed.on("blur", onBlur);
@@ -193,6 +257,10 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
     const onPointerDown = () => {
       pointerSelectingRef.current = true;
       clearRevealTimer();
+      if (linkOpenRef.current) {
+        setLinkOpen(false);
+        return;
+      }
       setAnchor(null);
     };
     const onPointerUp = () => {
@@ -234,15 +302,29 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
     return () => window.removeEventListener("keydown", onKey);
   }, [panelAnchor, linkOpen, editor, clearRevealTimer]);
 
+  const openLinkPopover = (e: MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!editor) return;
+    const { from, to, empty } = editor.state.selection;
+    if (empty || from >= to) return;
+    linkSelectionRef.current = { from, to };
+    setAnchor({ from, to });
+    const prev = editor.getAttributes("link").href as string | undefined;
+    setLinkUrl(prev ?? "");
+    setLinkUrlError("");
+    setLinkOpen(true);
+    reposition();
+  };
+
+  const restoreLinkSelection = useCallback(() => {
+    if (!editor || !linkSelectionRef.current) return false;
+    const { from, to } = linkSelectionRef.current;
+    return editor.chain().focus().setTextSelection({ from, to }).run();
+  }, [editor]);
+
   const run = (cmd: EditorCommand) => {
     if (!editor) return;
-    if (cmd === "link") {
-      const prev = editor.getAttributes("link").href as string | undefined;
-      setLinkUrl(prev ?? "https://");
-      setLinkOpen(true);
-      refreshAnchorPosition();
-      return;
-    }
     if (cmd === "comment") {
       setCommentNote(true);
       window.setTimeout(() => setCommentNote(false), 2200);
@@ -254,17 +336,41 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
   };
 
   const applyLink = () => {
-    const trimmed = linkUrl.trim();
-    if (!trimmed) onApplyFormat("link", { linkHref: null });
-    else onApplyFormat("link", { linkHref: trimmed });
+    if (!editor || !linkSelectionRef.current) return;
+
+    const parsed = parseLinkUrl(linkUrl);
+    if (parsed.ok === false) {
+      if (parsed.reason === "invalid") {
+        setLinkUrlError("Please enter a valid URL");
+      }
+      return;
+    }
+
+    const { from, to } = linkSelectionRef.current;
+    restoreLinkSelection();
+    onApplyFormat("link", { linkHref: parsed.href });
+    setLinkUrlError("");
     setLinkOpen(false);
-    refreshAnchorPosition();
+    requestAnimationFrame(() => {
+      if (!editor) return;
+      editor.chain().focus().setTextSelection({ from, to }).run();
+      setAnchor({ from, to });
+      reposition();
+    });
   };
 
   const removeLink = () => {
+    if (!editor || !linkSelectionRef.current) return;
+    const { from, to } = linkSelectionRef.current;
+    restoreLinkSelection();
     onApplyFormat("link", { linkHref: null });
     setLinkOpen(false);
-    refreshAnchorPosition();
+    requestAnimationFrame(() => {
+      if (!editor) return;
+      editor.chain().focus().setTextSelection({ from, to }).run();
+      setAnchor({ from, to });
+      reposition();
+    });
   };
 
   const act = (active: boolean) => (active ? HARVY_CONTEXT_MENU_TOOLBAR_BTN_ACTIVE_CLASS : "");
@@ -285,69 +391,37 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
     <HarvyContextMenuPortal mountEl={mountEl}>
       <HarvyContextMenuShell
         menuRef={menuRef}
-        role="toolbar"
-        ariaLabel="Text formatting"
-        className={`harvy-context-menu--toolbar w-fit max-w-[calc(100vw-1rem)] will-change-[opacity] ${opacityTransitionClass}`}
+        role={linkOpen ? "dialog" : "toolbar"}
+        ariaLabel={linkOpen ? "Edit link" : "Text formatting"}
+        className={`harvy-context-menu--toolbar w-fit max-w-[calc(100vw-1rem)] will-change-[opacity] ${linkOpen ? "harvy-context-menu--link-editor" : ""} ${opacityTransitionClass}`}
       >
         {commentNote ? (
           <p className="harvy-context-menu__note">
             Comments are not available yet — this space is reserved for a future flow.
           </p>
         ) : null}
-        {row(
-          <>
-            <button
-              type="button"
-              className={`${HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS} ${act(!!ed?.isActive("bold"))}`}
-              aria-label="Bold"
-              aria-pressed={ed?.isActive("bold") ?? false}
-              onClick={() => run("bold")}
-            >
-              <Bold size={13} strokeWidth={1.6} aria-hidden />
-            </button>
-            <button
-              type="button"
-              className={`${HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS} ${act(!!ed?.isActive("italic"))}`}
-              aria-label="Italic"
-              aria-pressed={ed?.isActive("italic") ?? false}
-              onClick={() => run("italic")}
-            >
-              <Italic size={13} strokeWidth={1.6} aria-hidden />
-            </button>
-            <button
-              type="button"
-              className={`${HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS} ${act(!!ed?.isActive("underline"))}`}
-              aria-label="Underline"
-              aria-pressed={ed?.isActive("underline") ?? false}
-              onClick={() => run("underline")}
-            >
-              <Underline size={13} strokeWidth={1.6} aria-hidden />
-            </button>
-            <button
-              type="button"
-              className={`${HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS} ${act(!!ed?.isActive("link"))}`}
-              aria-label="Link"
-              aria-pressed={ed?.isActive("link") ?? false}
-              onClick={() => run("link")}
-            >
-              <Link2 size={13} strokeWidth={1.6} aria-hidden />
-            </button>
-          </>,
-        )}
         {linkOpen ? (
-          <div className="harvy-context-menu__link-panel" onMouseDown={(e) => e.preventDefault()}>
+          <div
+            className="harvy-context-menu__link-panel harvy-context-menu__link-panel--solo"
+            onMouseDown={(e) => e.preventDefault()}
+          >
             <label className="sr-only" htmlFor="harvy-floating-link-url">
               Link URL
             </label>
             <input
+              ref={linkInputRef}
               id="harvy-floating-link-url"
-              type="url"
+              type="text"
               value={linkUrl}
-              onChange={(e) => setLinkUrl(e.target.value)}
+              onChange={(e) => {
+                setLinkUrl(e.target.value);
+                if (linkUrlError) setLinkUrlError("");
+              }}
               onMouseDown={(e) => e.preventDefault()}
               className="harvy-context-menu__link-input"
-              placeholder="https://"
-              autoFocus
+              placeholder="Paste a link..."
+              aria-invalid={linkUrlError ? true : undefined}
+              aria-describedby={linkUrlError ? "harvy-floating-link-url-error" : undefined}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
@@ -355,6 +429,11 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
                 }
               }}
             />
+            {linkUrlError ? (
+              <p id="harvy-floating-link-url-error" className="harvy-context-menu__link-error" role="alert">
+                {linkUrlError}
+              </p>
+            ) : null}
             <div className="harvy-context-menu__link-actions">
               <button type="button" className="harvy-context-menu__link-btn" onClick={removeLink}>
                 Remove
@@ -369,7 +448,48 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
             </div>
           </div>
         ) : (
-          row(
+          <>
+            {row(
+              <>
+                <button
+                  type="button"
+                  className={`${HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS} ${act(!!ed?.isActive("bold"))}`}
+                  aria-label="Bold"
+                  aria-pressed={ed?.isActive("bold") ?? false}
+                  onClick={() => run("bold")}
+                >
+                  <Bold size={13} strokeWidth={1.6} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className={`${HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS} ${act(!!ed?.isActive("italic"))}`}
+                  aria-label="Italic"
+                  aria-pressed={ed?.isActive("italic") ?? false}
+                  onClick={() => run("italic")}
+                >
+                  <Italic size={13} strokeWidth={1.6} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className={`${HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS} ${act(!!ed?.isActive("underline"))}`}
+                  aria-label="Underline"
+                  aria-pressed={ed?.isActive("underline") ?? false}
+                  onClick={() => run("underline")}
+                >
+                  <Underline size={13} strokeWidth={1.6} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className={`${HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS} ${act(!!ed?.isActive("link"))}`}
+                  aria-label="Link"
+                  aria-pressed={ed?.isActive("link") ?? false}
+                  onMouseDown={openLinkPopover}
+                >
+                  <Link2 size={13} strokeWidth={1.6} aria-hidden />
+                </button>
+              </>,
+            )}
+            {row(
               <>
                 <button
                   type="button"
@@ -407,7 +527,8 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
                   <Heading3 size={13} strokeWidth={1.6} aria-hidden />
                 </button>
               </>,
-            )
+            )}
+          </>
         )}
       </HarvyContextMenuShell>
     </HarvyContextMenuPortal>

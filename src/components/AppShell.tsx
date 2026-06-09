@@ -23,6 +23,15 @@ import { setSpellingDocumentKey } from "../features/proofread/mechanics/spelling
 import { syncSpellingContextMenuRef } from "../features/proofread/spellingContextMenuRef";
 import { EditorDocumentHeader } from "./EditorDocumentHeader";
 import { OpenWindowsBar } from "./OpenWindowsBar";
+import {
+  WorkspaceSectionPlaceholder,
+  WorkspaceSectionSwitcher,
+} from "./WorkspaceSectionSwitcher";
+import {
+  WORKSPACE_SECTION_RAIL_COLLAPSED_LEFT_PX,
+  WORKSPACE_SIDEBAR_WIDTH_PX,
+  type WorkspaceSection,
+} from "../features/workspace/workspaceSection";
 import { SaveAsModal, type SaveAsOrganizeMode } from "./SaveAsModal";
 import type { EditorCommand } from "../features/editor/commands";
 import { documentTextForStats, ingestTextFileContent } from "../features/editor/documentMarkdown";
@@ -167,6 +176,7 @@ export function AppShell() {
   const [openTabIds, setOpenTabIds] = useState<string[]>(() => [HARVY_DEFAULT_UNTITLED_TAB_ID]);
   const [searchQuery, setSearchQuery] = useState("");
   const [mode, setMode] = useState<SidebarToolsMode>("outline");
+  const [activeWorkspaceSection, setActiveWorkspaceSection] = useState<WorkspaceSection>("write");
   const [isWorkspaceSidebarOpen, setIsWorkspaceSidebarOpen] = useState(true);
   /** `null` = browse at the selected workspace root. */
   const [workspaceBrowsePath, setWorkspaceBrowsePath] = useState<string | null>(null);
@@ -1485,53 +1495,66 @@ export function AppShell() {
   );
 
   const editorPanelSection = (
-    <section
-      className="mx-auto flex min-h-0 w-full max-w-[820px] flex-1 flex-col overflow-hidden bg-stage"
-      aria-label="Editor"
-      role="tabpanel"
-      id="harvy-editor-panel"
-      aria-labelledby={activeTabId ? `harvy-tab-${activeTabId}` : undefined}
-    >
-      {SHOW_FORMATTING_TOOLBAR ? <EditorToolbar mode={mode} onRunCommand={runToolbarCommand} /> : null}
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <EditorCanvas
-          key={editorInstanceKey}
-          mode={mode}
-          documentTitle={editorTitle}
-          text={editorText}
-          contentSourcePath={activeDocument?.sourcePath ?? null}
-          placeholder={editorPlaceholder}
-          isEditable={editorEditable}
-          spellcheckEnabled={showEditModeSpellcheck}
-          grammarChecksEnabled={
-            writingAssistancePrefs.grammarChecks && readabilityPanelOpen && mode === "edit"
+    <div className="flex min-h-0 w-full flex-1 justify-center overflow-hidden bg-stage">
+      <section
+        className="mx-auto flex min-h-0 w-full max-w-[820px] flex-1 flex-col overflow-hidden bg-stage"
+        aria-label="Editor"
+        role="tabpanel"
+        id="harvy-editor-panel"
+        aria-labelledby={activeTabId ? `harvy-tab-${activeTabId}` : undefined}
+      >
+        {activeWorkspaceSection === "collect" ? <WorkspaceSectionPlaceholder title="Collect" /> : null}
+        {activeWorkspaceSection === "format" ? <WorkspaceSectionPlaceholder title="Format" /> : null}
+        <div
+          className={
+            activeWorkspaceSection === "write"
+              ? "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+              : "hidden"
           }
-          showReadabilityHighlights={showReadabilityHighlights}
-          showMechanicsUnderlines={showMechanicsUnderlines}
-          showOutlineInstructions={!isOutlineModeActive || outlineInstructionsVisible}
-          createOutlineMode={isOutlineModeActive}
-          workspaceRootPath={workspaceRootPath}
-          pickLocalImage={pickLocalImage}
-          loadImageAt={loadImageAtPos}
-          onInsertImage={editorEditable ? () => void handleInsertImage() : undefined}
-          onChangeText={updateActiveDocumentContent}
-          onEditorReady={handleEditorReady}
-          onTypingActivity={emitEditorTypingActivity}
-        />
-        <FloatingTextMenu
-          editor={tiptapEditor}
-          isEditable={editorEditable}
-          onApplyFormat={runEditorFormatCommand}
-        />
-        <EditorAmbientControls
-          activityHandlerRef={editorTypingActivityHandlerRef}
-          onToggleBothSidebars={toggleBothSidebars}
-          onCopyDocument={handleCopyDocument}
-          syncWithChrome
-          chromeHidden={isTopChromeHidden}
-        />
-      </div>
-    </section>
+          aria-hidden={activeWorkspaceSection !== "write"}
+        >
+          {SHOW_FORMATTING_TOOLBAR ? <EditorToolbar mode={mode} onRunCommand={runToolbarCommand} /> : null}
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <EditorCanvas
+              key={editorInstanceKey}
+              mode={mode}
+              documentTitle={editorTitle}
+              text={editorText}
+              contentSourcePath={activeDocument?.sourcePath ?? null}
+              placeholder={editorPlaceholder}
+              isEditable={editorEditable}
+              spellcheckEnabled={showEditModeSpellcheck}
+              grammarChecksEnabled={
+                writingAssistancePrefs.grammarChecks && readabilityPanelOpen && mode === "edit"
+              }
+              showReadabilityHighlights={showReadabilityHighlights}
+              showMechanicsUnderlines={showMechanicsUnderlines}
+              showOutlineInstructions={!isOutlineModeActive || outlineInstructionsVisible}
+              createOutlineMode={isOutlineModeActive}
+              workspaceRootPath={workspaceRootPath}
+              pickLocalImage={pickLocalImage}
+              loadImageAt={loadImageAtPos}
+              onInsertImage={editorEditable ? () => void handleInsertImage() : undefined}
+              onChangeText={updateActiveDocumentContent}
+              onEditorReady={handleEditorReady}
+              onTypingActivity={emitEditorTypingActivity}
+            />
+            <FloatingTextMenu
+              editor={tiptapEditor}
+              isEditable={editorEditable}
+              onApplyFormat={runEditorFormatCommand}
+            />
+            <EditorAmbientControls
+              activityHandlerRef={editorTypingActivityHandlerRef}
+              onToggleBothSidebars={toggleBothSidebars}
+              onCopyDocument={handleCopyDocument}
+              syncWithChrome
+              chromeHidden={isTopChromeHidden}
+            />
+          </div>
+        </div>
+      </section>
+    </div>
   );
 
   return (
@@ -1561,6 +1584,16 @@ export function AppShell() {
               </div>
             </div>
           </div>
+          <WorkspaceSectionSwitcher
+            activeSection={activeWorkspaceSection}
+            onSectionChange={setActiveWorkspaceSection}
+            className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20 transition-[left] duration-500 ease-in-out"
+            style={{
+              left: isWorkspaceSidebarOpen
+                ? WORKSPACE_SIDEBAR_WIDTH_PX
+                : WORKSPACE_SECTION_RAIL_COLLAPSED_LEFT_PX,
+            }}
+          />
           <div
             aria-hidden={!isWorkspaceSidebarOpen}
             className={`absolute inset-y-0 left-0 z-10 overflow-hidden bg-stage transition-[width] duration-500 ease-in-out ${
@@ -1593,7 +1626,15 @@ export function AppShell() {
               {workspaceSidebarPanel}
             </div>
           </div>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
+            <WorkspaceSectionSwitcher
+              activeSection={activeWorkspaceSection}
+              onSectionChange={setActiveWorkspaceSection}
+              className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20 transition-[left] duration-500 ease-in-out"
+              style={{
+                left: isWorkspaceSidebarOpen ? 0 : WORKSPACE_SECTION_RAIL_COLLAPSED_LEFT_PX,
+              }}
+            />
             {tabBarRow}
             <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden bg-stage">
               <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
