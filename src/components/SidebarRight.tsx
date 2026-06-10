@@ -18,7 +18,7 @@ const COMPACT_SECTION_GAP = "my-6";
 const COMPACT_ROWS_GAP = "space-y-3";
 
 const TAB_LABELS: Record<SidebarToolsMode, string> = {
-  notes: "Notes",
+  notes: "Note",
   edit: "Edit",
 };
 
