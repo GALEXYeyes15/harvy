@@ -1,10 +1,9 @@
-import type { Editor } from "@tiptap/core";
 import { Info } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import type { EditorStats } from "../features/editor/stats";
 import { SIDEBAR_TOOLS_MODES, type SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
 import type { ProofreadIssue } from "../features/proofread/types";
-import { WriteOutlineTools } from "./WriteOutlineTools";
+import { NotesSidebarPanel } from "./NotesSidebarPanel";
 
 const PANEL =
   "relative flex h-full min-h-0 w-full flex-col bg-stage font-[system-ui,-apple-system,BlinkMacSystemFont,'Segoe_UI',sans-serif] text-ink antialiased [backdrop-filter:none]";
@@ -19,7 +18,7 @@ const COMPACT_SECTION_GAP = "my-6";
 const COMPACT_ROWS_GAP = "space-y-3";
 
 const TAB_LABELS: Record<SidebarToolsMode, string> = {
-  outline: "Outline",
+  notes: "Notes",
   edit: "Edit",
 };
 
@@ -33,10 +32,8 @@ export type SidebarRightProps = {
   onModeChange: (mode: SidebarToolsMode) => void;
   /** Words in current textarea selection; `null` when caret only or focus outside editor. */
   selectedWordCount: number | null;
-  /** TipTap instance for Outline-tab outline import (optional). */
-  editor?: Editor | null;
-  outlineInstructionsVisible?: boolean;
-  onOutlineInstructionsVisibleChange?: (visible: boolean) => void;
+  notes: string;
+  onNotesChange: (value: string) => void;
   proofreadIssues?: ProofreadIssue[];
 };
 
@@ -209,47 +206,13 @@ function EditSidebarView({
   );
 }
 
-function OutlineSidebarView({
-  editor,
-  outlineInstructionsVisible = true,
-  onOutlineInstructionsVisibleChange,
-}: {
-  editor: Editor | null;
-  outlineInstructionsVisible?: boolean;
-  onOutlineInstructionsVisibleChange?: (visible: boolean) => void;
-}) {
-  return (
-    <>
-      <header className="flex items-baseline justify-between gap-4">
-        <h2 className="text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-ink">Outline</h2>
-      </header>
-
-      <div className={`${DIVIDER} my-9`} aria-hidden />
-
-      <p className="text-[13px] leading-relaxed text-muted/80">
-        Structure your draft with outline templates and block tools. Switch to Edit for readability and grammar
-        analysis when you are ready to polish.
-      </p>
-
-      <div className={`${DIVIDER} my-9`} aria-hidden />
-
-      <WriteOutlineTools
-        editor={editor}
-        outlineInstructionsVisible={outlineInstructionsVisible}
-        onOutlineInstructionsVisibleChange={onOutlineInstructionsVisibleChange}
-      />
-    </>
-  );
-}
-
 export function SidebarRight({
   stats,
   mode,
   onModeChange,
   selectedWordCount,
-  editor = null,
-  outlineInstructionsVisible = true,
-  onOutlineInstructionsVisibleChange,
+  notes,
+  onNotesChange,
   proofreadIssues = [],
 }: SidebarRightProps) {
   return (
@@ -267,18 +230,12 @@ export function SidebarRight({
 
       <div
         id="harvy-tools-panel"
-        className={`min-h-0 flex-1 px-7 pb-8 pt-2 ${
-          mode === "edit" ? "flex flex-col overflow-hidden" : "overflow-y-auto"
-        }`}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden px-7 pb-8 pt-2"
         role="tabpanel"
         aria-labelledby={`harvy-sidebar-tab-${mode}`}
       >
-        {mode === "outline" ? (
-          <OutlineSidebarView
-            editor={editor}
-            outlineInstructionsVisible={outlineInstructionsVisible}
-            onOutlineInstructionsVisibleChange={onOutlineInstructionsVisibleChange}
-          />
+        {mode === "notes" ? (
+          <NotesSidebarPanel notes={notes} onNotesChange={onNotesChange} />
         ) : (
           <EditSidebarView
             stats={stats}

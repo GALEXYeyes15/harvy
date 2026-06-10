@@ -33,7 +33,6 @@ import { HarvyListKeyboard } from "../features/editor/harvyListKeyboard";
 import { LinkEditorSelectionHighlight } from "../features/editor/linkEditorSelectionHighlight";
 import { HarvyMarkdownShortcuts } from "../features/editor/harvyMarkdownShortcuts";
 import { HarvyOutlineParagraph } from "../features/outline/harvyOutlineParagraph";
-import { syncOutlinePlaceholdersForAuthoringMode } from "../features/outline/syncOutlinePlaceholdersForAuthoringMode";
 import type { SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
 
 type EditorCanvasProps = {
@@ -56,10 +55,6 @@ type EditorCanvasProps = {
   onEditorReady: (editor: Editor | null) => void;
   /** Called after each content-changing update (typing, paste, etc.). */
   onTypingActivity?: () => void;
-  /** When false, outline instruction paragraphs are hidden in the editor (CSS only; document unchanged). */
-  showOutlineInstructions?: boolean;
-  /** Create Outline Mode: 1px muted frame around the editor canvas (not the toolbar). */
-  createOutlineMode?: boolean;
   /** Workspace root for resolving `.harvy/assets/...` image paths in the Tauri app. */
   workspaceRootPath?: string | null;
   /** Local file picker → workspace-relative `src`. */
@@ -84,8 +79,6 @@ export function EditorCanvas({
   onChangeText,
   onEditorReady,
   onTypingActivity,
-  showOutlineInstructions = true,
-  createOutlineMode = false,
   workspaceRootPath = null,
   pickLocalImage,
   loadImageAt,
@@ -192,24 +185,6 @@ export function EditorCanvas({
 
   useEffect(() => {
     if (!editor) return;
-    const dom = editor.view.dom as HTMLElement;
-    dom.classList.toggle("ProseMirror-harvy--hide-outline-instructions", !showOutlineInstructions);
-    return () => {
-      dom.classList.remove("ProseMirror-harvy--hide-outline-instructions");
-    };
-  }, [editor, showOutlineInstructions]);
-
-  useEffect(() => {
-    if (!editor) return;
-    const dom = editor.view.dom as HTMLElement;
-    dom.classList.toggle("ProseMirror-harvy--outline-authoring", createOutlineMode);
-    return () => {
-      dom.classList.remove("ProseMirror-harvy--outline-authoring");
-    };
-  }, [editor, createOutlineMode]);
-
-  useEffect(() => {
-    if (!editor) return;
     const storage = editor.storage.harvyImage;
     if (storage) {
       storage.resolveSrc = (storedSrc: string) =>
@@ -260,15 +235,6 @@ export function EditorCanvas({
       },
     });
   }, [editor, onInsertImage, isEditable]);
-
-  useEffect(() => {
-    if (!editor) return;
-    editor.storage.harvyOutlineParagraph.createOutlineMode = createOutlineMode;
-    const tr = syncOutlinePlaceholdersForAuthoringMode(editor.state, createOutlineMode);
-    if (tr) {
-      editor.view.dispatch(tr);
-    }
-  }, [editor, createOutlineMode]);
 
   return (
     <div className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent border border-solid border-transparent">

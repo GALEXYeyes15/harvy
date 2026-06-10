@@ -23,13 +23,11 @@ import { setSpellingDocumentKey } from "../features/proofread/mechanics/spelling
 import { syncSpellingContextMenuRef } from "../features/proofread/spellingContextMenuRef";
 import { EditorDocumentHeader } from "./EditorDocumentHeader";
 import { OpenWindowsBar } from "./OpenWindowsBar";
-import { FormatPreview } from "./FormatPreview";
 import {
   WorkspaceSectionPlaceholder,
   WorkspaceSectionSwitcher,
 } from "./WorkspaceSectionSwitcher";
 import {
-  WORKSPACE_SECTION_RAIL_COLLAPSED_LEFT_PX,
   WORKSPACE_SIDEBAR_WIDTH_PX,
   type WorkspaceSection,
 } from "../features/workspace/workspaceSection";
@@ -67,6 +65,11 @@ import {
   isTextPreviewable,
 } from "../features/workspace/tree";
 import { isPathUnderWorkspaceRoot } from "../features/workspace/workspacePaths";
+import {
+  loadDocumentNotes,
+  renameDocumentNotesSidecar,
+  saveDocumentNotes,
+} from "../features/workspace/documentNotes";
 import type { FileNode, WorkspaceDocument } from "../features/workspace/types";
 import { nextActiveTabIdAfterClose, toPageTabs } from "../features/tabs/pageTabs";
 import {
@@ -133,6 +136,8 @@ function createInitialUntitledWorkspaceDocument(): WorkspaceDocument {
     sourcePath: "",
     kind: "text",
     lastSavedContent: "",
+    notes: "",
+    lastSavedNotes: "",
   };
 }
 
@@ -144,7 +149,13 @@ function createUntitledWorkspaceDocument(id: string): WorkspaceDocument {
     sourcePath: "",
     kind: "text",
     lastSavedContent: "",
+    notes: "",
+    lastSavedNotes: "",
   };
+}
+
+function isDocumentDirty(doc: WorkspaceDocument): boolean {
+  return doc.content !== doc.lastSavedContent || doc.notes !== doc.lastSavedNotes;
 }
 
 function getFolderSegmentsRelativeToRoot(rootPath: string, targetPath: string): string[] | null {
@@ -176,7 +187,7 @@ export function AppShell() {
   /** Left-to-right order of open tabs; each id must exist in `openDocuments` while the tab is open. */
   const [openTabIds, setOpenTabIds] = useState<string[]>(() => [HARVY_DEFAULT_UNTITLED_TAB_ID]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [mode, setMode] = useState<SidebarToolsMode>("outline");
+  const [mode, setMode] = useState<SidebarToolsMode>("notes");
   const [activeWorkspaceSection, setActiveWorkspaceSection] = useState<WorkspaceSection>("write");
   const [isWorkspaceSidebarOpen, setIsWorkspaceSidebarOpen] = useState(true);
   /** `null` = browse at the selected workspace root. */
@@ -192,18 +203,7 @@ export function AppShell() {
   const [saveAsDestinationPath, setSaveAsDestinationPath] = useState<string | null>(null);
   const [saveAsSubmitting, setSaveAsSubmitting] = useState(false);
   const [isTopChromeHidden, setIsTopChromeHidden] = useState(false);
-  /** Outline tab: show outline NOTE: instruction blocks in the editor (CSS toggle only). */
-  const [outlineInstructionsVisible, setOutlineInstructionsVisible] = useState(true);
   const [readabilityPanelOpen, setReadabilityPanelOpen] = useState(true);
-  /** Outline Mode: right sidebar open AND Outline tab selected. */
-  const isOutlineModeActive = readabilityPanelOpen && mode === "outline";
-
-  const handleSidebarModeChange = useCallback((next: SidebarToolsMode) => {
-    setMode(next);
-    if (next === "edit") {
-      setOutlineInstructionsVisible(true);
-    }
-  }, []);
   /** In-memory buffer when no tabs open — not a saved file until persistence exists. */
   const [scratchDraftContent, setScratchDraftContent] = useState("");
   /** When set, scratch buffer last wrote to this path. */
@@ -510,7 +510,7 @@ export function AppShell() {
 
   const isDirty = useMemo(() => {
     if (activeTabId && activeDocument) {
-      return activeDocument.content !== activeDocument.lastSavedContent;
+      return isDocumentDirty(activeDocument);
     }
     if (openTabIds.length === 0) {
       return scratchDraftContent !== scratchLastSavedContent;
@@ -598,6 +598,15 @@ export function AppShell() {
     }
   }
 
+  function updateActiveDocumentNotes(nextValue: string) {
+    if (!activeTabId) return;
+    setOpenDocuments((prev) => {
+      const current = prev[activeTabId];
+      if (!current) return prev;
+      return { ...prev, [activeTabId]: { ...current, notes: nextValue } };
+    });
+  }
+
   function runToolbarCommand(command: EditorCommand) {
     if (mode !== "edit" || !tiptapEditor) return;
     runEditorFormat(tiptapEditor, command);
@@ -611,6 +620,7 @@ export function AppShell() {
 
   const finalizeSavedPath = useCallback(
     (outPath: string, markdown: string) => {
+      const savedNotes = activeDocument?.notes ?? "";
       if (activeTabId && activeDocument) {
         const oldId = activeTabId;
         if (oldId !== outPath) {
@@ -621,6 +631,7 @@ export function AppShell() {
             sourcePath: outPath,
             content: markdown,
             lastSavedContent: markdown,
+            lastSavedNotes: savedNotes,
           };
           setOpenDocuments((prev) => {
             const { [oldId]: _removed, ...rest } = prev;
@@ -637,6 +648,7 @@ export function AppShell() {
             ...prev[outPath]!,
             content: markdown,
             lastSavedContent: markdown,
+            lastSavedNotes: savedNotes,
           },
         }));
         setSelectedPath(outPath);
@@ -650,6 +662,8 @@ export function AppShell() {
         sourcePath: outPath,
         kind: "text",
         lastSavedContent: markdown,
+        notes: savedNotes,
+        lastSavedNotes: savedNotes,
       };
       setOpenDocuments((prev) => ({ ...prev, [outPath]: doc }));
       setOpenTabIds([outPath]);
@@ -741,15 +755,15 @@ export function AppShell() {
         let outPath: string;
         if (organize === "file") {
           outPath = normalizedFull;
-          await invoke("write_text_file", { path: outPath, contents: markdown });
         } else {
           const pkgDir = await invoke<string>("create_unique_directory", {
             parentPath: saveAsDestinationPath,
             baseName: base,
           });
           outPath = normalizeMarkdownSavePath(joinPath(pkgDir, leaf));
-          await invoke("write_text_file", { path: outPath, contents: markdown });
         }
+        await invoke("write_text_file", { path: outPath, contents: markdown });
+        await saveDocumentNotes(outPath, activeDocument?.notes ?? "");
         finalizeSavedPath(outPath, markdown);
         await reloadWorkspaceTree();
         setSaveAsModalOpen(false);
@@ -848,12 +862,14 @@ export function AppShell() {
         }
         const markdown = getDocumentMarkdown(tiptapEditor, activeDocument.content);
         await invoke("write_text_file", { path, contents: markdown });
+        await saveDocumentNotes(path, activeDocument.notes);
         setOpenDocuments((prev) => ({
           ...prev,
           [activeTabId]: {
             ...prev[activeTabId]!,
             content: markdown,
             lastSavedContent: markdown,
+            lastSavedNotes: activeDocument.notes,
           },
         }));
         return;
@@ -969,7 +985,7 @@ export function AppShell() {
     if (!prevIds.includes(id)) return;
 
     const doc = openDocuments[id];
-    if (doc && doc.content !== doc.lastSavedContent) {
+    if (doc && isDocumentDirty(doc)) {
       const ok = window.confirm(`Discard unsaved changes to “${doc.title}”?`);
       if (!ok) return;
     }
@@ -1038,6 +1054,8 @@ export function AppShell() {
       }
     }
 
+    const notes = previewable ? await loadDocumentNotes(node.path) : "";
+
     const nextDoc: WorkspaceDocument = {
       id,
       title: node.name,
@@ -1045,6 +1063,8 @@ export function AppShell() {
       sourcePath: node.path,
       kind,
       lastSavedContent: content,
+      notes,
+      lastSavedNotes: notes,
     };
 
     setOpenDocuments((prev) => ({ ...prev, [id]: nextDoc }));
@@ -1364,6 +1384,7 @@ export function AppShell() {
 
       try {
         await invoke("rename_fs_path", { fromPath: sourcePath, toPath: targetPath });
+        await renameDocumentNotesSidecar(sourcePath, targetPath);
       } catch (e) {
         window.alert(e instanceof Error ? e.message : String(e));
         return false;
@@ -1433,11 +1454,10 @@ export function AppShell() {
     <SidebarRight
       stats={stats}
       mode={mode}
-      onModeChange={handleSidebarModeChange}
+      onModeChange={setMode}
       selectedWordCount={selectedWordCount}
-      editor={tiptapEditor}
-      outlineInstructionsVisible={outlineInstructionsVisible}
-      onOutlineInstructionsVisibleChange={setOutlineInstructionsVisible}
+      notes={activeDocument?.notes ?? ""}
+      onNotesChange={updateActiveDocumentNotes}
       proofreadIssues={proofreadIssues}
     />
   );
@@ -1505,9 +1525,7 @@ export function AppShell() {
         aria-labelledby={activeTabId ? `harvy-tab-${activeTabId}` : undefined}
       >
         {activeWorkspaceSection === "collect" ? <WorkspaceSectionPlaceholder title="Collect" /> : null}
-        {activeWorkspaceSection === "format" ? (
-          <FormatPreview editor={tiptapEditor} fallbackText={editorText} />
-        ) : null}
+        {activeWorkspaceSection === "format" ? <WorkspaceSectionPlaceholder title="Format" /> : null}
         <div
           className={
             activeWorkspaceSection === "write"
@@ -1532,8 +1550,6 @@ export function AppShell() {
               }
               showReadabilityHighlights={showReadabilityHighlights}
               showMechanicsUnderlines={showMechanicsUnderlines}
-              showOutlineInstructions={!isOutlineModeActive || outlineInstructionsVisible}
-              createOutlineMode={isOutlineModeActive}
               workspaceRootPath={workspaceRootPath}
               pickLocalImage={pickLocalImage}
               loadImageAt={loadImageAtPos}
@@ -1594,7 +1610,7 @@ export function AppShell() {
             style={{
               left: isWorkspaceSidebarOpen
                 ? WORKSPACE_SIDEBAR_WIDTH_PX
-                : WORKSPACE_SECTION_RAIL_COLLAPSED_LEFT_PX,
+                : "var(--harvy-workspace-section-rail-left-collapsed)",
             }}
           />
           <div
@@ -1635,7 +1651,9 @@ export function AppShell() {
               onSectionChange={setActiveWorkspaceSection}
               className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20 transition-[left] duration-500 ease-in-out"
               style={{
-                left: isWorkspaceSidebarOpen ? 0 : WORKSPACE_SECTION_RAIL_COLLAPSED_LEFT_PX,
+                left: isWorkspaceSidebarOpen
+                  ? 0
+                  : "var(--harvy-workspace-section-rail-left-collapsed)",
               }}
             />
             {tabBarRow}

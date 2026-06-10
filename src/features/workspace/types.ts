@@ -14,4 +14,7 @@ export type WorkspaceDocument = {
   kind: "text" | "placeholder";
   /** Markdown (or legacy HTML) last successfully written to disk for this tab (`sourcePath`). */
   lastSavedContent: string;
+  /** Sidebar scratchpad notes for this document (persisted via `.harvy-notes` sidecar when saved). */
+  notes: string;
+  lastSavedNotes: string;
 };

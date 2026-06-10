@@ -20,7 +20,7 @@ export function toPageTabs(
       id: doc.id,
       title: doc.title,
       path: doc.sourcePath,
-      isDirty: doc.content !== doc.lastSavedContent,
+      isDirty: doc.content !== doc.lastSavedContent || doc.notes !== doc.lastSavedNotes,
     });
   }
   return out;
