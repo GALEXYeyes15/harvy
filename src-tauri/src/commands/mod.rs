@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 use tauri::Manager;
 
+pub mod format_generation;
+pub mod format_outputs_store;
 mod pdf_export;
 
 #[derive(Debug, Clone, Serialize)]
@@ -92,7 +94,7 @@ fn canonical(path: &Path) -> Result<PathBuf, String> {
         .map_err(|e| format!("Could not resolve path '{}': {}", path.display(), e))
 }
 
-fn app_config_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn app_config_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_config_dir()

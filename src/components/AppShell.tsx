@@ -23,11 +23,14 @@ import { setSpellingDocumentKey } from "../features/proofread/mechanics/spelling
 import { syncSpellingContextMenuRef } from "../features/proofread/spellingContextMenuRef";
 import { EditorDocumentHeader } from "./EditorDocumentHeader";
 import { OpenWindowsBar } from "./OpenWindowsBar";
-import { FormatGalleryPanel } from "./FormatGalleryPanel";
+import { CollectPanel } from "./CollectPanel";
+import type { CollectItem } from "../features/collect/collectItems";
 import {
-  WorkspaceSectionPlaceholder,
-  WorkspaceSectionSwitcher,
-} from "./WorkspaceSectionSwitcher";
+  loadPersistedCollectItems,
+  savePersistedCollectItems,
+} from "../features/collect/collectItemsPersistence";
+import { FormatGalleryPanel } from "./FormatGalleryPanel";
+import { WorkspaceSectionSwitcher } from "./WorkspaceSectionSwitcher";
 import {
   WORKSPACE_SIDEBAR_WIDTH_PX,
   type WorkspaceSection,
@@ -36,6 +39,25 @@ import { SaveAsModal, type SaveAsOrganizeMode } from "./SaveAsModal";
 import type { EditorCommand } from "../features/editor/commands";
 import { documentTextForStats, ingestTextFileContent } from "../features/editor/documentMarkdown";
 import { documentPreviewBlocksFromStored } from "../features/format/documentPreviewBlocks";
+import { formatDocumentKey } from "../features/format/formatDocumentKey";
+import {
+  tweetItemsFromGeneration,
+  type GeneratedTwitterCollection,
+} from "../features/format/formatGeneratedOutputs";
+import { estimateFormatOutputCount } from "../features/format/formatOutputEstimation";
+import {
+  loadPersistedTwitterFormats,
+  savePersistedTwitterFormats,
+  tweetsToGeneratedCollection,
+} from "../features/format/formatOutputsPersistence";
+import { requestTwitterFormatGeneration } from "../features/format/generation/twitterGeneration";
+import {
+  defaultFormatPlatformAmounts,
+  defaultFormatPlatformSelection,
+  type FormatPlatformAmounts,
+  type FormatPlatformSelection,
+} from "../features/format/formatPlatforms";
+import type { TweetItem } from "../features/format/tweetCollection";
 import { setFileMenuHandlers } from "../features/menu/fileMenuBridge";
 import { setupNativeAppMenu } from "../features/menu/setupNativeAppMenu";
 import { runEditorFormat, type LinkFormatOptions } from "../features/editor/editorFormatActions";
@@ -191,6 +213,17 @@ export function AppShell() {
   const [searchQuery, setSearchQuery] = useState("");
   const [mode, setMode] = useState<SidebarToolsMode>("notes");
   const [activeWorkspaceSection, setActiveWorkspaceSection] = useState<WorkspaceSection>("write");
+  const [formatPlatformSelection, setFormatPlatformSelection] = useState<FormatPlatformSelection>(
+    defaultFormatPlatformSelection,
+  );
+  const [formatPlatformAmounts, setFormatPlatformAmounts] = useState<FormatPlatformAmounts>(
+    defaultFormatPlatformAmounts,
+  );
+  const [generatedTwitterCollection, setGeneratedTwitterCollection] =
+    useState<GeneratedTwitterCollection | null>(null);
+  const [isGeneratingFormats, setIsGeneratingFormats] = useState(false);
+  const [formatGenerationError, setFormatGenerationError] = useState<string | null>(null);
+  const [collectItems, setCollectItems] = useState<CollectItem[]>(() => loadPersistedCollectItems());
   const [isWorkspaceSidebarOpen, setIsWorkspaceSidebarOpen] = useState(true);
   /** `null` = browse at the selected workspace root. */
   const [workspaceBrowsePath, setWorkspaceBrowsePath] = useState<string | null>(null);
@@ -1208,6 +1241,89 @@ export function AppShell() {
     activeDocument?.title ??
     (openTabIds.length === 0 ? scratchDocumentTitle : "Untitled");
   const editorTitleBase = splitFileBaseAndExtension(editorTitle).base || "Untitled";
+  const formatDocumentId = activeTabId ?? (openTabIds.length === 0 ? "scratch" : null);
+
+  const handleGenerateFormats = useCallback(async () => {
+    // TODO(format): dispatch YouTube, Substack, Instagram, TikTok, LinkedIn via native commands when implemented.
+    if (!formatPlatformSelection.x) {
+      setFormatGenerationError("Select X / Twitter to generate tweets.");
+      return;
+    }
+
+    const essayText = documentTextForStats(
+      getDocumentMarkdown(tiptapEditor, scratchEditorBody),
+    );
+    if (!essayText.trim()) {
+      setFormatGenerationError("Write an essay before generating formats.");
+      return;
+    }
+
+    const targetCount = estimateFormatOutputCount(
+      stats.words,
+      formatPlatformAmounts.x,
+      "x",
+    );
+
+    setIsGeneratingFormats(true);
+    setFormatGenerationError(null);
+
+    try {
+      const result = await requestTwitterFormatGeneration({
+        essayTitle: editorTitleBase,
+        essayText,
+        targetCount,
+        documentId: formatDocumentId,
+      });
+      const collection = tweetItemsFromGeneration(result);
+      setGeneratedTwitterCollection(collection);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Format generation failed";
+      setFormatGenerationError(message);
+    } finally {
+      setIsGeneratingFormats(false);
+    }
+  }, [
+    formatPlatformSelection.x,
+    tiptapEditor,
+    scratchEditorBody,
+    stats.words,
+    formatPlatformAmounts.x,
+    editorTitleBase,
+    formatDocumentId,
+  ]);
+
+  const handleGeneratedTwitterTweetsChange = useCallback(
+    (tweets: TweetItem[]) => {
+      const nextCollection = tweetsToGeneratedCollection(tweets);
+      setGeneratedTwitterCollection(nextCollection);
+      void savePersistedTwitterFormats(formatDocumentId, editorTitleBase, nextCollection);
+    },
+    [formatDocumentId, editorTitleBase],
+  );
+
+  useEffect(() => {
+    const documentKey = formatDocumentKey(activeTabId, openTabIds.length);
+    if (documentKey === "browse") {
+      setGeneratedTwitterCollection(null);
+      return;
+    }
+
+    let cancelled = false;
+    void loadPersistedTwitterFormats(formatDocumentId, editorTitleBase).then((loaded) => {
+      if (!cancelled) {
+        setGeneratedTwitterCollection(loaded);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTabId, openTabIds.length, formatDocumentId, editorTitleBase]);
+
+  useEffect(() => {
+    savePersistedCollectItems(collectItems);
+  }, [collectItems]);
+
   /** Inline rename for an open file tab, or for the scratch buffer when no tabs are open. */
   const titleRenameEnabled =
     Boolean(activeTabId && activeDocument) || openTabIds.length === 0;
@@ -1468,6 +1584,14 @@ export function AppShell() {
       notes={activeDocument?.notes ?? ""}
       onNotesChange={updateActiveDocumentNotes}
       proofreadIssues={proofreadIssues}
+      workspaceSection={activeWorkspaceSection}
+      formatPlatformSelection={formatPlatformSelection}
+      onFormatPlatformSelectionChange={setFormatPlatformSelection}
+      formatPlatformAmounts={formatPlatformAmounts}
+      onFormatPlatformAmountsChange={setFormatPlatformAmounts}
+      isGeneratingFormats={isGeneratingFormats}
+      formatGenerationError={formatGenerationError}
+      onGenerateFormats={() => void handleGenerateFormats()}
     />
   );
 
@@ -1533,12 +1657,19 @@ export function AppShell() {
         id="harvy-editor-panel"
         aria-labelledby={activeTabId ? `harvy-tab-${activeTabId}` : undefined}
       >
-        {activeWorkspaceSection === "collect" ? <WorkspaceSectionPlaceholder title="Collect" /> : null}
+        {activeWorkspaceSection === "collect" ? (
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <CollectPanel items={collectItems} onItemsChange={setCollectItems} />
+          </div>
+        ) : null}
         {activeWorkspaceSection === "format" ? (
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <FormatGalleryPanel
               documentTitle={editorTitleBase}
               documentPreviewBlocks={formatPreviewBlocks}
+              platformSelection={formatPlatformSelection}
+              generatedTwitterCollection={generatedTwitterCollection}
+              onGeneratedTwitterTweetsChange={handleGeneratedTwitterTweetsChange}
             />
           </div>
         ) : null}

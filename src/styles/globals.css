@@ -1437,6 +1437,103 @@
     background: linear-gradient(to bottom, transparent 0%, #222222 100%);
   }
 
+  .harvy-format-generate-button {
+    border: 1px solid color-mix(in oklab, var(--color-line) 28%, transparent);
+    background: color-mix(in oklab, var(--color-ink) 7%, var(--color-stage));
+    color: var(--color-ink);
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      transform 120ms ease;
+  }
+
+  .harvy-format-generate-button:hover {
+    background: color-mix(in oklab, var(--color-ink) 9%, var(--color-stage));
+    border-color: color-mix(in oklab, var(--color-line) 42%, transparent);
+  }
+
+  .harvy-format-generate-button:active {
+    transform: scale(0.985);
+    background: color-mix(in oklab, var(--color-ink) 6%, var(--color-stage));
+  }
+
+  html.dark .harvy-format-generate-button {
+    border-color: color-mix(in oklab, white 10%, transparent);
+    background: #242424;
+    color: rgba(255, 255, 255, 0.92);
+  }
+
+  html.dark .harvy-format-generate-button:hover {
+    border-color: color-mix(in oklab, white 14%, transparent);
+    background: #2a2a2a;
+  }
+
+  html.dark .harvy-format-generate-button:active {
+    background: #1f1f1f;
+  }
+
+  .harvy-format-amount-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 3px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--color-ink) 14%, transparent);
+    cursor: pointer;
+  }
+
+  html.dark .harvy-format-amount-slider {
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  .harvy-format-amount-slider:focus {
+    outline: none;
+  }
+
+  .harvy-format-amount-slider:focus-visible {
+    outline: 2px solid color-mix(in oklab, #2fbf71 55%, transparent);
+    outline-offset: 4px;
+  }
+
+  .harvy-format-amount-slider::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  .harvy-format-amount-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -5.5px;
+    border: 0;
+    border-radius: 999px;
+    background: #2fbf71;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+    cursor: pointer;
+    transition: transform 120ms ease;
+  }
+
+  .harvy-format-amount-slider:active::-webkit-slider-thumb {
+    transform: scale(1.05);
+  }
+
+  .harvy-format-amount-slider::-moz-range-track {
+    height: 3px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  .harvy-format-amount-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: 0;
+    border-radius: 999px;
+    background: #2fbf71;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+    cursor: pointer;
+  }
+
   /* Subtle theme morph for surfaces using semantic + common utility colors */
   :where(#root) :where(*) {
     transition-property: background-color, border-color, color, fill, stroke, box-shadow;

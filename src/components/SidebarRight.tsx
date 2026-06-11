@@ -3,6 +3,12 @@ import type { CSSProperties, ReactNode } from "react";
 import type { EditorStats } from "../features/editor/stats";
 import { SIDEBAR_TOOLS_MODES, type SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
 import type { ProofreadIssue } from "../features/proofread/types";
+import type {
+  FormatPlatformAmounts,
+  FormatPlatformSelection,
+} from "../features/format/formatPlatforms";
+import type { WorkspaceSection } from "../features/workspace/workspaceSection";
+import { FormatSettingsSidebarPanel } from "./FormatSettingsSidebarPanel";
 import { NotesSidebarPanel } from "./NotesSidebarPanel";
 
 const PANEL =
@@ -35,6 +41,14 @@ export type SidebarRightProps = {
   notes: string;
   onNotesChange: (value: string) => void;
   proofreadIssues?: ProofreadIssue[];
+  workspaceSection?: WorkspaceSection;
+  formatPlatformSelection?: FormatPlatformSelection;
+  onFormatPlatformSelectionChange?: (selection: FormatPlatformSelection) => void;
+  formatPlatformAmounts?: FormatPlatformAmounts;
+  onFormatPlatformAmountsChange?: (amounts: FormatPlatformAmounts) => void;
+  isGeneratingFormats?: boolean;
+  formatGenerationError?: string | null;
+  onGenerateFormats?: () => void;
 };
 
 function SidebarToolsTab({
@@ -214,7 +228,47 @@ export function SidebarRight({
   notes,
   onNotesChange,
   proofreadIssues = [],
+  workspaceSection = "write",
+  formatPlatformSelection,
+  onFormatPlatformSelectionChange,
+  formatPlatformAmounts,
+  onFormatPlatformAmountsChange,
+  isGeneratingFormats = false,
+  formatGenerationError = null,
+  onGenerateFormats,
 }: SidebarRightProps) {
+  if (workspaceSection === "format") {
+    if (
+      !formatPlatformSelection ||
+      !onFormatPlatformSelectionChange ||
+      !formatPlatformAmounts ||
+      !onFormatPlatformAmountsChange ||
+      !onGenerateFormats
+    ) {
+      return null;
+    }
+
+    return (
+      <div className={PANEL}>
+        <div
+          id="harvy-tools-panel"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden px-7 pb-8 pt-3"
+        >
+          <FormatSettingsSidebarPanel
+            essayWordCount={stats.words}
+            platformSelection={formatPlatformSelection}
+            onPlatformSelectionChange={onFormatPlatformSelectionChange}
+            platformAmounts={formatPlatformAmounts}
+            onPlatformAmountsChange={onFormatPlatformAmountsChange}
+            isGeneratingFormats={isGeneratingFormats}
+            formatGenerationError={formatGenerationError}
+            onGenerateFormats={onGenerateFormats}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={PANEL}>
       {/* pt-1 mirrors SidebarLeft first block after the h-8 chrome band (toggle → content rhythm) */}

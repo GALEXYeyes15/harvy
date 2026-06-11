@@ -1,45 +1,11 @@
-import OpenAI from "openai";
-
-/**
- * Lazy client: `vite.config.ts` sets `process.env.OPENAI_API_KEY` from `loadEnv` before each request,
- * so the key must not be read only at module load time (it is often empty then).
- */
-let client: OpenAI | null = null;
-
-function getClient(): OpenAI {
-  const apiKey = process.env.OPENAI_API_KEY?.trim() ?? "";
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
-  }
-  if (!client) {
-    client = new OpenAI({ apiKey });
-  }
-  return client;
-}
-
-function extractOutputText(response: OpenAIResponseShape): string | undefined {
-  const nested = response.output?.[0]?.content?.[0];
-  if (nested && typeof nested === "object" && "text" in nested && typeof (nested as { text: unknown }).text === "string") {
-    return (nested as { text: string }).text;
-  }
-  if (typeof response.output_text === "string" && response.output_text.trim()) {
-    return response.output_text;
-  }
-  return undefined;
-}
-
-/** Narrow type for output extraction without importing full SDK internals */
-type OpenAIResponseShape = {
-  output?: Array<{ content?: Array<{ text?: string }> }>;
-  output_text?: string;
-};
+import { extractOpenAIOutputText, getOpenAIClient, type OpenAIResponseShape } from "./openaiClient";
 
 export async function runProofread(text: string): Promise<string> {
   if (!text) {
     return JSON.stringify({ issues: [] });
   }
 
-  const response = await getClient().responses.create({
+  const response = await getOpenAIClient().responses.create({
     model: "gpt-4o",
     input: [
       {
@@ -88,7 +54,7 @@ Rules:
     },
   });
 
-  const output = extractOutputText(response as OpenAIResponseShape);
+  const output = extractOpenAIOutputText(response as OpenAIResponseShape);
 
   if (!output) {
     return JSON.stringify({ issues: [] });

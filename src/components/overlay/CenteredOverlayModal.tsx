@@ -22,6 +22,9 @@ export type CenteredOverlayModalProps = {
   closeButtonClassName?: string;
   /** When false, header shows title only (dismiss via footer / Escape / backdrop). */
   showHeaderClose?: boolean;
+  /** Optional line shown under the title in the header. */
+  subtitle?: ReactNode;
+  zIndexClass?: string;
   children: ReactNode;
 };
 
@@ -37,6 +40,8 @@ export function CenteredOverlayModal({
   autoFocusCloseButton = true,
   closeButtonClassName,
   showHeaderClose = true,
+  subtitle,
+  zIndexClass = "z-[200]",
   children,
 }: CenteredOverlayModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -99,7 +104,7 @@ export function CenteredOverlayModal({
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-6" role="presentation">
+    <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-6`} role="presentation">
       <button
         type="button"
         tabIndex={-1}
@@ -121,9 +126,14 @@ export function CenteredOverlayModal({
               : "flex shrink-0 items-center px-6 py-3.5"
           }
         >
-          <h1 id={titleId} className="text-[15px] font-semibold tracking-tight text-ink">
-            {title}
-          </h1>
+          <div className="min-w-0">
+            <h1 id={titleId} className="text-[15px] font-semibold tracking-tight text-ink">
+              {title}
+            </h1>
+            {subtitle ? (
+              <p className="mt-1 text-[12px] font-normal text-muted/65 dark:text-white/45">{subtitle}</p>
+            ) : null}
+          </div>
           {showHeaderClose ? (
             <button
               ref={closeButtonRef}

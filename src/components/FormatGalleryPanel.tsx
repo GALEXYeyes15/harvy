@@ -1,17 +1,23 @@
 import { useMemo, useState } from "react";
+import type { GeneratedTwitterCollection } from "../features/format/formatGeneratedOutputs";
 import {
+  applyGeneratedTwitterCollection,
   buildFormatGalleryCards,
+  filterFormatGalleryCards,
   formatGalleryCardAspect,
   formatGalleryCardLabel,
   PLACEHOLDER_FORMAT_GROUPS,
   type FormatCardAspect,
   type FormatGalleryCard,
 } from "../features/format/formatOutputs";
+import type { TweetItem } from "../features/format/tweetCollection";
+import { hasSelectedFormatPlatforms, type FormatPlatformSelection } from "../features/format/formatPlatforms";
 import type { DocumentPreviewBlock } from "../features/format/documentPreviewBlocks";
 import { distributeFormatGalleryCards } from "../features/format/formatMasonry";
 import { useFormatGalleryColumnCount } from "../features/format/useFormatGalleryColumnCount";
 import { FormatFeaturedPreview } from "./FormatFeaturedPreview";
 import { FormatOutputModal } from "./FormatOutputModal";
+import { WorkspaceSectionMainContent } from "./WorkspaceSectionMainContent";
 
 const CARD_BASE =
   "harvy-format-gallery-card group w-full cursor-pointer rounded-xl text-left active:scale-[0.995]";
@@ -27,6 +33,9 @@ const CARD_ASPECT_CLASS: Record<FormatCardAspect, string> = {
 type FormatGalleryPanelProps = {
   documentTitle: string;
   documentPreviewBlocks: DocumentPreviewBlock[];
+  platformSelection: FormatPlatformSelection;
+  generatedTwitterCollection: GeneratedTwitterCollection | null;
+  onGeneratedTwitterTweetsChange: (tweets: TweetItem[]) => void;
 };
 
 function FeaturedFormatCard({
@@ -87,47 +96,76 @@ function FormatGalleryCardButton({
   );
 }
 
-export function FormatGalleryPanel({ documentTitle, documentPreviewBlocks }: FormatGalleryPanelProps) {
-  const [activeCardTitle, setActiveCardTitle] = useState<string | null>(null);
-  const galleryCards = useMemo(() => buildFormatGalleryCards(PLACEHOLDER_FORMAT_GROUPS), []);
+export function FormatGalleryPanel({
+  documentTitle,
+  documentPreviewBlocks,
+  platformSelection,
+  generatedTwitterCollection,
+  onGeneratedTwitterTweetsChange,
+}: FormatGalleryPanelProps) {
+  const [activeModal, setActiveModal] = useState<{
+    title: string;
+    card: FormatGalleryCard | null;
+  } | null>(null);
+  const galleryCards = useMemo(() => {
+    const allCards = buildFormatGalleryCards(PLACEHOLDER_FORMAT_GROUPS);
+    const filtered = filterFormatGalleryCards(allCards, platformSelection);
+    return applyGeneratedTwitterCollection(filtered, generatedTwitterCollection);
+  }, [platformSelection, generatedTwitterCollection]);
+  const showEmptyState = !hasSelectedFormatPlatforms(platformSelection);
   const columnCount = useFormatGalleryColumnCount();
   const masonryColumns = useMemo(
     () => distributeFormatGalleryCards(galleryCards, columnCount),
     [galleryCards, columnCount],
   );
 
-  const openCard = (title: string) => setActiveCardTitle(title);
+  const openGalleryCard = (card: FormatGalleryCard) => {
+    setActiveModal({ title: formatGalleryCardLabel(card), card });
+  };
+
+  const openFeaturedCard = (title: string) => {
+    setActiveModal({ title, card: null });
+  };
 
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-10 py-10 sm:px-14">
+      <WorkspaceSectionMainContent>
         <div className="flex flex-col gap-5">
           <FeaturedFormatCard
             title={documentTitle}
             previewBlocks={documentPreviewBlocks}
-            onClick={() => openCard(documentTitle)}
+            onClick={() => openFeaturedCard(documentTitle)}
           />
 
-          <div className="flex gap-4">
-            {masonryColumns.map((column, columnIndex) => (
-              <div key={columnIndex} className="flex min-w-0 flex-1 flex-col gap-4">
-                {column.map((card) => (
-                  <FormatGalleryCardButton
-                    key={card.id}
-                    card={card}
-                    onClick={() => openCard(formatGalleryCardLabel(card))}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
+          {showEmptyState ? (
+            <p className="text-[13px] text-muted/55 dark:text-white/38">
+              Select a format to preview generated outputs.
+            </p>
+          ) : (
+            <div className="flex gap-4">
+              {masonryColumns.map((column, columnIndex) => (
+                <div key={columnIndex} className="flex min-w-0 flex-1 flex-col gap-4">
+                  {column.map((card) => (
+                    <FormatGalleryCardButton
+                      key={card.id}
+                      card={card}
+                      onClick={() => openGalleryCard(card)}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
+      </WorkspaceSectionMainContent>
 
       <FormatOutputModal
-        open={activeCardTitle !== null}
-        title={activeCardTitle ?? "Format output"}
-        onClose={() => setActiveCardTitle(null)}
+        open={activeModal !== null}
+        title={activeModal?.title ?? "Format output"}
+        card={activeModal?.card ?? null}
+        generatedTwitterTweets={generatedTwitterCollection?.tweets ?? null}
+        onGeneratedTwitterTweetsChange={onGeneratedTwitterTweetsChange}
+        onClose={() => setActiveModal(null)}
       />
     </>
   );
