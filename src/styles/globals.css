@@ -1388,6 +1388,55 @@
     color: var(--color-ink);
   }
 
+  /* Format gallery — solid filled tiles (page darkest, card slightly elevated). */
+  .harvy-format-gallery-card {
+    border-width: 1px;
+    border-style: solid;
+    border-color: color-mix(in oklab, var(--color-line) 20%, transparent);
+    background: color-mix(in oklab, var(--color-ink) 6%, var(--color-stage));
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      transform 150ms ease;
+  }
+
+  .harvy-format-gallery-card:hover {
+    background: color-mix(in oklab, var(--color-ink) 7%, var(--color-stage));
+    border-color: color-mix(in oklab, var(--color-line) 35%, transparent);
+  }
+
+  html.dark .harvy-format-gallery-card {
+    border-color: color-mix(in oklab, white 8%, transparent);
+    background: #1e1e1e;
+  }
+
+  html.dark .harvy-format-gallery-card:hover {
+    background: #222222;
+    border-color: color-mix(in oklab, white 12%, transparent);
+  }
+
+  .harvy-format-featured-preview-fade {
+    pointer-events: none;
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 1;
+    height: 3.25rem;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      color-mix(in oklab, var(--color-ink) 6%, var(--color-stage)) 100%
+    );
+  }
+
+  html.dark .harvy-format-featured-preview-fade {
+    background: linear-gradient(to bottom, transparent 0%, #1e1e1e 100%);
+  }
+
+  html.dark .harvy-format-gallery-card:hover .harvy-format-featured-preview-fade {
+    background: linear-gradient(to bottom, transparent 0%, #222222 100%);
+  }
+
   /* Subtle theme morph for surfaces using semantic + common utility colors */
   :where(#root) :where(*) {
     transition-property: background-color, border-color, color, fill, stroke, box-shadow;

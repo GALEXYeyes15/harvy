@@ -23,6 +23,7 @@ import { setSpellingDocumentKey } from "../features/proofread/mechanics/spelling
 import { syncSpellingContextMenuRef } from "../features/proofread/spellingContextMenuRef";
 import { EditorDocumentHeader } from "./EditorDocumentHeader";
 import { OpenWindowsBar } from "./OpenWindowsBar";
+import { FormatGalleryPanel } from "./FormatGalleryPanel";
 import {
   WorkspaceSectionPlaceholder,
   WorkspaceSectionSwitcher,
@@ -34,6 +35,7 @@ import {
 import { SaveAsModal, type SaveAsOrganizeMode } from "./SaveAsModal";
 import type { EditorCommand } from "../features/editor/commands";
 import { documentTextForStats, ingestTextFileContent } from "../features/editor/documentMarkdown";
+import { documentPreviewBlocksFromStored } from "../features/format/documentPreviewBlocks";
 import { setFileMenuHandlers } from "../features/menu/fileMenuBridge";
 import { setupNativeAppMenu } from "../features/menu/setupNativeAppMenu";
 import { runEditorFormat, type LinkFormatOptions } from "../features/editor/editorFormatActions";
@@ -533,6 +535,13 @@ export function AppShell() {
       : countSentenceComplexityFromStoredDocument(scratchEditorBody, activeDocument?.sourcePath ?? null);
     return calculateEditorStats(text, sentenceComplexity);
   }, [scratchEditorBody, tiptapEditor, activeDocument?.sourcePath]);
+
+  const formatPreviewBlocks = useMemo(() => {
+    const markdown = getDocumentMarkdown(tiptapEditor, scratchEditorBody);
+    return documentPreviewBlocksFromStored(markdown, {
+      sourcePath: activeDocument?.sourcePath ?? null,
+    });
+  }, [tiptapEditor, scratchEditorBody, activeDocument?.sourcePath]);
 
   useEffect(() => {
     // Initialize persisted rules file early so future edits always target user-owned rules.
@@ -1525,7 +1534,14 @@ export function AppShell() {
         aria-labelledby={activeTabId ? `harvy-tab-${activeTabId}` : undefined}
       >
         {activeWorkspaceSection === "collect" ? <WorkspaceSectionPlaceholder title="Collect" /> : null}
-        {activeWorkspaceSection === "format" ? <WorkspaceSectionPlaceholder title="Format" /> : null}
+        {activeWorkspaceSection === "format" ? (
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <FormatGalleryPanel
+              documentTitle={editorTitleBase}
+              documentPreviewBlocks={formatPreviewBlocks}
+            />
+          </div>
+        ) : null}
         <div
           className={
             activeWorkspaceSection === "write"
