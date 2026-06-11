@@ -10,6 +10,7 @@ type FormatOutputModalProps = {
   card: FormatGalleryCard | null;
   generatedTwitterTweets: TweetItem[] | null;
   onGeneratedTwitterTweetsChange: (tweets: TweetItem[]) => void;
+  onTweetFavoritedForCollect?: (tweetText: string) => "added" | "duplicate";
   onClose: () => void;
 };
 
@@ -24,10 +25,12 @@ function TweetsCollectionModalBody({
   card,
   generatedTwitterTweets,
   onGeneratedTwitterTweetsChange,
+  onTweetFavoritedForCollect,
 }: {
   card: Extract<FormatGalleryCard, { kind: "collection" }>;
   generatedTwitterTweets: TweetItem[] | null;
   onGeneratedTwitterTweetsChange: (tweets: TweetItem[]) => void;
+  onTweetFavoritedForCollect?: (tweetText: string) => "added" | "duplicate";
 }) {
   const [placeholderTweets, setPlaceholderTweets] = useState<TweetItem[]>(() =>
     createPlaceholderTweets(card.count),
@@ -53,7 +56,11 @@ function TweetsCollectionModalBody({
   return (
     <>
       <p className="sr-only">{subtitle}</p>
-      <TweetsCollectionTable tweets={tweets} onTweetsChange={handleTweetsChange} />
+      <TweetsCollectionTable
+        tweets={tweets}
+        onTweetsChange={handleTweetsChange}
+        onTweetFavorited={onTweetFavoritedForCollect}
+      />
     </>
   );
 }
@@ -64,6 +71,7 @@ export function FormatOutputModal({
   card,
   generatedTwitterTweets,
   onGeneratedTwitterTweetsChange,
+  onTweetFavoritedForCollect,
   onClose,
 }: FormatOutputModalProps) {
   const tweetsCollection = isTweetsCollection(card);
@@ -88,6 +96,7 @@ export function FormatOutputModal({
           card={card}
           generatedTwitterTweets={generatedTwitterTweets}
           onGeneratedTwitterTweetsChange={onGeneratedTwitterTweetsChange}
+          onTweetFavoritedForCollect={onTweetFavoritedForCollect}
         />
       </CenteredOverlayModal>
     );

@@ -3,6 +3,14 @@ use serde::{Deserialize, Serialize};
 pub const MAX_TWITTER_FORMAT_COUNT: i64 = 100;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FormatInspirationExample {
+    pub preview: String,
+    pub format: String,
+    #[serde(rename = "type")]
+    pub example_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TwitterFormatItem {
     pub id: String,
     pub text: String,

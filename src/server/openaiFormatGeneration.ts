@@ -1,7 +1,12 @@
+import type { FormatInspirationExample } from "../features/collect/collectFormatInspiration";
 import type {
   TwitterFormatGenerationItem,
   TwitterFormatGenerationResult,
 } from "../features/format/formatGenerationTypes";
+import {
+  buildTwitterSystemPrompt,
+  buildTwitterUserPrompt,
+} from "../features/format/generation/twitterFormatPrompt";
 import { extractOpenAIOutputText, getOpenAIClient, type OpenAIResponseShape } from "./openaiClient";
 
 /** Hard cap per request — batching for larger counts is a future improvement. */
@@ -14,6 +19,7 @@ export type { TwitterFormatGenerationItem, TwitterFormatGenerationResult };
 export async function runTwitterFormatGeneration(
   essayText: string,
   targetCount: number,
+  inspirationExamples: FormatInspirationExample[] = [],
 ): Promise<TwitterFormatGenerationResult> {
   const trimmedEssay = essayText.trim();
   if (!trimmedEssay) {
@@ -25,43 +31,18 @@ export async function runTwitterFormatGeneration(
     Math.max(1, Math.round(targetCount)),
   );
 
+  const examples = inspirationExamples.filter((example) => example.preview.trim().length > 0);
+
   const response = await getOpenAIClient().responses.create({
     model: "gpt-4o",
     input: [
       {
         role: "system",
-        content: `You convert essays into standalone tweets for X (Twitter).
-
-Return ONLY valid JSON in this exact shape:
-{
-  "platform": "twitter",
-  "type": "collection",
-  "title": "Tweets — ${count} generated",
-  "items": [
-    {
-      "id": "tweet-1",
-      "text": "Tweet text here...",
-      "status": "draft",
-      "favorite": false
-    }
-  ]
-}
-
-Rules:
-- Generate exactly ${count} tweets.
-- Base tweets ONLY on the provided essay. Do not invent unrelated ideas.
-- Each tweet must stand alone and make sense without the essay.
-- Preserve the author's voice where possible.
-- Avoid hashtags unless strongly relevant.
-- Avoid generic motivational filler.
-- Keep each tweet concise (aim for under 280 characters).
-- Use ids "tweet-1" through "tweet-${count}".
-- Set status to "draft" and favorite to false for every item.
-- Return JSON only. No markdown fences or explanations.`,
+        content: buildTwitterSystemPrompt(count, examples.length > 0),
       },
       {
         role: "user",
-        content: `Essay:\n\n${trimmedEssay}`,
+        content: buildTwitterUserPrompt(trimmedEssay, examples),
       },
     ],
     text: {
@@ -98,40 +79,43 @@ function normalizeTwitterFormatGenerationResult(
   }
 
   const itemsRaw = record.items;
-  if (!Array.isArray(itemsRaw)) {
-    throw new Error("Format generation response missing items");
+  if (!Array.isArray(itemsRaw) || itemsRaw.length === 0) {
+    throw new Error("Format generation returned no tweets");
   }
 
-  const items: TwitterFormatGenerationItem[] = [];
-  for (let index = 0; index < itemsRaw.length; index += 1) {
-    const item = itemsRaw[index];
-    if (!item || typeof item !== "object") continue;
-    const row = item as Record<string, unknown>;
-    const text = typeof row.text === "string" ? row.text.trim() : "";
-    if (!text) continue;
-    const id = typeof row.id === "string" && row.id.trim() ? row.id.trim() : `tweet-${index + 1}`;
-    items.push({
-      id,
-      text,
-      status: "draft",
-      favorite: false,
-    });
-  }
+  const items = itemsRaw
+    .map((item, index) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      const text = typeof row.text === "string" ? row.text.trim() : "";
+      if (!text) return null;
+      const id = typeof row.id === "string" && row.id.trim() ? row.id.trim() : `tweet-${index + 1}`;
+      const favorite = row.favorite === true;
+      return {
+        id,
+        text,
+        status: "draft" as const,
+        favorite,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 
   if (items.length === 0) {
     throw new Error("Format generation returned no tweets");
   }
 
-  const count = items.length;
+  const count = Math.min(items.length, targetCount);
+  const trimmedItems = items.slice(0, count);
+
   const title =
     typeof record.title === "string" && record.title.trim()
       ? record.title.trim()
-      : `Tweets — ${count} generated`;
+      : `Tweets — ${trimmedItems.length} generated`;
 
   return {
     platform: "twitter",
     type: "collection",
     title,
-    items: items.slice(0, targetCount),
+    items: trimmedItems,
   };
 }

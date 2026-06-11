@@ -41,7 +41,14 @@ export async function POST(req: Request) {
 
   try {
     process.env.OPENAI_API_KEY = apiKey;
-    const result = await runTwitterFormatGeneration(essayText, targetCount);
+    const inspirationExamples = Array.isArray(record.inspirationExamples)
+      ? record.inspirationExamples
+      : [];
+    const result = await runTwitterFormatGeneration(
+      essayText,
+      targetCount,
+      inspirationExamples,
+    );
     return Response.json(result);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Format generation failed";

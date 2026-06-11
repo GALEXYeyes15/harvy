@@ -36,6 +36,7 @@ type FormatGalleryPanelProps = {
   platformSelection: FormatPlatformSelection;
   generatedTwitterCollection: GeneratedTwitterCollection | null;
   onGeneratedTwitterTweetsChange: (tweets: TweetItem[]) => void;
+  onTweetFavoritedForCollect?: (tweetText: string) => "added" | "duplicate";
 };
 
 function FeaturedFormatCard({
@@ -102,6 +103,7 @@ export function FormatGalleryPanel({
   platformSelection,
   generatedTwitterCollection,
   onGeneratedTwitterTweetsChange,
+  onTweetFavoritedForCollect,
 }: FormatGalleryPanelProps) {
   const [activeModal, setActiveModal] = useState<{
     title: string;
@@ -165,6 +167,7 @@ export function FormatGalleryPanel({
         card={activeModal?.card ?? null}
         generatedTwitterTweets={generatedTwitterCollection?.tweets ?? null}
         onGeneratedTwitterTweetsChange={onGeneratedTwitterTweetsChange}
+        onTweetFavoritedForCollect={onTweetFavoritedForCollect}
         onClose={() => setActiveModal(null)}
       />
     </>

@@ -1,5 +1,6 @@
 import { Copy, Pencil, Star, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { AddTweetToCollectResult } from "../features/collect/addTweetToCollect";
 import { tweetStatusLabel, type TweetItem, type TweetStatus } from "../features/format/tweetCollection";
 import { TweetEditorModal } from "./TweetEditorModal";
 
@@ -9,10 +10,22 @@ const ACTION_BUTTON =
 type TweetsCollectionTableProps = {
   tweets: TweetItem[];
   onTweetsChange: (tweets: TweetItem[]) => void;
+  onTweetFavorited?: (tweetText: string) => AddTweetToCollectResult;
 };
 
-export function TweetsCollectionTable({ tweets, onTweetsChange }: TweetsCollectionTableProps) {
+export function TweetsCollectionTable({
+  tweets,
+  onTweetsChange,
+  onTweetFavorited,
+}: TweetsCollectionTableProps) {
   const [editingTweetId, setEditingTweetId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timeoutId = window.setTimeout(() => setToastMessage(null), 2200);
+    return () => window.clearTimeout(timeoutId);
+  }, [toastMessage]);
 
   const editingTweet = useMemo(
     () => tweets.find((tweet) => tweet.id === editingTweetId) ?? null,
@@ -38,8 +51,18 @@ export function TweetsCollectionTable({ tweets, onTweetsChange }: TweetsCollecti
   };
 
   const toggleFavorite = (tweet: TweetItem) => {
-    const nextStatus: TweetStatus = tweet.status === "favorite" ? "draft" : "favorite";
+    const wasFavorite = tweet.status === "favorite";
+    const nextStatus: TweetStatus = wasFavorite ? "draft" : "favorite";
     updateTweet(tweet.id, { status: nextStatus });
+
+    if (!wasFavorite && onTweetFavorited) {
+      const result = onTweetFavorited(tweet.text);
+      if (result === "added") {
+        setToastMessage("Saved to Collect");
+      } else if (result === "duplicate") {
+        setToastMessage("Already in Collect");
+      }
+    }
   };
 
   const saveTweet = (tweetId: string, text: string) => {
@@ -48,7 +71,7 @@ export function TweetsCollectionTable({ tweets, onTweetsChange }: TweetsCollecti
 
   return (
     <>
-      <div className="harvy-tweets-collection-table flex min-h-0 flex-1 flex-col">
+      <div className="harvy-tweets-collection-table relative flex min-h-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 overflow-y-auto">
           <table className="w-full border-collapse text-left">
             <thead className="sticky top-0 z-10 bg-page">
@@ -132,6 +155,15 @@ export function TweetsCollectionTable({ tweets, onTweetsChange }: TweetsCollecti
             </tbody>
           </table>
         </div>
+        {toastMessage ? (
+          <p
+            className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-md bg-ink/90 px-3 py-1.5 text-[12px] text-white shadow-md dark:bg-white/90 dark:text-ink"
+            role="status"
+            aria-live="polite"
+          >
+            {toastMessage}
+          </p>
+        ) : null}
       </div>
 
       <TweetEditorModal

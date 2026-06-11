@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { FormatInspirationExample } from "../../collect/collectFormatInspiration";
 import { isTauriRuntime } from "../../save/saveRuntime";
 import type { TwitterFormatGenerationResult } from "../formatGenerationTypes";
 import { parseTwitterFormatGenerationResult } from "./parseTwitterFormatResult";
@@ -8,6 +9,7 @@ export type TwitterFormatGenerateRequest = {
   essayText: string;
   targetCount: number;
   documentId?: string | null;
+  inspirationExamples?: FormatInspirationExample[];
 };
 
 const DEV_API_PATH = "/api/format/generate";
@@ -22,6 +24,7 @@ export async function requestTwitterFormatGeneration(
       essayText: request.essayText,
       targetCount: request.targetCount,
       documentId: request.documentId ?? null,
+      inspirationExamples: request.inspirationExamples ?? [],
     });
   }
 
@@ -42,6 +45,7 @@ async function requestTwitterFormatGenerationDevApi(
       platform: "twitter",
       essayText: request.essayText,
       targetCount: request.targetCount,
+      inspirationExamples: request.inspirationExamples ?? [],
     }),
   });
 

@@ -1,9 +1,11 @@
-use super::types::TwitterFormatCollection;
+use super::types::{FormatInspirationExample, TwitterFormatCollection};
 use reqwest::blocking::Client;
 use serde::Serialize;
 use serde_json::Value;
 
 const OPENAI_RESPONSES_URL: &str = "https://api.openai.com/v1/responses";
+
+const INSPIRATION_PREAMBLE: &str = "Below are examples of tweet formats the user has saved in Harvy Collect. Use these as inspiration for structure and style only. Do not copy them. Do not reuse their specific claims unless those claims also appear in the essay. The generated tweets should be about the essay, but shaped by the patterns in these examples.";
 
 #[derive(Serialize)]
 struct ResponsesRequest<'a> {
@@ -32,6 +34,7 @@ struct ResponsesTextFormat {
 pub fn generate_twitter_collection(
     essay_text: &str,
     target_count: i64,
+    inspiration_examples: &[FormatInspirationExample],
 ) -> Result<TwitterFormatCollection, String> {
     let api_key = std::env::var("OPENAI_API_KEY")
         .map_err(|_| "OPENAI_API_KEY is not configured".to_string())?
@@ -42,8 +45,9 @@ pub fn generate_twitter_collection(
     }
 
     let count = target_count.clamp(1, super::types::MAX_TWITTER_FORMAT_COUNT);
-    let system_prompt = twitter_system_prompt(count);
-    let user_prompt = format!("Essay:\n\n{}", essay_text.trim());
+    let has_examples = !inspiration_examples.is_empty();
+    let system_prompt = twitter_system_prompt(count, has_examples);
+    let user_prompt = twitter_user_prompt(essay_text, inspiration_examples);
 
     let body = ResponsesRequest {
         model: "gpt-4o",
@@ -96,7 +100,16 @@ pub fn generate_twitter_collection(
     normalize_twitter_collection(parsed, count)
 }
 
-fn twitter_system_prompt(count: i64) -> String {
+fn twitter_system_prompt(count: i64, has_inspiration_examples: bool) -> String {
+    let inspiration_rules = if has_inspiration_examples {
+        r#"
+- Use the Harvy Collect examples to infer style, rhythm, structure, punchiness, pacing, and framing.
+- Do not directly copy or lightly paraphrase the Collect examples.
+- Do not introduce ideas that appear only in the Collect examples and not in the essay."#
+    } else {
+        ""
+    };
+
     format!(
         r#"You convert essays into standalone tweets for X (Twitter).
 
@@ -119,13 +132,41 @@ Rules:
 - Generate exactly {count} tweets.
 - Base tweets ONLY on the provided essay. Do not invent unrelated ideas.
 - Each tweet must stand alone and make sense without the essay.
-- Preserve the author's voice where possible.
+- Preserve the author's voice from the essay.
 - Avoid hashtags unless strongly relevant.
 - Avoid generic motivational filler.
 - Keep each tweet concise (aim for under 280 characters).
 - Use ids "tweet-1" through "tweet-{count}".
-- Set status to "draft" and favorite to false for every item.
+- Set status to "draft" and favorite to false for every item.{inspiration_rules}
 - Return JSON only. No markdown fences or explanations."#
+    )
+}
+
+fn twitter_user_prompt(essay_text: &str, inspiration_examples: &[FormatInspirationExample]) -> String {
+    let trimmed_essay = essay_text.trim();
+    if inspiration_examples.is_empty() {
+        return format!("Essay:\n\n{}", trimmed_essay);
+    }
+
+    let mut examples_block = String::new();
+    for (index, example) in inspiration_examples
+        .iter()
+        .filter(|example| !example.preview.trim().is_empty())
+        .enumerate()
+    {
+        examples_block.push_str(&format!(
+            "{}. [{}] {}\n",
+            index + 1,
+            example.example_type,
+            example.preview.trim()
+        ));
+    }
+
+    format!(
+        "Essay:\n\n{}\n\n{}\n\n{}",
+        trimmed_essay,
+        INSPIRATION_PREAMBLE,
+        examples_block.trim_end()
     )
 }
 

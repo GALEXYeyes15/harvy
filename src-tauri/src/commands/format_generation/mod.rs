@@ -16,6 +16,7 @@ pub fn generate_twitter_formats(
     essay_text: String,
     target_count: i64,
     document_id: Option<String>,
+    inspiration_examples: Option<Vec<types::FormatInspirationExample>>,
 ) -> Result<TwitterFormatCollection, String> {
     let trimmed = essay_text.trim();
     if trimmed.is_empty() {
@@ -25,7 +26,8 @@ pub fn generate_twitter_formats(
         return Err("Invalid target count".to_string());
     }
 
-    let collection = openai::generate_twitter_collection(trimmed, target_count)?;
+    let examples = inspiration_examples.unwrap_or_default();
+    let collection = openai::generate_twitter_collection(trimmed, target_count, &examples)?;
     let document_key = format_outputs_store::resolve_document_key(document_id.as_deref(), &essay_title);
     format_outputs_store::save_twitter_collection(&app, &document_key, &essay_title, &collection)?;
     Ok(collection)

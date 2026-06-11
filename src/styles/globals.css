@@ -1534,6 +1534,48 @@
     cursor: pointer;
   }
 
+  .harvy-collect-open-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 0.375rem;
+    border: 1px solid color-mix(in oklab, var(--color-line) 70%, transparent);
+    background: color-mix(in oklab, var(--color-ink) 8%, var(--color-stage));
+    padding: 0.2rem 0.45rem 0.2rem 0.35rem;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: color-mix(in oklab, var(--color-ink) 88%, transparent);
+    opacity: 0;
+    transition:
+      opacity 150ms ease,
+      background-color 120ms ease,
+      border-color 120ms ease;
+    pointer-events: none;
+  }
+
+  .group:hover .harvy-collect-open-button,
+  .group:focus-within .harvy-collect-open-button {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .harvy-collect-open-button:hover {
+    background: color-mix(in oklab, var(--color-ink) 12%, var(--color-stage));
+    border-color: color-mix(in oklab, var(--color-line) 90%, transparent);
+  }
+
+  html.dark .harvy-collect-open-button {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: #242424;
+    color: rgba(255, 255, 255, 0.88);
+  }
+
+  html.dark .harvy-collect-open-button:hover {
+    background: #2a2a2a;
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+
   /* Subtle theme morph for surfaces using semantic + common utility colors */
   :where(#root) :where(*) {
     transition-property: background-color, border-color, color, fill, stroke, box-shadow;

@@ -26,6 +26,11 @@ import { OpenWindowsBar } from "./OpenWindowsBar";
 import { CollectPanel } from "./CollectPanel";
 import type { CollectItem } from "../features/collect/collectItems";
 import {
+  addTweetToCollectAsCraft,
+  type AddTweetToCollectResult,
+} from "../features/collect/addTweetToCollect";
+import { collectInspirationExamplesForPlatform } from "../features/collect/collectFormatInspiration";
+import {
   loadPersistedCollectItems,
   savePersistedCollectItems,
 } from "../features/collect/collectItemsPersistence";
@@ -94,6 +99,7 @@ import {
   renameDocumentNotesSidecar,
   saveDocumentNotes,
 } from "../features/workspace/documentNotes";
+import { appendTextToDocumentNotes } from "../features/workspace/appendDocumentNotes";
 import type { FileNode, WorkspaceDocument } from "../features/workspace/types";
 import { nextActiveTabIdAfterClose, toPageTabs } from "../features/tabs/pageTabs";
 import {
@@ -648,6 +654,14 @@ export function AppShell() {
       return { ...prev, [activeTabId]: { ...current, notes: nextValue } };
     });
   }
+
+  const handleAddCollectPreviewToNotes = useCallback(
+    (preview: string) => {
+      const currentNotes = activeDocument?.notes ?? "";
+      updateActiveDocumentNotes(appendTextToDocumentNotes(currentNotes, preview));
+    },
+    [activeDocument?.notes, activeTabId],
+  );
 
   function runToolbarCommand(command: EditorCommand) {
     if (mode !== "edit" || !tiptapEditor) return;
@@ -1268,11 +1282,14 @@ export function AppShell() {
     setFormatGenerationError(null);
 
     try {
+      const inspirationExamples = collectInspirationExamplesForPlatform(collectItems, "x");
+
       const result = await requestTwitterFormatGeneration({
         essayTitle: editorTitleBase,
         essayText,
         targetCount,
         documentId: formatDocumentId,
+        inspirationExamples,
       });
       const collection = tweetItemsFromGeneration(result);
       setGeneratedTwitterCollection(collection);
@@ -1283,6 +1300,7 @@ export function AppShell() {
       setIsGeneratingFormats(false);
     }
   }, [
+    collectItems,
     formatPlatformSelection.x,
     tiptapEditor,
     scratchEditorBody,
@@ -1299,6 +1317,17 @@ export function AppShell() {
       void savePersistedTwitterFormats(formatDocumentId, editorTitleBase, nextCollection);
     },
     [formatDocumentId, editorTitleBase],
+  );
+
+  const handleTweetFavoritedForCollect = useCallback(
+    (tweetText: string): AddTweetToCollectResult => {
+      const { items, result } = addTweetToCollectAsCraft(collectItems, tweetText);
+      if (result === "added") {
+        setCollectItems(items);
+      }
+      return result;
+    },
+    [collectItems],
   );
 
   useEffect(() => {
@@ -1659,7 +1688,11 @@ export function AppShell() {
       >
         {activeWorkspaceSection === "collect" ? (
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <CollectPanel items={collectItems} onItemsChange={setCollectItems} />
+            <CollectPanel
+              items={collectItems}
+              onItemsChange={setCollectItems}
+              onAddPreviewToNotes={handleAddCollectPreviewToNotes}
+            />
           </div>
         ) : null}
         {activeWorkspaceSection === "format" ? (
@@ -1670,6 +1703,7 @@ export function AppShell() {
               platformSelection={formatPlatformSelection}
               generatedTwitterCollection={generatedTwitterCollection}
               onGeneratedTwitterTweetsChange={handleGeneratedTwitterTweetsChange}
+              onTweetFavoritedForCollect={handleTweetFavoritedForCollect}
             />
           </div>
         ) : null}

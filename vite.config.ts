@@ -86,7 +86,14 @@ function harvyApiPlugin(env: Record<string, string>): Plugin {
               return;
             }
             if (!ensureApiKey()) return;
-            const result = await runTwitterFormatGeneration(essayText, targetCount);
+            const inspirationExamples = Array.isArray(body.inspirationExamples)
+              ? body.inspirationExamples
+              : [];
+            const result = await runTwitterFormatGeneration(
+              essayText,
+              targetCount,
+              inspirationExamples,
+            );
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify(result));
             return;
