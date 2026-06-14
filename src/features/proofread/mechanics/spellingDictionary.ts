@@ -1,10 +1,7 @@
 import { isAllowedSpellingWord, registerCustomSpellingWords } from "./commonWordList";
+import { normalizeSpellingToken } from "./spellingNormalize";
 
 const STORAGE_KEY = "harvy:custom-spelling-dictionary";
-
-function normalizeSpellingToken(word: string): string {
-  return word.toLowerCase().replace(/'/g, "'");
-}
 
 /** Lowercase key → preferred display casing (first saved form). */
 const customDictionaryDisplay = new Map<string, string>();

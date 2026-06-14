@@ -1,5 +1,10 @@
 import { isWordSpellingExempt } from "./spellingDictionary";
 import { getHunspell } from "./hunspellDictionary";
+import {
+  normalizeSpellingApostrophes,
+  normalizeSpellingToken,
+  SPELLING_WORD_RE,
+} from "./spellingNormalize";
 import type { MechanicsRuleHit } from "./types";
 
 /**
@@ -28,11 +33,12 @@ function applyReplacementCase(original: string, replacement: string): string {
 }
 
 function casingVariants(word: string): string[] {
-  const lower = word.toLowerCase();
-  const variants = new Set<string>([word, lower]);
-  if (word.length > 1) {
-    variants.add(word[0]!.toUpperCase() + word.slice(1).toLowerCase());
-    variants.add(word.toUpperCase());
+  const normalized = normalizeSpellingApostrophes(word);
+  const lower = normalized.toLowerCase();
+  const variants = new Set<string>([normalized, lower]);
+  if (normalized.length > 1) {
+    variants.add(normalized[0]!.toUpperCase() + normalized.slice(1).toLowerCase());
+    variants.add(normalized.toUpperCase());
   }
   return [...variants];
 }
@@ -48,7 +54,8 @@ function isCorrectByHunspell(word: string): boolean {
 function suggestionForWord(word: string): string | undefined {
   const checker = getHunspell();
   if (!checker) return undefined;
-  const suggestions = checker.suggest(word);
+  const lookup = normalizeSpellingApostrophes(word);
+  const suggestions = checker.suggest(lookup);
   return suggestions[0];
 }
 
@@ -57,12 +64,13 @@ export function scanSpellingIssues(text: string): MechanicsRuleHit[] {
   if (!text.trim()) return [];
 
   const hits: MechanicsRuleHit[] = [];
-  const wordRe = /\b[A-Za-z']+\b/g;
+  const scanText = normalizeSpellingApostrophes(text);
+  const wordRe = new RegExp(SPELLING_WORD_RE.source, "g");
   let match: RegExpExecArray | null;
 
-  while ((match = wordRe.exec(text)) !== null) {
+  while ((match = wordRe.exec(scanText)) !== null) {
     const word = match[0];
-    const lower = word.toLowerCase();
+    const lower = normalizeSpellingToken(word);
     if (lower.length <= 2) continue;
     if (isWordSpellingExempt(word)) continue;
 

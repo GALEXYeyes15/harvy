@@ -1,17 +1,20 @@
+import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { GeneratedTwitterCollection } from "../features/format/formatGeneratedOutputs";
 import {
-  applyGeneratedTwitterCollection,
-  buildFormatGalleryCards,
-  filterFormatGalleryCards,
+  buildFormatWorkspaceCards,
   formatGalleryCardAspect,
   formatGalleryCardLabel,
-  PLACEHOLDER_FORMAT_GROUPS,
   type FormatCardAspect,
   type FormatGalleryCard,
 } from "../features/format/formatOutputs";
+import type { FormatGenerationOrchestratorResult } from "../features/format/generation/orchestratorTypes";
 import type { TweetItem } from "../features/format/tweetCollection";
-import { hasSelectedFormatPlatforms, type FormatPlatformSelection } from "../features/format/formatPlatforms";
+import {
+  hasSelectedFormatCategories,
+  type FormatCategoryAmounts,
+  type FormatCategorySelection,
+} from "../features/format/formatCategories";
 import type { DocumentPreviewBlock } from "../features/format/documentPreviewBlocks";
 import { distributeFormatGalleryCards } from "../features/format/formatMasonry";
 import { useFormatGalleryColumnCount } from "../features/format/useFormatGalleryColumnCount";
@@ -20,7 +23,7 @@ import { FormatOutputModal } from "./FormatOutputModal";
 import { WorkspaceSectionMainContent } from "./WorkspaceSectionMainContent";
 
 const CARD_BASE =
-  "harvy-format-gallery-card group w-full cursor-pointer rounded-xl text-left active:scale-[0.995]";
+  "harvy-format-gallery-card group w-full rounded-xl text-left active:scale-[0.995]";
 
 const CARD_ASPECT_CLASS: Record<FormatCardAspect, string> = {
   "16:9": "aspect-[16/9]",
@@ -33,7 +36,11 @@ const CARD_ASPECT_CLASS: Record<FormatCardAspect, string> = {
 type FormatGalleryPanelProps = {
   documentTitle: string;
   documentPreviewBlocks: DocumentPreviewBlock[];
-  platformSelection: FormatPlatformSelection;
+  categorySelection: FormatCategorySelection;
+  categoryAmounts: FormatCategoryAmounts;
+  wordCount: number;
+  isGeneratingFormats: boolean;
+  formatGenerationResults: FormatGenerationOrchestratorResult | null;
   generatedTwitterCollection: GeneratedTwitterCollection | null;
   onGeneratedTwitterTweetsChange: (tweets: TweetItem[]) => void;
   onTweetFavoritedForCollect?: (tweetText: string) => "added" | "duplicate";
@@ -51,7 +58,7 @@ function FeaturedFormatCard({
   return (
     <button
       type="button"
-      className={`${CARD_BASE} flex h-[11.5rem] flex-col overflow-hidden px-6 py-6`}
+      className={`${CARD_BASE} flex h-[11.5rem] cursor-pointer flex-col overflow-hidden px-6 py-6`}
       onClick={onClick}
     >
       <p className="shrink-0 text-[18px] font-semibold leading-snug tracking-[-0.01em] text-ink">
@@ -65,6 +72,20 @@ function FeaturedFormatCard({
   );
 }
 
+function FormatCardLoadingState() {
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center">
+      <Loader2
+        size={28}
+        strokeWidth={1.75}
+        aria-hidden
+        className="animate-spin text-muted/45 dark:text-white/35"
+      />
+      <span className="sr-only">Generating</span>
+    </div>
+  );
+}
+
 function FormatGalleryCardButton({
   card,
   onClick,
@@ -74,25 +95,38 @@ function FormatGalleryCardButton({
 }) {
   const isCollection = card.kind === "collection";
   const aspect = formatGalleryCardAspect(card);
+  const isInteractive = !card.loading;
 
   return (
     <button
       type="button"
-      className={`${CARD_BASE} ${CARD_ASPECT_CLASS[aspect]} flex flex-col px-5 py-5`}
-      onClick={onClick}
+      disabled={!isInteractive}
+      className={`${CARD_BASE} ${CARD_ASPECT_CLASS[aspect]} flex flex-col px-5 py-5 ${
+        isInteractive ? "cursor-pointer" : "cursor-default"
+      }`}
+      onClick={isInteractive ? onClick : undefined}
+      aria-busy={card.loading || undefined}
     >
-      <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted/55">
+      <p className="shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-muted/55">
         {isCollection ? "Collection" : card.category}
       </p>
-      <p className="mt-3 text-[1.05rem] font-semibold leading-snug tracking-[-0.01em] text-ink">
+      <p className="mt-3 shrink-0 text-[1.05rem] font-semibold leading-snug tracking-[-0.01em] text-ink">
         {isCollection ? `${card.title} — ${card.count} generated` : card.title}
       </p>
-      {card.kind === "individual" && card.subtitle ? (
-        <p className="mt-2 text-[12px] leading-relaxed text-muted/65">{card.subtitle}</p>
-      ) : null}
-      {isCollection ? (
-        <p className="mt-2 text-[12px] leading-relaxed text-muted/65">Open collection</p>
-      ) : null}
+
+      {card.loading ? (
+        <FormatCardLoadingState />
+      ) : card.error ? (
+        <p className="mt-3 min-h-0 flex-1 text-[12px] leading-relaxed text-[#e5484d]/85">{card.error}</p>
+      ) : card.kind === "individual" && card.content ? (
+        <p className="mt-3 line-clamp-[8] min-h-0 flex-1 text-[12px] leading-relaxed text-muted/70 dark:text-white/55">
+          {card.content}
+        </p>
+      ) : isCollection ? (
+        <p className="mt-2 shrink-0 text-[12px] leading-relaxed text-muted/65">Open collection</p>
+      ) : (
+        <div className="min-h-0 flex-1" aria-hidden />
+      )}
     </button>
   );
 }
@@ -100,7 +134,11 @@ function FormatGalleryCardButton({
 export function FormatGalleryPanel({
   documentTitle,
   documentPreviewBlocks,
-  platformSelection,
+  categorySelection,
+  categoryAmounts,
+  wordCount,
+  isGeneratingFormats,
+  formatGenerationResults,
   generatedTwitterCollection,
   onGeneratedTwitterTweetsChange,
   onTweetFavoritedForCollect,
@@ -109,12 +147,28 @@ export function FormatGalleryPanel({
     title: string;
     card: FormatGalleryCard | null;
   } | null>(null);
-  const galleryCards = useMemo(() => {
-    const allCards = buildFormatGalleryCards(PLACEHOLDER_FORMAT_GROUPS);
-    const filtered = filterFormatGalleryCards(allCards, platformSelection);
-    return applyGeneratedTwitterCollection(filtered, generatedTwitterCollection);
-  }, [platformSelection, generatedTwitterCollection]);
-  const showEmptyState = !hasSelectedFormatPlatforms(platformSelection);
+
+  const galleryCards = useMemo(
+    () =>
+      buildFormatWorkspaceCards({
+        selection: categorySelection,
+        categoryAmounts,
+        wordCount,
+        isGenerating: isGeneratingFormats,
+        orchestratorResults: formatGenerationResults,
+        generatedTweetsNotesCount: generatedTwitterCollection?.tweets.length ?? null,
+      }),
+    [
+      categorySelection,
+      categoryAmounts,
+      wordCount,
+      isGeneratingFormats,
+      formatGenerationResults,
+      generatedTwitterCollection,
+    ],
+  );
+
+  const showEmptyState = !hasSelectedFormatCategories(categorySelection);
   const columnCount = useFormatGalleryColumnCount();
   const masonryColumns = useMemo(
     () => distributeFormatGalleryCards(galleryCards, columnCount),

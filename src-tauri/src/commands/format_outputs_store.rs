@@ -1,20 +1,40 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use tauri::AppHandle;
 
 use super::app_config_dir;
-use super::format_generation::TwitterFormatCollection;
+use super::format_generation::FormatCollection;
 
 const FORMAT_OUTPUTS_DIR: &str = "format-outputs";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LegacyTwitterFormatItem {
+    id: String,
+    text: String,
+    status: String,
+    favorite: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LegacyTwitterFormatCollection {
+    platform: String,
+    #[serde(rename = "type")]
+    collection_type: String,
+    title: String,
+    items: Vec<LegacyTwitterFormatItem>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct StoredDocumentFormatOutputs {
     document_key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     essay_title: Option<String>,
+    #[serde(default)]
+    collections: HashMap<String, FormatCollection>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    twitter: Option<TwitterFormatCollection>,
+    twitter: Option<LegacyTwitterFormatCollection>,
 }
 
 pub fn resolve_document_key(document_id: Option<&str>, essay_title: &str) -> String {
@@ -51,6 +71,30 @@ fn format_outputs_path(app: &AppHandle, document_key: &str) -> Result<PathBuf, S
     Ok(dir.join(format!("{}.json", sanitize_document_key(document_key))))
 }
 
+fn migrate_legacy_twitter(stored: &mut StoredDocumentFormatOutputs) {
+    if stored.collections.contains_key("tweets_notes") {
+        return;
+    }
+    let Some(legacy) = stored.twitter.clone() else {
+        return;
+    };
+    let items = legacy
+        .items
+        .into_iter()
+        .map(|item| super::format_generation::FormatOutputItem {
+            id: item.id,
+            title: None,
+            content: item.text,
+            status: item.status,
+            favorite: item.favorite,
+        })
+        .collect();
+    stored.collections.insert(
+        "tweets_notes".to_string(),
+        FormatCollection::new("tweets_notes", legacy.title, items),
+    );
+}
+
 fn read_stored_outputs(app: &AppHandle, document_key: &str) -> Result<Option<StoredDocumentFormatOutputs>, String> {
     let path = format_outputs_path(app, document_key)?;
     if !path.exists() {
@@ -58,8 +102,9 @@ fn read_stored_outputs(app: &AppHandle, document_key: &str) -> Result<Option<Sto
     }
     let text = fs::read_to_string(&path)
         .map_err(|e| format!("Could not read format outputs '{}': {}", path.display(), e))?;
-    let stored: StoredDocumentFormatOutputs = serde_json::from_str(&text)
+    let mut stored: StoredDocumentFormatOutputs = serde_json::from_str(&text)
         .map_err(|e| format!("Could not parse format outputs '{}': {}", path.display(), e))?;
+    migrate_legacy_twitter(&mut stored);
     Ok(Some(stored))
 }
 
@@ -71,22 +116,57 @@ fn write_stored_outputs(app: &AppHandle, stored: &StoredDocumentFormatOutputs) -
         .map_err(|e| format!("Could not write format outputs '{}': {}", path.display(), e))
 }
 
-pub fn save_twitter_collection(
+pub fn save_format_collection(
     app: &AppHandle,
     document_key: &str,
     essay_title: &str,
-    collection: &TwitterFormatCollection,
+    category: &str,
+    collection: &FormatCollection,
 ) -> Result<(), String> {
     let key = sanitize_document_key(document_key);
     let mut stored = read_stored_outputs(app, &key)?.unwrap_or(StoredDocumentFormatOutputs {
         document_key: key.clone(),
         essay_title: None,
+        collections: HashMap::new(),
         twitter: None,
     });
     stored.document_key = key;
     stored.essay_title = Some(essay_title.trim().to_string());
-    stored.twitter = Some(collection.clone());
+    stored.collections.insert(category.to_string(), collection.clone());
     write_stored_outputs(app, &stored)
+}
+
+pub fn save_twitter_collection(
+    app: &AppHandle,
+    document_key: &str,
+    essay_title: &str,
+    collection: &FormatCollection,
+) -> Result<(), String> {
+    save_format_collection(app, document_key, essay_title, "tweets_notes", collection)
+}
+
+#[tauri::command]
+pub fn load_format_collection(
+    app: AppHandle,
+    category: String,
+    document_id: Option<String>,
+    essay_title: String,
+) -> Result<Option<FormatCollection>, String> {
+    let document_key = resolve_document_key(document_id.as_deref(), &essay_title);
+    let stored = read_stored_outputs(&app, &document_key)?;
+    Ok(stored.and_then(|s| s.collections.get(&category).cloned()))
+}
+
+#[tauri::command]
+pub fn save_format_collection_command(
+    app: AppHandle,
+    category: String,
+    document_id: Option<String>,
+    essay_title: String,
+    collection: FormatCollection,
+) -> Result<(), String> {
+    let document_key = resolve_document_key(document_id.as_deref(), &essay_title);
+    save_format_collection(&app, &document_key, &essay_title, &category, &collection)
 }
 
 #[tauri::command]
@@ -94,10 +174,8 @@ pub fn load_twitter_formats(
     app: AppHandle,
     document_id: Option<String>,
     essay_title: String,
-) -> Result<Option<TwitterFormatCollection>, String> {
-    let document_key = resolve_document_key(document_id.as_deref(), &essay_title);
-    let stored = read_stored_outputs(&app, &document_key)?;
-    Ok(stored.and_then(|s| s.twitter))
+) -> Result<Option<FormatCollection>, String> {
+    load_format_collection(app, "tweets_notes".to_string(), document_id, essay_title)
 }
 
 #[tauri::command]
@@ -105,8 +183,13 @@ pub fn save_twitter_formats(
     app: AppHandle,
     document_id: Option<String>,
     essay_title: String,
-    collection: TwitterFormatCollection,
+    collection: FormatCollection,
 ) -> Result<(), String> {
-    let document_key = resolve_document_key(document_id.as_deref(), &essay_title);
-    save_twitter_collection(&app, &document_key, &essay_title, &collection)
+    save_format_collection_command(
+        app,
+        "tweets_notes".to_string(),
+        document_id,
+        essay_title,
+        collection,
+    )
 }

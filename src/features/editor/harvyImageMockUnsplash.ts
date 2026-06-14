@@ -1,17 +1,10 @@
 import { DEFAULT_UNSPLASH_URL } from "./harvyImageAttribution";
+import type { UnsplashImageResult } from "./unsplashSearch";
 
-export type MockUnsplashImage = {
-  id: string;
-  thumbUrl: string;
-  fullUrl: string;
-  alt: string;
-  photographer: string;
-  photographerUrl: string;
-  unsplashUrl: string;
-};
+export type { UnsplashImageResult };
 
-/** Sample thumbnails for the Unsplash tab until API integration exists. */
-export const MOCK_UNSPLASH_IMAGES: MockUnsplashImage[] = [
+/** Sample thumbnails for the Unsplash tab before the user runs a search. */
+export const MOCK_UNSPLASH_IMAGES: UnsplashImageResult[] = [
   {
     id: "u1",
     thumbUrl: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=320&h=200&fit=crop",
@@ -67,14 +60,3 @@ export const MOCK_UNSPLASH_IMAGES: MockUnsplashImage[] = [
     unsplashUrl: DEFAULT_UNSPLASH_URL,
   },
 ];
-
-export function searchMockUnsplash(query: string): MockUnsplashImage[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return MOCK_UNSPLASH_IMAGES;
-  return MOCK_UNSPLASH_IMAGES.filter(
-    (img) =>
-      img.alt.toLowerCase().includes(q) ||
-      img.photographer.toLowerCase().includes(q) ||
-      img.id.includes(q),
-  );
-}

@@ -1,5 +1,5 @@
-import { ArrowUpRight, Check, Plus } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { ArrowUpRight, Check, NotepadText, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import {
   COLLECT_FORMAT_OPTIONS,
   COLLECT_TYPE_OPTIONS,
@@ -8,11 +8,19 @@ import {
   type CollectItem,
 } from "../features/collect/collectItems";
 import { CollectItemModal } from "./CollectItemModal";
-import { CollectRowActionMenu } from "./CollectRowActionMenu";
+import { OutliersView } from "./OutliersView";
 import { WorkspaceSectionMainContent } from "./WorkspaceSectionMainContent";
 
 const ADD_BUTTON =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted/55 transition-colors hover:bg-white/[0.06] hover:text-ink dark:hover:text-white/88";
+
+const SELECTION_ACTION_BUTTON =
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted/55 transition-colors hover:bg-white/[0.06] hover:text-ink dark:hover:text-white/88";
+
+const SUB_VIEW_TAB =
+  "border-0 bg-transparent p-0 text-[1.375rem] font-semibold leading-none tracking-[-0.02em]";
+
+type CollectSubView = "outliers" | "collect";
 
 const CELL_SELECT =
   "w-full min-w-0 cursor-pointer appearance-none border-0 bg-transparent p-0 text-[12px] text-muted/70 shadow-none outline-none ring-0 focus:outline-none focus:ring-0 dark:text-white/50";
@@ -22,35 +30,6 @@ type CollectPanelProps = {
   onItemsChange: (items: CollectItem[]) => void;
   onAddPreviewToNotes?: (preview: string) => void;
 };
-
-function CollectRowSelectCell({
-  checked,
-  showMenu,
-  onToggle,
-  onDelete,
-  onAddToNotes,
-}: {
-  checked: boolean;
-  showMenu: boolean;
-  onToggle: () => void;
-  onDelete: () => void;
-  onAddToNotes: () => void;
-}) {
-  const anchorRef = useRef<HTMLDivElement | null>(null);
-
-  return (
-    <div ref={anchorRef} className="relative flex items-center justify-end">
-      <CollectRowCheckbox checked={checked} onToggle={onToggle} />
-      {showMenu ? (
-        <CollectRowActionMenu
-          anchorRef={anchorRef as RefObject<HTMLElement | null>}
-          onDelete={onDelete}
-          onAddToNotes={onAddToNotes}
-        />
-      ) : null}
-    </div>
-  );
-}
 
 function CollectRowCheckbox({
   checked,
@@ -65,26 +44,98 @@ function CollectRowCheckbox({
       role="checkbox"
       aria-checked={checked}
       aria-label={checked ? "Deselect row" : "Select row"}
-      className={`flex h-4 w-4 items-center justify-center rounded-sm border transition-[opacity,background-color,border-color] duration-150 ${
+      className={`harvy-checkbox flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-sm transition-opacity duration-150 ${
         checked
-          ? "border-[#2fbf71] bg-[#2fbf71] opacity-100"
-          : "border-line/45 bg-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 dark:border-white/22"
+          ? "harvy-checkbox--checked opacity-100"
+          : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
       }`}
       onClick={(event) => {
         event.stopPropagation();
         onToggle();
       }}
     >
-      {checked ? <Check size={11} strokeWidth={2.75} className="text-white" aria-hidden /> : null}
+      {checked ? <Check size={14} strokeWidth={2.75} className="text-white" aria-hidden /> : null}
     </button>
   );
 }
 
+function CollectSelectionActions({
+  selectedCount,
+  onDelete,
+  onAddToNotes,
+}: {
+  selectedCount: number;
+  onDelete: () => void;
+  onAddToNotes: () => void;
+}) {
+  const labelSuffix = selectedCount === 1 ? "selected item" : "selected items";
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        className={SELECTION_ACTION_BUTTON}
+        aria-label={`Delete ${selectedCount} ${labelSuffix}`}
+        onClick={onDelete}
+      >
+        <Trash2 size={15} strokeWidth={1.75} aria-hidden />
+      </button>
+      <button
+        type="button"
+        className={SELECTION_ACTION_BUTTON}
+        aria-label={`Add ${selectedCount} ${labelSuffix} to Notes`}
+        onClick={onAddToNotes}
+      >
+        <NotepadText size={15} strokeWidth={1.75} aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+function CollectSubViewTabs({
+  activeView,
+  onViewChange,
+}: {
+  activeView: CollectSubView;
+  onViewChange: (view: CollectSubView) => void;
+}) {
+  return (
+    <div className="flex items-baseline gap-7" role="tablist" aria-label="Collect views">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeView === "outliers"}
+        className={`${SUB_VIEW_TAB} text-ink ${
+          activeView === "outliers" ? "opacity-100" : "opacity-40"
+        }`}
+        onClick={() => onViewChange("outliers")}
+      >
+        Outliers
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeView === "collect"}
+        className={`${SUB_VIEW_TAB} text-ink ${
+          activeView === "collect" ? "opacity-100" : "opacity-40"
+        }`}
+        onClick={() => onViewChange("collect")}
+      >
+        Collect
+      </button>
+    </div>
+  );
+}
+
 export function CollectPanel({ items, onItemsChange, onAddPreviewToNotes }: CollectPanelProps) {
+  const [activeCollectView, setActiveCollectView] = useState<CollectSubView>("collect");
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [openMenuItemId, setOpenMenuItemId] = useState<string | null>(null);
-  const openMenuAnchorRef = useRef<HTMLDivElement | null>(null);
+
+  const selectedItems = useMemo(
+    () => items.filter((item) => selectedIds.has(item.id)),
+    [items, selectedIds],
+  );
 
   const activeItem = useMemo(
     () => items.find((item) => item.id === activeItemId) ?? null,
@@ -98,25 +149,6 @@ export function CollectPanel({ items, onItemsChange, onAddPreviewToNotes }: Coll
       return next.size === current.size ? current : next;
     });
   }, [items]);
-
-  useEffect(() => {
-    if (!openMenuItemId) return;
-
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-
-      const menu = document.querySelector("[data-collect-row-menu]");
-      if (menu?.contains(target)) return;
-
-      if (openMenuAnchorRef.current?.contains(target)) return;
-
-      setOpenMenuItemId(null);
-    };
-
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [openMenuItemId]);
 
   const updateItem = (itemId: string, patch: Partial<CollectItem>) => {
     onItemsChange(
@@ -135,64 +167,48 @@ export function CollectPanel({ items, onItemsChange, onAddPreviewToNotes }: Coll
   };
 
   const toggleSelected = (itemId: string) => {
-    const isSelected = selectedIds.has(itemId);
-
-    if (isSelected) {
-      setSelectedIds((current) => {
-        const next = new Set(current);
-        next.delete(itemId);
-        return next;
-      });
-      setOpenMenuItemId((open) => (open === itemId ? null : open));
-      return;
-    }
-
-    setSelectedIds((current) => new Set(current).add(itemId));
-    setOpenMenuItemId(itemId);
-  };
-
-  const removeItem = (itemId: string) => {
-    onItemsChange(items.filter((item) => item.id !== itemId));
     setSelectedIds((current) => {
       const next = new Set(current);
-      next.delete(itemId);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else {
+        next.add(itemId);
+      }
       return next;
     });
-    if (openMenuItemId === itemId) {
-      setOpenMenuItemId(null);
-    }
-    if (activeItemId === itemId) {
-      setActiveItemId(null);
-    }
   };
 
-  const handleAddToNotes = (item: CollectItem) => {
-    onAddPreviewToNotes?.(item.preview);
-    setOpenMenuItemId(null);
+  const removeSelectedItems = () => {
+    if (selectedIds.size === 0) return;
+    onItemsChange(items.filter((item) => !selectedIds.has(item.id)));
+    if (activeItemId && selectedIds.has(activeItemId)) {
+      setActiveItemId(null);
+    }
+    setSelectedIds(new Set());
+  };
+
+  const handleAddSelectedToNotes = () => {
+    if (selectedItems.length === 0 || !onAddPreviewToNotes) return;
+
+    const combined = selectedItems
+      .map((item) => item.preview.trim())
+      .filter(Boolean)
+      .join("\n\n");
+
+    if (!combined) return;
+    onAddPreviewToNotes(combined);
   };
 
   return (
     <>
       <WorkspaceSectionMainContent>
         <header className="shrink-0">
-          <h1 className="text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-ink">
-            Harvy Collect
-          </h1>
+          <CollectSubViewTabs activeView={activeCollectView} onViewChange={setActiveCollectView} />
         </header>
 
-        <div className="harvy-collect-table mt-7">
-          <div className="mb-2 flex justify-end">
-            <button
-              type="button"
-              className={ADD_BUTTON}
-              aria-label="Add collected item"
-              onClick={handleAddItem}
-            >
-              <Plus size={15} strokeWidth={2} aria-hidden />
-            </button>
-          </div>
-
-          <table className="w-full border-collapse text-left">
+        {activeCollectView === "collect" ? (
+          <div className="harvy-collect-table mt-7">
+            <table className="w-full border-collapse text-left">
             <thead className="sticky top-0 z-10 bg-stage">
               <tr className="border-b border-line/20 dark:border-white/[0.08]">
                 <th className="pb-3 pr-4 pt-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted/60">
@@ -205,9 +221,19 @@ export function CollectPanel({ items, onItemsChange, onAddPreviewToNotes }: Coll
                   Type
                 </th>
                 <th className="w-[7.5rem] pb-3 pr-2 pt-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted/60">
-                  Date Created
+                  Collected
                 </th>
-                <th className="w-9 pb-3 pt-1" aria-hidden />
+                <th className="relative w-9 overflow-visible pb-3 pt-1">
+                  {selectedIds.size > 0 ? (
+                    <div className="absolute inset-y-0 right-0 flex items-center gap-1.5">
+                      <CollectSelectionActions
+                        selectedCount={selectedIds.size}
+                        onDelete={removeSelectedItems}
+                        onAddToNotes={handleAddSelectedToNotes}
+                      />
+                    </div>
+                  ) : null}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -223,7 +249,6 @@ export function CollectPanel({ items, onItemsChange, onAddPreviewToNotes }: Coll
               ) : (
                 items.map((item) => {
                   const isSelected = selectedIds.has(item.id);
-                  const showMenu = isSelected && openMenuItemId === item.id;
 
                   return (
                     <tr
@@ -308,15 +333,10 @@ export function CollectPanel({ items, onItemsChange, onAddPreviewToNotes }: Coll
                         className="py-3 align-top"
                         onClick={(event) => event.stopPropagation()}
                       >
-                        <div
-                          ref={showMenu ? openMenuAnchorRef : undefined}
-                        >
-                          <CollectRowSelectCell
+                        <div className="flex items-center justify-end">
+                          <CollectRowCheckbox
                             checked={isSelected}
-                            showMenu={showMenu}
                             onToggle={() => toggleSelected(item.id)}
-                            onDelete={() => removeItem(item.id)}
-                            onAddToNotes={() => handleAddToNotes(item)}
                           />
                         </div>
                       </td>
@@ -326,7 +346,18 @@ export function CollectPanel({ items, onItemsChange, onAddPreviewToNotes }: Coll
               )}
             </tbody>
           </table>
+            <button
+              type="button"
+              className={`${ADD_BUTTON} mt-7`}
+              aria-label="Add collected item"
+              onClick={handleAddItem}
+            >
+              <Plus size={15} strokeWidth={2} aria-hidden />
+            </button>
         </div>
+        ) : (
+          <OutliersView />
+        )}
       </WorkspaceSectionMainContent>
 
       <CollectItemModal

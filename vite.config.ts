@@ -1,8 +1,10 @@
 import type { IncomingMessage } from "node:http";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin } from "vite";
-import { runTwitterFormatGeneration } from "./src/server/openaiFormatGeneration";
+import { generateFormatOutputs } from "./src/server/formatGeneration/orchestrator";
 import { runProofread } from "./src/server/openaiProofread";
+import { searchUnsplashPhotos } from "./src/server/unsplashSearch";
+import { UNSPLASH_MISSING_KEY_MESSAGE } from "./src/features/editor/unsplashErrors";
 
 function readJsonBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -19,6 +21,35 @@ function harvyApiPlugin(env: Record<string, string>): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = req.url?.split("?")[0] ?? "";
+        if (req.method === "GET" && url === "/api/unsplash/search") {
+          try {
+            const unsplashKey = env.UNSPLASH_ACCESS_KEY?.trim() ?? "";
+            if (!unsplashKey) {
+              console.warn("[harvy:unsplash] UNSPLASH_ACCESS_KEY is not set in .env.local");
+              res.statusCode = 500;
+              res.end(UNSPLASH_MISSING_KEY_MESSAGE);
+              return;
+            }
+            process.env.UNSPLASH_ACCESS_KEY = unsplashKey;
+
+            const parsed = new URL(req.url ?? "", "http://localhost");
+            const query = parsed.searchParams.get("q")?.trim() ?? "";
+            if (!query) {
+              res.statusCode = 400;
+              res.end("Missing search query");
+              return;
+            }
+            const results = await searchUnsplashPhotos(query);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ results }));
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : "Request failed";
+            res.statusCode = 500;
+            res.end(msg);
+          }
+          return;
+        }
+
         if (req.method !== "POST") {
           next();
           return;
@@ -59,41 +90,33 @@ function harvyApiPlugin(env: Record<string, string>): Plugin {
             return;
           }
 
-          // TODO(format): dev/web fallback only — Tauri uses native `generate_twitter_formats`.
+          // Dev/web fallback only — Tauri uses native `generate_format_outputs`.
           if (url === "/api/format/generate") {
             const raw = await readJsonBody(req);
             const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-            const platform = body.platform;
-            if (platform !== "twitter") {
-              // TODO(format): route to other platform generators.
-              res.statusCode = 400;
-              res.end("Only twitter format generation is supported");
-              return;
-            }
             const essayText = typeof body.essayText === "string" ? body.essayText : "";
-            const targetCount =
-              typeof body.targetCount === "number" && Number.isFinite(body.targetCount)
-                ? body.targetCount
+            const wordCount =
+              typeof body.wordCount === "number" && Number.isFinite(body.wordCount)
+                ? body.wordCount
                 : 0;
             if (!essayText.trim()) {
               res.statusCode = 400;
               res.end("No essay text provided");
               return;
             }
-            if (targetCount <= 0) {
+            if (!body.selectedFormats || !body.categoryAmounts) {
               res.statusCode = 400;
-              res.end("Invalid target count");
+              res.end("Missing format selection or amounts");
               return;
             }
             if (!ensureApiKey()) return;
-            const inspirationExamples = Array.isArray(body.inspirationExamples)
-              ? body.inspirationExamples
-              : [];
-            const result = await runTwitterFormatGeneration(
+            const result = await generateFormatOutputs({
               essayText,
-              targetCount,
-              inspirationExamples,
-            );
+              wordCount,
+              selectedFormats: body.selectedFormats as never,
+              categoryAmounts: body.categoryAmounts as never,
+              inspirationExamplesByCategory: body.inspirationExamplesByCategory as never,
+            });
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify(result));
             return;

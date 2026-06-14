@@ -1,3 +1,8 @@
+import {
+  countSpellingWords,
+  tokenizeSpellingWords,
+} from "../proofread/mechanics/spellingNormalize";
+
 export type SentenceComplexityLevel = "normal" | "complex";
 
 /** Sentence-level FK threshold for complexity classification. */
@@ -10,7 +15,6 @@ export type SentenceComplexityScore = {
   fkSentence: number;
 };
 
-const WORD_RE = /\b[\w'-]+\b/g;
 const VOWEL_GROUP_RE = /[aeiouy]+/g;
 
 /**
@@ -36,8 +40,7 @@ export function normalizeSentenceForAnalysis(sentence: string): string {
 }
 
 export function countWords(text: string): number {
-  const words = text.trim().match(WORD_RE);
-  return words ? words.length : 0;
+  return countSpellingWords(text);
 }
 
 export function wordsInSentence(sentence: string): number {
@@ -55,7 +58,7 @@ export function estimateSyllablesInWord(rawWord: string): number {
 }
 
 export function estimateSyllables(text: string): number {
-  const words = text.match(WORD_RE) ?? [];
+  const words = tokenizeSpellingWords(text);
   if (words.length === 0) return 0;
   return words.reduce((total, word) => total + estimateSyllablesInWord(word), 0);
 }

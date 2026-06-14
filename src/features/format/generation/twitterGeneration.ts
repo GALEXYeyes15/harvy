@@ -1,10 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { FormatInspirationExample } from "../../collect/collectFormatInspiration";
 import { isTauriRuntime } from "../../save/saveRuntime";
+import type { FormatCollectionResult } from "../formatOutputTypes";
+import { legacyTwitterResultFromCollection } from "../formatGenerationTypes";
 import type { TwitterFormatGenerationResult } from "../formatGenerationTypes";
-import { parseTwitterFormatGenerationResult } from "./parseTwitterFormatResult";
+import { parseFormatCollectionResult } from "./parseFormatCollectionResult";
 
-export type TwitterFormatGenerateRequest = {
+export type TweetsNotesFormatGenerateRequest = {
   essayTitle: string;
   essayText: string;
   targetCount: number;
@@ -12,14 +14,16 @@ export type TwitterFormatGenerateRequest = {
   inspirationExamples?: FormatInspirationExample[];
 };
 
+/** @deprecated Use TweetsNotesFormatGenerateRequest */
+export type TwitterFormatGenerateRequest = TweetsNotesFormatGenerateRequest;
+
 const DEV_API_PATH = "/api/format/generate";
 
-/** Primary: native Tauri command. Fallback: dev-only Vite `/api/format/generate` route. */
-export async function requestTwitterFormatGeneration(
-  request: TwitterFormatGenerateRequest,
-): Promise<TwitterFormatGenerationResult> {
+export async function requestTweetsNotesFormatGeneration(
+  request: TweetsNotesFormatGenerateRequest,
+): Promise<FormatCollectionResult> {
   if (isTauriRuntime()) {
-    return invoke<TwitterFormatGenerationResult>("generate_twitter_formats", {
+    return invoke<FormatCollectionResult>("generate_tweets_notes_formats", {
       essayTitle: request.essayTitle,
       essayText: request.essayText,
       targetCount: request.targetCount,
@@ -28,13 +32,21 @@ export async function requestTwitterFormatGeneration(
     });
   }
 
-  return requestTwitterFormatGenerationDevApi(request);
+  const legacy = await requestTweetsNotesFormatGenerationDevApi(request);
+  return parseFormatCollectionResult(legacy, "tweets_notes");
 }
 
-/** Dev/web fallback — not used in Tauri production builds. */
-async function requestTwitterFormatGenerationDevApi(
-  request: TwitterFormatGenerateRequest,
+/** @deprecated Use requestTweetsNotesFormatGeneration */
+export async function requestTwitterFormatGeneration(
+  request: TweetsNotesFormatGenerateRequest,
 ): Promise<TwitterFormatGenerationResult> {
+  const collection = await requestTweetsNotesFormatGeneration(request);
+  return legacyTwitterResultFromCollection(collection);
+}
+
+async function requestTweetsNotesFormatGenerationDevApi(
+  request: TweetsNotesFormatGenerateRequest,
+): Promise<unknown> {
   const base = (import.meta.env.VITE_FORMAT_API_BASE as string | undefined)?.replace(/\/$/, "") ?? "";
   const url = `${base}${DEV_API_PATH}`;
 
@@ -42,7 +54,7 @@ async function requestTwitterFormatGenerationDevApi(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      platform: "twitter",
+      category: "tweets_notes",
       essayText: request.essayText,
       targetCount: request.targetCount,
       inspirationExamples: request.inspirationExamples ?? [],
@@ -54,8 +66,5 @@ async function requestTwitterFormatGenerationDevApi(
     throw new Error(errText || `Format generation failed (${res.status})`);
   }
 
-  const data: unknown = await res.json();
-  return parseTwitterFormatGenerationResult(data);
+  return res.json();
 }
-
-// TODO(format): requestYouTubeFormatGeneration via generate_youtube_formats

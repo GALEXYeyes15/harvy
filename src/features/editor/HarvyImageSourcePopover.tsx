@@ -1,8 +1,10 @@
-import { Upload } from "lucide-react";
+import { Search, Upload } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { buildUnsplashLoadAttrs, type HarvyImageLoadAttrs } from "./harvyImageAttribution";
-import { MOCK_UNSPLASH_IMAGES, searchMockUnsplash, type MockUnsplashImage } from "./harvyImageMockUnsplash";
+import { MOCK_UNSPLASH_IMAGES } from "./harvyImageMockUnsplash";
+import { searchUnsplashPhotos, type UnsplashImageResult } from "./unsplashSearch";
+import { invokeErrorMessage } from "./unsplashErrors";
 
 type ImageSourceTab = "upload" | "link" | "unsplash" | "giphy";
 
@@ -75,7 +77,10 @@ export function HarvyImageSourcePopover({
   const [linkUrl, setLinkUrl] = useState("");
   const [linkError, setLinkError] = useState("");
   const [unsplashQuery, setUnsplashQuery] = useState("");
-  const [unsplashResults, setUnsplashResults] = useState<MockUnsplashImage[]>(MOCK_UNSPLASH_IMAGES);
+  const [unsplashResults, setUnsplashResults] = useState<UnsplashImageResult[]>(MOCK_UNSPLASH_IMAGES);
+  const [unsplashHasSearched, setUnsplashHasSearched] = useState(false);
+  const [unsplashLoading, setUnsplashLoading] = useState(false);
+  const [unsplashError, setUnsplashError] = useState("");
   const [uploadBusy, setUploadBusy] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
 
@@ -117,8 +122,28 @@ export function HarvyImageSourcePopover({
     };
   }, [anchorEl, onClose]);
 
-  useEffect(() => {
-    setUnsplashResults(searchMockUnsplash(unsplashQuery));
+  const runUnsplashSearch = useCallback(async () => {
+    const trimmed = unsplashQuery.trim();
+    if (!trimmed) {
+      setUnsplashError("");
+      setUnsplashHasSearched(false);
+      setUnsplashResults(MOCK_UNSPLASH_IMAGES);
+      return;
+    }
+
+    setUnsplashLoading(true);
+    setUnsplashError("");
+    try {
+      const results = await searchUnsplashPhotos(trimmed);
+      setUnsplashResults(results);
+      setUnsplashHasSearched(true);
+    } catch (error) {
+      setUnsplashError(invokeErrorMessage(error));
+      setUnsplashHasSearched(true);
+      setUnsplashResults([]);
+    } finally {
+      setUnsplashLoading(false);
+    }
   }, [unsplashQuery]);
 
   const handleUpload = useCallback(async () => {
@@ -214,16 +239,45 @@ export function HarvyImageSourcePopover({
 
         {tab === "unsplash" ? (
           <div className="harvy-image-source-popover__unsplash">
-            <input
-              type="search"
-              className="harvy-image-source-popover__input"
-              placeholder="Search for an image..."
-              value={unsplashQuery}
-              onChange={(e) => setUnsplashQuery(e.target.value)}
-            />
+            <div className="harvy-image-source-popover__search-row">
+              <input
+                type="search"
+                className="harvy-image-source-popover__input"
+                placeholder="Search for an image..."
+                value={unsplashQuery}
+                onChange={(e) => {
+                  setUnsplashQuery(e.target.value);
+                  if (unsplashError) setUnsplashError("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void runUnsplashSearch();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="harvy-image-source-popover__search-btn"
+                aria-label="Search Unsplash"
+                disabled={unsplashLoading}
+                onClick={() => void runUnsplashSearch()}
+              >
+                <Search size={15} strokeWidth={1.75} aria-hidden />
+              </button>
+            </div>
+            {unsplashError ? (
+              <p className="harvy-image-source-popover__error harvy-image-source-popover__error--banner">
+                {unsplashError}
+              </p>
+            ) : null}
             <div className="harvy-image-source-popover__grid">
-              {unsplashResults.length === 0 ? (
-                <p className="harvy-image-source-popover__empty">No sample images match that search.</p>
+              {unsplashLoading ? (
+                <p className="harvy-image-source-popover__status">Searching Unsplash…</p>
+              ) : unsplashError ? null : unsplashResults.length === 0 ? (
+                <p className="harvy-image-source-popover__empty">
+                  {unsplashHasSearched ? "No images found for that search." : "No sample images to show."}
+                </p>
               ) : (
                 unsplashResults.map((img) => (
                   <button

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
@@ -18,6 +18,12 @@ import {
   MechanicsUnderlineLayer,
   setMechanicsUnderlinesVisible,
 } from "../features/proofread/mechanicsUnderlineLayer";
+import {
+  type EditorCanvasFocusControl,
+  handleEditorCanvasFocusPointerDown,
+  handleEditorWritingSurfacePointerDown,
+  rejectEditorFocusIfSuppressed,
+} from "../features/editor/editorCanvasFocus";
 import { handleEditorContextMenuEvent } from "../features/editor/editorContextMenu";
 import {
   attachEditorLinkModifierCursor,
@@ -63,6 +69,11 @@ type EditorCanvasProps = {
   loadImageAt?: (pos: number, attrs: HarvyImageLoadAttrs) => void;
   /** Insert image block at cursor (same flow as context menu action). */
   onInsertImage?: () => void | Promise<void>;
+  /** Visual inactive mode — hides caret/selection until user clicks the writing surface. */
+  editorVisuallyInactive?: boolean;
+  /** When true, block focus until the user clicks the writing surface. */
+  editorFocusSuppressedRef?: RefObject<boolean>;
+  onEditorUserActivated?: () => void;
 };
 
 export function EditorCanvas({
@@ -83,6 +94,9 @@ export function EditorCanvas({
   pickLocalImage,
   loadImageAt,
   onInsertImage,
+  editorVisuallyInactive = false,
+  editorFocusSuppressedRef,
+  onEditorUserActivated,
 }: EditorCanvasProps) {
   const pickLocalImageRef = useRef(pickLocalImage);
   pickLocalImageRef.current = pickLocalImage;
@@ -96,10 +110,21 @@ export function EditorCanvas({
   workspaceRootPathRef.current = workspaceRootPath;
   const onTypingActivityRef = useRef(onTypingActivity);
   onTypingActivityRef.current = onTypingActivity;
+  const onEditorUserActivatedRef = useRef(onEditorUserActivated);
+  onEditorUserActivatedRef.current = onEditorUserActivated;
+
+  const editorFocusControl = useMemo<EditorCanvasFocusControl>(
+    () => ({
+      isFocusSuppressed: () => editorFocusSuppressedRef?.current ?? false,
+      onUserActivate: () => onEditorUserActivatedRef.current?.(),
+    }),
+    [editorFocusSuppressedRef],
+  );
 
   const editor = useEditor(
     {
       immediatelyRender: true,
+      autofocus: false,
       extensions: [
         StarterKit.configure({
           heading: { levels: [1, 2, 3] },
@@ -142,8 +167,8 @@ export function EditorCanvas({
           "aria-multiline": "true",
           spellcheck: spellcheckEnabled ? "true" : "false",
           class:
-            "editor-content ProseMirror-harvy block min-h-0 w-full max-w-none resize-none bg-transparent py-10 text-[18px] font-normal text-ink caret-muted outline-none focus:outline-none placeholder:text-muted/45 sm:py-11 " +
-            (isEditable ? "" : "cursor-default select-text opacity-75"),
+            "editor-content ProseMirror-harvy block min-h-full w-full max-w-none resize-none bg-transparent py-10 text-[18px] font-normal text-ink caret-muted outline-none focus:outline-none placeholder:text-muted/45 sm:py-11 " +
+            (isEditable ? "cursor-text" : "cursor-default select-text opacity-75"),
         },
         handleKeyDown: (view, event) => handleBackspaceOnEmptyTextBlockKeyDown(view, event),
       },
@@ -204,6 +229,11 @@ export function EditorCanvas({
 
   useEffect(() => {
     if (!editor) return;
+    editor.view.dom.classList.toggle("harvy-editor-visually-inactive", editorVisuallyInactive);
+  }, [editor, editorVisuallyInactive]);
+
+  useEffect(() => {
+    if (!editor) return;
     const prior = editor.options.editorProps?.handleDOMEvents ?? {};
     editor.setOptions({
       editorProps: {
@@ -211,9 +241,35 @@ export function EditorCanvas({
         handleDOMEvents: {
           ...prior,
           mousedown: (view, event) => {
+            if (isEditableRef.current) {
+              handleEditorWritingSurfacePointerDown(event as MouseEvent, editorFocusControl);
+            }
             if (handleEditorLinkPointerDown(event as MouseEvent)) return true;
             if (handleImageCaptionLinkPointerDown(event as MouseEvent)) return true;
+            if (
+              isEditableRef.current &&
+              handleEditorCanvasFocusPointerDown(view, event as MouseEvent, editorFocusControl)
+            ) {
+              return true;
+            }
             return prior.mousedown?.(view, event) ?? false;
+          },
+          focus: (view, event) => {
+            if (rejectEditorFocusIfSuppressed(view, editorFocusControl)) return true;
+            return prior.focus?.(view, event) ?? false;
+          },
+          keydown: (view, event) => {
+            if (
+              editorFocusSuppressedRef?.current &&
+              view.hasFocus() &&
+              !event.metaKey &&
+              !event.ctrlKey &&
+              !event.altKey
+            ) {
+              view.dom.blur();
+              return true;
+            }
+            return prior.keydown?.(view, event) ?? false;
           },
           contextmenu: (view, event) => {
             if (!isEditableRef.current) return false;
@@ -234,16 +290,30 @@ export function EditorCanvas({
         },
       },
     });
-  }, [editor, onInsertImage, isEditable]);
+  }, [editor, editorFocusControl, editorFocusSuppressedRef, onInsertImage, isEditable]);
+
+  const handleCanvasMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!editor || !isEditable || event.button !== 0) return;
+    if (editor.view.dom.contains(event.target as Node)) return;
+    handleEditorWritingSurfacePointerDown(event.nativeEvent, editorFocusControl);
+    if (handleEditorCanvasFocusPointerDown(editor.view, event.nativeEvent, editorFocusControl)) {
+      event.preventDefault();
+    }
+  };
 
   return (
-    <div className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent border border-solid border-transparent">
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
-        <div className="min-h-full w-full px-10 pb-52 pt-2 sm:px-14 sm:pb-9 sm:pt-2.5">
+    <div
+      className={`box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent border border-solid border-transparent ${editorVisuallyInactive ? "editor-is-inactive" : ""}`}
+    >
+      <div
+        className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain ${isEditable ? "cursor-text" : ""}`}
+        onMouseDown={handleCanvasMouseDown}
+      >
+        <div className="flex min-h-full w-full flex-col px-10 pb-52 pt-2 sm:px-14 sm:pb-9 sm:pt-2.5">
           <label htmlFor="harvy-editor" className="sr-only">
             {documentTitle}
           </label>
-          <EditorContent editor={editor} className="block w-full pb-52" />
+          <EditorContent editor={editor} className="block min-h-full w-full flex-1 pb-52" />
         </div>
       </div>
     </div>

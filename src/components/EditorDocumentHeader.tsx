@@ -200,6 +200,9 @@ export function EditorDocumentHeader({
     [documentTitleBase, titleRenameEnabled],
   );
 
+  const titleRowClass = `inline-flex w-fit max-w-full min-h-[1.25rem] items-center gap-1.5 ${TITLE_ROW_TYPOGRAPHY}`;
+  const titleFieldClass = `${TITLE_EMPHASIS} border-0 bg-transparent p-0 font-inherit text-inherit tracking-inherit shadow-none outline-none ring-0`;
+
   return (
     <div className="relative z-20 w-full min-w-0 shrink-0 bg-stage">
       <div className={`min-w-0 shrink-0 ${railShift}`}>
@@ -209,44 +212,50 @@ export function EditorDocumentHeader({
           <div
             className={`relative z-[2] flex w-full min-w-0 flex-row items-center pb-2 pt-1.5 pr-10 ${LEADING_PAD_SYNC} ${chromeLeftPadding} pointer-events-auto`}
           >
-            {isEditingTitle ? (
-              <div className={`flex min-w-0 min-h-[1.25rem] flex-1 items-center gap-1.5 ${TITLE_ROW_TYPOGRAPHY}`}>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={draftTitle}
-                  onChange={(e) => setDraftTitle(e.target.value)}
-                  onKeyDown={onTitleKeyDown}
-                  onBlur={onTitleBlur}
-                  aria-label="Document name"
-                  className={`${TITLE_EMPHASIS} m-0 min-h-[1.25rem] min-w-0 flex-[0_1_auto] max-w-full border-0 bg-transparent p-0 shadow-none outline-none ring-0 focus:border-0 focus:ring-0`}
-                />
-                {documentDirty ? <span className="shrink-0 italic text-muted/52">(Unsaved)</span> : null}
-              </div>
-            ) : (
-              <div className={`flex min-w-0 min-h-[1.25rem] flex-1 items-center gap-1.5 ${TITLE_ROW_TYPOGRAPHY}`}>
-                {titleRenameEnabled ? (
-                  <button
-                    type="button"
-                    onClick={startEditing}
-                    className={`${TITLE_EMPHASIS} min-h-[1.25rem] min-w-0 max-w-full flex-[0_1_auto] cursor-text truncate text-left transition-colors duration-200 hover:text-ink`}
-                    title={documentTitleBase}
-                    aria-label={`Rename document, currently ${documentTitleBase}`}
-                  >
-                    {documentTitleBase}
-                  </button>
-                ) : (
+            <div className={titleRowClass}>
+              {isEditingTitle ? (
+                <span
+                  className={`relative inline-block w-fit max-w-full min-h-[1.25rem] ${TITLE_EMPHASIS}`}
+                >
                   <span
-                    className={`min-w-0 max-w-full flex-[0_1_auto] truncate ${TITLE_EMPHASIS}`}
-                    title={documentTitleBase}
-                    aria-live="polite"
+                    aria-hidden
+                    className="pointer-events-none invisible block whitespace-pre select-none"
                   >
-                    {documentTitleBase}
+                    {draftTitle || "\u00A0"}
                   </span>
-                )}
-                {documentDirty ? <span className="shrink-0 italic text-muted/52">(Unsaved)</span> : null}
-              </div>
-            )}
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={draftTitle}
+                    onChange={(e) => setDraftTitle(e.target.value)}
+                    onKeyDown={onTitleKeyDown}
+                    onBlur={onTitleBlur}
+                    aria-label="Document name"
+                    className={`${titleFieldClass} absolute inset-y-0 left-0 m-0 h-full min-w-0 focus:border-0 focus:ring-0`}
+                    style={{ width: "100%" }}
+                  />
+                </span>
+              ) : titleRenameEnabled ? (
+                <button
+                  type="button"
+                  onClick={startEditing}
+                  className={`${titleFieldClass} min-h-[1.25rem] min-w-0 max-w-full cursor-text truncate text-left transition-colors duration-200 hover:text-ink`}
+                  title={documentTitleBase}
+                  aria-label={`Rename document, currently ${documentTitleBase}`}
+                >
+                  {documentTitleBase}
+                </button>
+              ) : (
+                <span
+                  className={`${titleFieldClass} min-h-[1.25rem] min-w-0 max-w-full truncate`}
+                  title={documentTitleBase}
+                  aria-live="polite"
+                >
+                  {documentTitleBase}
+                </span>
+              )}
+              {documentDirty ? <span className="shrink-0 italic text-muted/52">(Unsaved)</span> : null}
+            </div>
           </div>
         </div>
       </div>

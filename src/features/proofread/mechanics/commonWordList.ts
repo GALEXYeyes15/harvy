@@ -5,9 +5,9 @@
  * Extend via `registerCustomSpellingWords()` for future user ignore lists.
  */
 
-function normalizeSpellingToken(word: string): string {
-  return word.toLowerCase().replace(/'/g, "'");
-}
+import { normalizeSpellingToken } from "./spellingNormalize";
+
+export { normalizeSpellingToken } from "./spellingNormalize";
 
 /** User / document-specific vocabulary (brands, proper nouns, platform names). */
 const customSpellingWords = new Set<string>();

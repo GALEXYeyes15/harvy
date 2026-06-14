@@ -2,10 +2,8 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import { mechanicsUnderlineLayerKey } from "./mechanicsUnderlineLayer";
 import { proofreadPlainTextAndPositions } from "./proofreadPlainMap";
+import { isSpellingWordToken, normalizeSpellingApostrophes, SPELLING_WORD_RE } from "./mechanics/spellingNormalize";
 import type { ProofreadIssue } from "./types";
-
-const WORD_RE = /\b[A-Za-z']+\b/g;
-const WORD_ONLY_RE = /^[A-Za-z']+$/;
 
 function pmRangeForPlainRange(
   charToPmPos: number[],
@@ -27,13 +25,13 @@ export function wordRangeAtPmPos(
   const $pos = doc.resolve(pos);
   if (!$pos.parent.isTextblock) return null;
 
-  const parentText = $pos.parent.textContent;
+  const parentText = normalizeSpellingApostrophes($pos.parent.textContent);
   const parentStart = $pos.start();
   const offset = $pos.parentOffset;
 
-  WORD_RE.lastIndex = 0;
+  const wordRe = new RegExp(SPELLING_WORD_RE.source, "g");
   let match: RegExpExecArray | null;
-  while ((match = WORD_RE.exec(parentText)) !== null) {
+  while ((match = wordRe.exec(parentText)) !== null) {
     const start = match.index;
     const end = start + match[0].length;
     if (offset >= start && offset < end) {
@@ -51,7 +49,7 @@ function getWordRangeForDoubleClick(
   const { from, to, empty } = view.state.selection;
   if (!empty && to > from) {
     const selected = view.state.doc.textBetween(from, to, "");
-    if (WORD_ONLY_RE.test(selected)) {
+    if (isSpellingWordToken(selected)) {
       return { from, to, text: selected };
     }
   }

@@ -1,10 +1,11 @@
-import { runTwitterFormatGeneration } from "../../../../src/server/openaiFormatGeneration";
+import type { FormatGenerationRequest } from "../../../../src/features/format/generation/orchestratorTypes";
+import { generateFormatOutputs } from "../../../../src/server/formatGeneration/orchestrator";
 
 /**
  * Next.js App Router handler (optional deploy target).
  * Harvy’s Vite dev server uses `vite.config.ts` middleware for the same `/api/format/generate` contract.
  *
- * TODO(format): dev/web fallback only — the Tauri app uses native `generate_twitter_formats`.
+ * Dev/web fallback only — the Tauri app uses native `generate_format_outputs`.
  */
 export async function POST(req: Request) {
   let body: unknown;
@@ -14,24 +15,16 @@ export async function POST(req: Request) {
     return new Response("Invalid JSON", { status: 400 });
   }
 
-  const record = body as Record<string, unknown>;
-  const platform = record.platform;
-  if (platform !== "twitter") {
-  // TODO(format): route to YouTube, Substack, Instagram, TikTok, LinkedIn handlers.
-    return new Response("Only twitter format generation is supported", { status: 400 });
-  }
-
+  const record = body as Partial<FormatGenerationRequest>;
   const essayText = typeof record.essayText === "string" ? record.essayText : "";
-  const targetCount =
-    typeof record.targetCount === "number" && Number.isFinite(record.targetCount)
-      ? record.targetCount
-      : 0;
+  const wordCount =
+    typeof record.wordCount === "number" && Number.isFinite(record.wordCount) ? record.wordCount : 0;
 
   if (!essayText.trim()) {
     return new Response("No essay text provided", { status: 400 });
   }
-  if (targetCount <= 0) {
-    return new Response("Invalid target count", { status: 400 });
+  if (!record.selectedFormats || !record.categoryAmounts) {
+    return new Response("Missing format selection or amounts", { status: 400 });
   }
 
   const apiKey = process.env.OPENAI_API_KEY ?? "";
@@ -41,14 +34,13 @@ export async function POST(req: Request) {
 
   try {
     process.env.OPENAI_API_KEY = apiKey;
-    const inspirationExamples = Array.isArray(record.inspirationExamples)
-      ? record.inspirationExamples
-      : [];
-    const result = await runTwitterFormatGeneration(
+    const result = await generateFormatOutputs({
       essayText,
-      targetCount,
-      inspirationExamples,
-    );
+      wordCount,
+      selectedFormats: record.selectedFormats,
+      categoryAmounts: record.categoryAmounts,
+      inspirationExamplesByCategory: record.inspirationExamplesByCategory,
+    });
     return Response.json(result);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Format generation failed";

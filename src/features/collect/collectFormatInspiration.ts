@@ -1,4 +1,4 @@
-import type { FormatPlatformId } from "../format/formatPlatforms";
+import type { FormatCategoryId } from "../format/formatCategories";
 import type { CollectItem, CollectItemType } from "./collectItems";
 
 export const COLLECT_INSPIRATION_MAX = 25;
@@ -17,28 +17,21 @@ function inspirationSortScore(type: CollectItemType): number {
   return type === "Craft" ? 0 : 1;
 }
 
-/** Collect Format value used for style inspiration per Harvy Format platform. */
-export function collectFormatForPlatform(platform: FormatPlatformId): string | null {
-  switch (platform) {
-    case "x":
-      return "Tweet";
-    // TODO(format): YouTube generation — use Collect items where Format = YouTube
-    case "youtube":
-      return "Video";
-    // TODO(format): Substack generation — use Collect items where Format = Newsletter/Substack
-    case "substack":
-      return "Article";
-    // TODO(format): Instagram generation — use Collect items where Format = Instagram
-    case "instagram":
-      return "Quote";
-    // TODO(format): TikTok generation — use Collect items where Format = Short Form/TikTok
-    case "tiktok":
-      return "Thread";
-    // TODO(format): LinkedIn generation — use Collect items where Format = LinkedIn
-    case "linkedin":
-      return "Article";
+/** Collect Format values used for style inspiration per Harvy output category. */
+export function collectFormatsForCategory(category: FormatCategoryId): string[] {
+  switch (category) {
+    case "tweets_notes":
+      return ["Tweet", "Note", "Notes"];
+    case "short_form_outline":
+      return ["Short Form", "TikTok", "Reel", "Video"];
+    case "long_form_outline":
+      return ["YouTube", "Video", "Long Form"];
+    case "newsletter":
+      return ["Newsletter", "Substack", "Email"];
+    case "podcast_notes":
+      return ["Podcast", "Interview"];
     default:
-      return null;
+      return [];
   }
 }
 
@@ -48,10 +41,12 @@ export function collectFormatForPlatform(platform: FormatPlatformId): string | n
  */
 export function selectCollectInspirationExamples(
   items: CollectItem[],
-  targetFormat: string,
+  targetFormats: string[],
 ): FormatInspirationExample[] {
   const matching = items.filter(
-    (item) => formatMatches(item.format, targetFormat) && item.preview.trim().length > 0,
+    (item) =>
+      targetFormats.some((format) => formatMatches(item.format, format)) &&
+      item.preview.trim().length > 0,
   );
 
   const sorted = [...matching].sort((a, b) => {
@@ -67,11 +62,11 @@ export function selectCollectInspirationExamples(
   }));
 }
 
-export function collectInspirationExamplesForPlatform(
+export function collectInspirationExamplesForCategory(
   items: CollectItem[],
-  platform: FormatPlatformId,
+  category: FormatCategoryId,
 ): FormatInspirationExample[] {
-  const targetFormat = collectFormatForPlatform(platform);
-  if (!targetFormat) return [];
-  return selectCollectInspirationExamples(items, targetFormat);
+  const targetFormats = collectFormatsForCategory(category);
+  if (targetFormats.length === 0) return [];
+  return selectCollectInspirationExamples(items, targetFormats);
 }

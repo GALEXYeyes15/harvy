@@ -6,6 +6,7 @@ use tauri::Manager;
 
 pub mod format_generation;
 pub mod format_outputs_store;
+pub mod unsplash;
 mod pdf_export;
 
 #[derive(Debug, Clone, Serialize)]
@@ -197,41 +198,26 @@ pub fn get_volume_display_name_for_path(app: AppHandle, path: String) -> Result<
 
     #[cfg(target_os = "macos")]
     {
-        if let Some(name) = volume_name_macos(&safe_path) {
-            return Ok(name);
-        }
-        return Ok("Files".to_string());
+        return Ok(volume_name_macos(&safe_path).unwrap_or_else(|| "Local Drive".to_string()));
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
     {
-        let fallback = safe_path
-            .components()
-            .next()
-            .map(|c| match c {
-                std::path::Component::Prefix(prefix) => prefix.as_os_str().to_string_lossy().into_owned(),
-                std::path::Component::RootDir => "Root".to_string(),
-                _ => "Storage".to_string(),
-            })
-            .unwrap_or_else(|| "Storage".to_string());
-        Ok(fallback)
+        return Ok(volume_display_name_windows(&safe_path));
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        return Ok(volume_display_name_linux(&safe_path));
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        Ok("Local Drive".to_string())
     }
 }
 
-#[cfg(target_os = "macos")]
-fn volume_name_macos(path: &Path) -> Option<String> {
-    let mount_point = mount_point_for_path_macos(path);
-
-    if let Some(mp) = mount_point.as_deref() {
-        if let Some(name) = volume_name_from_diskutil(mp) {
-            return Some(name);
-        }
-    }
-    volume_name_from_diskutil(path)
-}
-
-#[cfg(target_os = "macos")]
-fn mount_point_for_path_macos(path: &Path) -> Option<PathBuf> {
+fn mount_point_for_path(path: &Path) -> Option<PathBuf> {
     let path_arg = path.to_string_lossy();
     let output = std::process::Command::new("df")
         .args(["-P", path_arg.as_ref()])
@@ -244,6 +230,129 @@ fn mount_point_for_path_macos(path: &Path) -> Option<PathBuf> {
     let data_line = stdout.lines().skip(1).find(|line| !line.trim().is_empty())?;
     let mount = data_line.split_whitespace().last()?;
     Some(PathBuf::from(mount))
+}
+
+#[cfg(target_os = "macos")]
+fn volume_name_macos(path: &Path) -> Option<String> {
+    let mount_point = mount_point_for_path(path).or_else(|| Some(path.to_path_buf()))?;
+    volume_name_for_mount_macos(&mount_point)
+}
+
+#[cfg(target_os = "macos")]
+fn volume_name_for_mount_macos(mount: &Path) -> Option<String> {
+    let mount_str = mount.to_string_lossy();
+
+    if mount_str.starts_with("/Volumes/") {
+        let name = mount
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .filter(|s| !s.is_empty())?;
+        return Some(name);
+    }
+
+    if let Some(name) = volume_name_from_diskutil(mount) {
+        let normalized = normalize_macos_volume_label(&name);
+        if normalized != "Data" {
+            return Some(normalized);
+        }
+    }
+
+    if mount_str == "/System/Volumes/Data"
+        || mount_str.starts_with("/System/Volumes/Data/")
+        || mount_str == "/"
+    {
+        if let Some(name) = volume_name_from_diskutil(Path::new("/")) {
+            let normalized = normalize_macos_volume_label(&name);
+            if !normalized.is_empty() && normalized != "Data" {
+                return Some(normalized);
+            }
+        }
+
+        if let Ok(entries) = std::fs::read_dir("/Volumes") {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(name) = volume_name_from_diskutil(&path) {
+                    let normalized = normalize_macos_volume_label(&name);
+                    if normalized.is_empty() || normalized == "Data" {
+                        continue;
+                    }
+                    let volume_dir = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned());
+                    if volume_dir.as_deref() == Some(normalized.as_str()) {
+                        return Some(normalized);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn volume_display_name_windows(path: &Path) -> String {
+    let Some(letter) = windows_drive_letter(path) else {
+        return "Local Drive".to_string();
+    };
+
+    let label = volume_label_from_vol(letter)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "Local Disk".to_string());
+
+    format!("{label} ({letter}:)")
+}
+
+#[cfg(target_os = "windows")]
+fn windows_drive_letter(path: &Path) -> Option<char> {
+    let mut components = path.components();
+    match components.next()? {
+        std::path::Component::Prefix(prefix) => {
+            let prefix_str = prefix.as_os_str().to_string_lossy();
+            let letter = prefix_str.chars().next()?;
+            if letter.is_ascii_alphabetic() {
+                Some(letter.to_ascii_uppercase())
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn volume_label_from_vol(letter: char) -> Option<String> {
+    let output = std::process::Command::new("cmd")
+        .args(["/C", &format!("vol {}:", letter)])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        if let Some((_, label)) = line.split_once(" is ") {
+            let trimmed = label.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn volume_display_name_linux(path: &Path) -> String {
+    if let Some(mount) = mount_point_for_path(path) {
+        let mount_str = mount.to_string_lossy();
+        if mount_str.starts_with("/media/") || mount_str.starts_with("/mnt/") || mount_str.starts_with("/run/media/") {
+            if let Some(name) = mount.file_name().and_then(|n| n.to_str()).filter(|s| !s.is_empty()) {
+                return name.to_string();
+            }
+        }
+    }
+    "Local Drive".to_string()
 }
 
 #[cfg(target_os = "macos")]
@@ -320,6 +429,52 @@ pub fn create_unique_directory(app: AppHandle, parent_path: String, base_name: S
         }
     }
     Err("Could not find an available folder name.".to_string())
+}
+
+/// Create a project folder under `parent_path`, or return it when it already exists as a directory.
+#[tauri::command]
+pub fn ensure_directory(app: AppHandle, parent_path: String, folder_name: String) -> Result<String, String> {
+    let parent = ensure_within_workspace_root(&app, Path::new(&parent_path))?;
+    if !parent.is_dir() {
+        return Err(format!("Parent is not a directory: {}", parent.display()));
+    }
+    let name = folder_name.trim();
+    if name.is_empty() {
+        return Err("Folder name is empty.".to_string());
+    }
+    let dest = parent.join(name);
+    if dest.exists() {
+        if dest.is_dir() {
+            return Ok(dest.to_string_lossy().to_string());
+        }
+        return Err(format!(
+            "A file named '{}' already exists at this location.",
+            name
+        ));
+    }
+    fs::create_dir(&dest).map_err(|e| {
+        format!(
+            "Could not create folder '{}': {}",
+            dest.display(),
+            e
+        )
+    })?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
+/// Whether a workspace path already exists on disk.
+#[tauri::command]
+pub fn path_exists(app: AppHandle, path: String) -> Result<bool, String> {
+    let p = PathBuf::from(path.trim());
+    if p.as_os_str().is_empty() {
+        return Ok(false);
+    }
+    if let Some(parent) = p.parent() {
+        if !parent.as_os_str().is_empty() {
+            ensure_within_workspace_root(&app, parent)?;
+        }
+    }
+    Ok(p.exists())
 }
 
 /// Rename a file or directory on disk (same parent recommended; caller builds full `to_path`).

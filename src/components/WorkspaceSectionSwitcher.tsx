@@ -5,9 +5,15 @@ import {
   type WorkspaceSection,
 } from "../features/workspace/workspaceSection";
 
+/** Match workspace/readability sidebar rail timing (`duration-500 ease-in-out`). */
+const RAIL_MOTION_CLASS =
+  "transition-[left,opacity,transform] duration-500 ease-in-out";
+
 type WorkspaceSectionSwitcherProps = {
   activeSection: WorkspaceSection;
   onSectionChange: (section: WorkspaceSection) => void;
+  /** Shared with top chrome (tabs, header, ambient controls) during distraction-free writing. */
+  chromeHidden?: boolean;
   className?: string;
   style?: CSSProperties;
 };
@@ -15,6 +21,7 @@ type WorkspaceSectionSwitcherProps = {
 export function WorkspaceSectionSwitcher({
   activeSection,
   onSectionChange,
+  chromeHidden = false,
   className,
   style,
 }: WorkspaceSectionSwitcherProps) {
@@ -22,6 +29,10 @@ export function WorkspaceSectionSwitcher({
     <nav
       className={[
         "pointer-events-none flex w-[3.25rem] shrink-0 flex-col items-stretch justify-start bg-transparent pl-1 pr-2",
+        RAIL_MOTION_CLASS,
+        chromeHidden
+          ? "pointer-events-none -translate-y-2 opacity-0"
+          : "translate-y-0 opacity-100",
         className,
       ]
         .filter(Boolean)
@@ -38,9 +49,9 @@ export function WorkspaceSectionSwitcher({
             type="button"
             onClick={() => onSectionChange(section)}
             aria-current={active ? "page" : undefined}
-            className={`pointer-events-auto group relative flex w-full items-center justify-start py-1 pl-2 pr-1 text-left transition-colors ${
-              active ? "text-ink" : "text-muted/55 hover:text-muted/90"
-            }`}
+            className={`group relative flex w-full items-center justify-start py-1 pl-2 pr-1 text-left transition-colors ${
+              chromeHidden ? "pointer-events-none" : "pointer-events-auto"
+            } ${active ? "text-ink" : "text-muted/55 hover:text-muted/90"}`}
           >
             <span
               aria-hidden

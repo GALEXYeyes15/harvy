@@ -4,9 +4,9 @@ import type { EditorStats } from "../features/editor/stats";
 import { SIDEBAR_TOOLS_MODES, type SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
 import type { ProofreadIssue } from "../features/proofread/types";
 import type {
-  FormatPlatformAmounts,
-  FormatPlatformSelection,
-} from "../features/format/formatPlatforms";
+  FormatCategoryAmounts,
+  FormatCategorySelection,
+} from "../features/format/formatCategories";
 import type { WorkspaceSection } from "../features/workspace/workspaceSection";
 import { FormatSettingsSidebarPanel } from "./FormatSettingsSidebarPanel";
 import { NotesSidebarPanel } from "./NotesSidebarPanel";
@@ -42,10 +42,10 @@ export type SidebarRightProps = {
   onNotesChange: (value: string) => void;
   proofreadIssues?: ProofreadIssue[];
   workspaceSection?: WorkspaceSection;
-  formatPlatformSelection?: FormatPlatformSelection;
-  onFormatPlatformSelectionChange?: (selection: FormatPlatformSelection) => void;
-  formatPlatformAmounts?: FormatPlatformAmounts;
-  onFormatPlatformAmountsChange?: (amounts: FormatPlatformAmounts) => void;
+  formatCategorySelection?: FormatCategorySelection;
+  onFormatCategorySelectionChange?: (selection: FormatCategorySelection) => void;
+  formatCategoryAmounts?: FormatCategoryAmounts;
+  onFormatCategoryAmountsChange?: (amounts: FormatCategoryAmounts) => void;
   isGeneratingFormats?: boolean;
   formatGenerationError?: string | null;
   onGenerateFormats?: () => void;
@@ -229,20 +229,20 @@ export function SidebarRight({
   onNotesChange,
   proofreadIssues = [],
   workspaceSection = "write",
-  formatPlatformSelection,
-  onFormatPlatformSelectionChange,
-  formatPlatformAmounts,
-  onFormatPlatformAmountsChange,
+  formatCategorySelection,
+  onFormatCategorySelectionChange,
+  formatCategoryAmounts,
+  onFormatCategoryAmountsChange,
   isGeneratingFormats = false,
   formatGenerationError = null,
   onGenerateFormats,
 }: SidebarRightProps) {
   if (workspaceSection === "format") {
     if (
-      !formatPlatformSelection ||
-      !onFormatPlatformSelectionChange ||
-      !formatPlatformAmounts ||
-      !onFormatPlatformAmountsChange ||
+      !formatCategorySelection ||
+      !onFormatCategorySelectionChange ||
+      !formatCategoryAmounts ||
+      !onFormatCategoryAmountsChange ||
       !onGenerateFormats
     ) {
       return null;
@@ -256,14 +256,27 @@ export function SidebarRight({
         >
           <FormatSettingsSidebarPanel
             essayWordCount={stats.words}
-            platformSelection={formatPlatformSelection}
-            onPlatformSelectionChange={onFormatPlatformSelectionChange}
-            platformAmounts={formatPlatformAmounts}
-            onPlatformAmountsChange={onFormatPlatformAmountsChange}
+            categorySelection={formatCategorySelection}
+            onCategorySelectionChange={onFormatCategorySelectionChange}
+            categoryAmounts={formatCategoryAmounts}
+            onCategoryAmountsChange={onFormatCategoryAmountsChange}
             isGeneratingFormats={isGeneratingFormats}
             formatGenerationError={formatGenerationError}
             onGenerateFormats={onGenerateFormats}
           />
+        </div>
+      </div>
+    );
+  }
+
+  if (workspaceSection === "collect") {
+    return (
+      <div className={PANEL}>
+        <div
+          id="harvy-tools-panel"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden px-7 pb-8 pt-3"
+        >
+          <NotesSidebarPanel notes={notes} onNotesChange={onNotesChange} />
         </div>
       </div>
     );

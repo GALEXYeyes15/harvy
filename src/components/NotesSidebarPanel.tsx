@@ -7,7 +7,7 @@ export function NotesSidebarPanel({ notes, onNotesChange }: NotesSidebarPanelPro
   return (
     <div className="flex flex-col">
       <header className="flex items-baseline justify-between gap-4">
-        <h2 className="text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-ink">Note</h2>
+        <h2 className="text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-ink">Notes</h2>
       </header>
 
       <label htmlFor="harvy-document-notes" className="sr-only">

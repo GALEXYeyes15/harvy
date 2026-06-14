@@ -1,11 +1,14 @@
 import { ChevronDown, Folder } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { CenteredOverlayModal } from "./overlay/CenteredOverlayModal";
-import { fileNameFromPath, normalizeMarkdownSavePath } from "../features/save/saveRuntime";
-import { joinPath, splitFileBaseAndExtension } from "../features/workspace/folderNaming";
+import { SaveAsFolderPreview } from "./SaveAsFolderPreview";
+import {
+  resolveSaveAsOutputPath,
+  type SaveAsOrganizeMode,
+} from "../features/save/saveRuntime";
+import type { SaveAsFolderPreviewContext } from "../features/save/saveAsFolderPreview";
 
-/** `file` = single file in chosen folder; `folder` = nested folder + file inside (package). */
-export type SaveAsOrganizeMode = "file" | "folder";
+export type { SaveAsOrganizeMode };
 
 type SaveAsModalProps = {
   open: boolean;
@@ -17,6 +20,10 @@ type SaveAsModalProps = {
   isSubmitting: boolean;
   onPickDestination: () => void | Promise<void>;
   onSave: (payload: { fileName: string; organize: SaveAsOrganizeMode }) => void | Promise<void>;
+  /** Live filename edits while the dialog is open (e.g. sync document title in the shell). */
+  onFileNameChange?: (fileName: string) => void;
+  /** Live folder preview context derived from the current document. */
+  folderPreviewContext: SaveAsFolderPreviewContext;
 };
 
 const LABEL_COL = "w-[4.75rem] shrink-0 pt-2.5 text-right text-[12px] font-medium tracking-wide text-muted/72";
@@ -30,11 +37,24 @@ const FIELD = `h-11 w-full min-w-0 rounded-[10px] ${MODAL_STROKE} bg-ink/[0.04] 
 const SAVE_AS_FILENAME_FOCUS =
   "focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-[#7d7d7d] focus-visible:shadow-[inset_0_1px_2px_rgba(28,25,23,0.04)] dark:focus-visible:shadow-[inset_0_1px_2px_rgba(255,255,255,0.05)]";
 
-const RADIO_CARD_BASE = `flex w-full cursor-pointer items-start gap-3 rounded-[10px] ${MODAL_STROKE} px-3.5 py-3 text-left transition-[background-color,box-shadow]`;
+const RADIO_CARD_BASE = `flex w-full cursor-pointer rounded-[10px] ${MODAL_STROKE} px-3.5 py-3 text-left transition-[background-color,box-shadow]`;
+
+const RADIO_CARD_ROW = "items-start gap-3";
 
 const RADIO_CARD_UNSELECTED = "bg-ink/[0.02] hover:bg-ink/[0.04] dark:bg-ink/[0.04] dark:hover:bg-ink/[0.06]";
 
 const RADIO_CARD_SELECTED = "bg-ink/[0.06] dark:bg-ink/[0.08]";
+
+const RADIO_OUTER =
+  `mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${MODAL_STROKE} bg-transparent`;
+
+function SaveAsRadioIndicator({ selected }: { selected: boolean }) {
+  return (
+    <span className={RADIO_OUTER} aria-hidden>
+      {selected ? <span className="h-2 w-2 shrink-0 rounded-full bg-white" /> : null}
+    </span>
+  );
+}
 
 export function SaveAsModal({
   open,
@@ -45,6 +65,8 @@ export function SaveAsModal({
   isSubmitting,
   onPickDestination,
   onSave,
+  onFileNameChange,
+  folderPreviewContext,
 }: SaveAsModalProps) {
   const [fileName, setFileName] = useState("");
   const [organize, setOrganize] = useState<SaveAsOrganizeMode>("file");
@@ -57,29 +79,45 @@ export function SaveAsModal({
     if (!open) return;
     setFileName(initialFileName);
     setOrganize("file");
+    onFileNameChange?.(initialFileName);
     requestAnimationFrame(() => {
       fileNameInputRef.current?.focus();
       fileNameInputRef.current?.select();
     });
-  }, [open, initialFileName]);
+  }, [open, initialFileName, onFileNameChange]);
 
-  const previewLeaf = useMemo(() => {
-    const t = fileName.trim();
-    if (!t) return "Untitled.md";
-    return fileNameFromPath(normalizeMarkdownSavePath(joinPath("x", t)));
-  }, [fileName]);
+  const filePreview = useMemo(() => {
+    if (!destinationPath) {
+      return { leaf: "Untitled.md", folderBase: "Untitled" };
+    }
+    return (
+      resolveSaveAsOutputPath(destinationPath, fileName.trim() || "Untitled.md", "file") ?? {
+        path: "",
+        leaf: "Untitled.md",
+        folderBase: "Untitled",
+      }
+    );
+  }, [destinationPath, fileName]);
 
-  const previewBase = useMemo(() => {
-    const { base } = splitFileBaseAndExtension(previewLeaf);
-    return base || "Untitled";
-  }, [previewLeaf]);
+  const folderPreview = useMemo(() => {
+    if (!destinationPath) {
+      return { leaf: "Untitled.md", folderBase: "Untitled" };
+    }
+    return (
+      resolveSaveAsOutputPath(destinationPath, fileName.trim() || "Untitled.md", "folder") ?? {
+        path: "",
+        leaf: "Untitled.md",
+        folderBase: "Untitled",
+      }
+    );
+  }, [destinationPath, fileName]);
 
   const destLabel = destinationPath ? destinationDisplay : "…";
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     if (isSubmitting) return;
     onClose();
-  };
+  }, [isSubmitting, onClose]);
 
   const handleSave = () => {
     if (isSubmitting) return;
@@ -110,7 +148,11 @@ export function SaveAsModal({
               id={saveAsFieldId}
               type="text"
               value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setFileName(next);
+                onFileNameChange?.(next);
+              }}
               className={`${FIELD} ${SAVE_AS_FILENAME_FOCUS}`}
               autoComplete="off"
               spellCheck={false}
@@ -143,7 +185,7 @@ export function SaveAsModal({
             id={orgGroupId}
             className="inline-flex w-fit rounded-md bg-mist/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted/58 dark:bg-ink/[0.06]"
           >
-            Organize my project as:
+            Organize project as:
           </p>
 
           <div className="flex flex-col gap-2" role="radiogroup" aria-labelledby={orgGroupId}>
@@ -153,23 +195,14 @@ export function SaveAsModal({
               aria-checked={organize === "file"}
               disabled={isSubmitting}
               onClick={() => setOrganize("file")}
-              className={`${RADIO_CARD_BASE} ${organize === "file" ? RADIO_CARD_SELECTED : RADIO_CARD_UNSELECTED}`}
+              className={`${RADIO_CARD_BASE} ${RADIO_CARD_ROW} ${organize === "file" ? RADIO_CARD_SELECTED : RADIO_CARD_UNSELECTED}`}
             >
-              <span
-                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${MODAL_STROKE} ${
-                  organize === "file" ? "bg-page" : "bg-transparent"
-                }`}
-                aria-hidden
-              >
-                {organize === "file" ? (
-                  <span className="h-2 w-2 rounded-full bg-ink/70 dark:bg-page" />
-                ) : null}
-              </span>
+              <SaveAsRadioIndicator selected={organize === "file"} />
               <span className="min-w-0 flex-1 text-[13px] leading-snug text-ink/88">
                 <span className="font-medium text-ink/92">File</span>
                 <span className="text-muted/62">
                   {" "}
-                  – /{destLabel} / {previewLeaf}
+                  – /{destLabel} / {filePreview.leaf}
                 </span>
               </span>
             </button>
@@ -180,25 +213,31 @@ export function SaveAsModal({
               aria-checked={organize === "folder"}
               disabled={isSubmitting}
               onClick={() => setOrganize("folder")}
-              className={`${RADIO_CARD_BASE} ${organize === "folder" ? RADIO_CARD_SELECTED : RADIO_CARD_UNSELECTED}`}
+              className={`${RADIO_CARD_BASE} ${
+                organize === "folder" ? `flex-col ${RADIO_CARD_SELECTED}` : `${RADIO_CARD_ROW} ${RADIO_CARD_UNSELECTED}`
+              }`}
             >
-              <span
-                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${MODAL_STROKE} ${
-                  organize === "folder" ? "bg-page" : "bg-transparent"
-                }`}
-                aria-hidden
-              >
-                {organize === "folder" ? (
-                  <span className="h-2 w-2 rounded-full bg-ink/70 dark:bg-page" />
-                ) : null}
-              </span>
-              <span className="min-w-0 flex-1 text-[13px] leading-snug text-ink/88">
-                <span className="font-medium text-ink/92">Folder</span>
-                <span className="text-muted/62">
-                  {" "}
-                  – /{destLabel} / {previewBase} / {previewLeaf}
+              <div className={`flex w-full min-w-0 ${RADIO_CARD_ROW}`}>
+                <SaveAsRadioIndicator selected={organize === "folder"} />
+                <span className="min-w-0 flex-1 text-[13px] leading-snug text-ink/88">
+                  <span className="font-medium text-ink/92">Folder</span>
+                  <span className="text-muted/62">
+                    {" "}
+                    – /{destLabel} / {folderPreview.folderBase}
+                    {organize === "folder" ? " ..." : ""}
+                  </span>
                 </span>
-              </span>
+              </div>
+              {organize === "folder" ? (
+                <div className="mt-3.5 w-full min-w-0 pl-7">
+                  <SaveAsFolderPreview
+                    inline
+                    folderBase={folderPreview.folderBase}
+                    leafFileName={folderPreview.leaf}
+                    context={folderPreviewContext}
+                  />
+                </div>
+              ) : null}
             </button>
           </div>
         </div>

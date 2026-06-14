@@ -29,7 +29,6 @@ import {
   addTweetToCollectAsCraft,
   type AddTweetToCollectResult,
 } from "../features/collect/addTweetToCollect";
-import { collectInspirationExamplesForPlatform } from "../features/collect/collectFormatInspiration";
 import {
   loadPersistedCollectItems,
   savePersistedCollectItems,
@@ -46,25 +45,33 @@ import { documentTextForStats, ingestTextFileContent } from "../features/editor/
 import { documentPreviewBlocksFromStored } from "../features/format/documentPreviewBlocks";
 import { formatDocumentKey } from "../features/format/formatDocumentKey";
 import {
-  tweetItemsFromGeneration,
+  tweetItemsFromCollection,
   type GeneratedTwitterCollection,
 } from "../features/format/formatGeneratedOutputs";
-import { estimateFormatOutputCount } from "../features/format/formatOutputEstimation";
 import {
   loadPersistedTwitterFormats,
   savePersistedTwitterFormats,
   tweetsToGeneratedCollection,
 } from "../features/format/formatOutputsPersistence";
-import { requestTwitterFormatGeneration } from "../features/format/generation/twitterGeneration";
+import { requestFormatGeneration } from "../features/format/generation/generateFormatOutputs";
+import type { FormatGenerationOrchestratorResult } from "../features/format/generation/orchestratorTypes";
 import {
-  defaultFormatPlatformAmounts,
-  defaultFormatPlatformSelection,
-  type FormatPlatformAmounts,
-  type FormatPlatformSelection,
-} from "../features/format/formatPlatforms";
+  formatOrchestratorSummary,
+  tweetsNotesCollectionFromOrchestrator,
+} from "../features/format/generation/orchestratorResults";
+import {
+  defaultFormatCategoryAmounts,
+  defaultFormatCategorySelection,
+  hasSelectedFormatCategories,
+  normalizeFormatCategoryAmounts,
+  normalizeFormatCategorySelection,
+  type FormatCategoryAmounts,
+  type FormatCategorySelection,
+} from "../features/format/formatCategories";
 import type { TweetItem } from "../features/format/tweetCollection";
 import { setFileMenuHandlers } from "../features/menu/fileMenuBridge";
 import { setupNativeAppMenu } from "../features/menu/setupNativeAppMenu";
+import { visuallyDeactivateEditor } from "../features/editor/editorCanvasFocus";
 import { runEditorFormat, type LinkFormatOptions } from "../features/editor/editorFormatActions";
 import { calculateEditorStats } from "../features/editor/stats";
 import { pickAndImportWorkspaceImage } from "../features/editor/imageAssets";
@@ -99,18 +106,26 @@ import {
   renameDocumentNotesSidecar,
   saveDocumentNotes,
 } from "../features/workspace/documentNotes";
+import { countSpellingWords } from "../features/proofread/mechanics/spellingNormalize";
 import { appendTextToDocumentNotes } from "../features/workspace/appendDocumentNotes";
 import type { FileNode, WorkspaceDocument } from "../features/workspace/types";
 import { nextActiveTabIdAfterClose, toPageTabs } from "../features/tabs/pageTabs";
 import {
   defaultPdfFileName,
   defaultSaveFileName,
+  documentTitleBaseFromSaveAsFileName,
   fileNameFromPath,
   getDocumentMarkdown,
   isTauriRuntime,
   normalizeMarkdownSavePath,
   normalizePdfSavePath,
+  resolveSaveAsOutputPath,
+  validateSaveAsOutputPath,
 } from "../features/save/saveRuntime";
+import {
+  getProjectStructure,
+  projectSubfolderPathsToCreate,
+} from "../features/save/saveAsFolderPreview";
 import {
   readWritingAssistancePrefs,
   writeWritingAssistancePrefs,
@@ -219,14 +234,10 @@ export function AppShell() {
   const [searchQuery, setSearchQuery] = useState("");
   const [mode, setMode] = useState<SidebarToolsMode>("notes");
   const [activeWorkspaceSection, setActiveWorkspaceSection] = useState<WorkspaceSection>("write");
-  const [formatPlatformSelection, setFormatPlatformSelection] = useState<FormatPlatformSelection>(
-    defaultFormatPlatformSelection,
-  );
-  const [formatPlatformAmounts, setFormatPlatformAmounts] = useState<FormatPlatformAmounts>(
-    defaultFormatPlatformAmounts,
-  );
   const [generatedTwitterCollection, setGeneratedTwitterCollection] =
     useState<GeneratedTwitterCollection | null>(null);
+  const [formatGenerationResults, setFormatGenerationResults] =
+    useState<FormatGenerationOrchestratorResult | null>(null);
   const [isGeneratingFormats, setIsGeneratingFormats] = useState(false);
   const [formatGenerationError, setFormatGenerationError] = useState<string | null>(null);
   const [collectItems, setCollectItems] = useState<CollectItem[]>(() => loadPersistedCollectItems());
@@ -240,6 +251,7 @@ export function AppShell() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [saveAsModalOpen, setSaveAsModalOpen] = useState(false);
+  const [saveAsLiveFileName, setSaveAsLiveFileName] = useState("");
   const [saveAsInitialFileName, setSaveAsInitialFileName] = useState("Untitled.md");
   const [saveAsDestinationPath, setSaveAsDestinationPath] = useState<string | null>(null);
   const [saveAsSubmitting, setSaveAsSubmitting] = useState(false);
@@ -253,6 +265,10 @@ export function AppShell() {
   const [scratchLastSavedContent, setScratchLastSavedContent] = useState("");
   /** Display name for the scratch buffer (no tab row); shown in the document header. */
   const [scratchDocumentTitle, setScratchDocumentTitle] = useState("Untitled");
+  const [scratchFormatCategorySelection, setScratchFormatCategorySelection] =
+    useState<FormatCategorySelection>(defaultFormatCategorySelection);
+  const [scratchFormatCategoryAmounts, setScratchFormatCategoryAmounts] =
+    useState<FormatCategoryAmounts>(defaultFormatCategoryAmounts);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredThemeMode());
   const [systemPrefersDark, setSystemPrefersDark] = useState(() =>
     typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)").matches : false,
@@ -280,9 +296,51 @@ export function AppShell() {
     folderRenameRef.current = folderRename;
   }, [folderRename]);
 
+  const [editorVisuallyInactive, setEditorVisuallyInactive] = useState(false);
+  const editorFocusSuppressedRef = useRef(false);
+  const editorFocusBeforeSaveAsRef = useRef<boolean | null>(null);
+
+  const setEditorInactive = useCallback((inactive: boolean) => {
+    editorFocusSuppressedRef.current = inactive;
+    setEditorVisuallyInactive(inactive);
+  }, []);
+
   const handleEditorReady = useCallback((ed: Editor | null) => {
     setTiptapEditor(ed);
   }, []);
+
+  const handleEditorUserActivated = useCallback(() => {
+    setEditorInactive(false);
+  }, [setEditorInactive]);
+
+  const handleWorkspaceSectionChange = useCallback(
+    (section: WorkspaceSection) => {
+      if (section !== "write") {
+        setEditorInactive(true);
+        visuallyDeactivateEditor(tiptapEditor);
+      }
+      setActiveWorkspaceSection(section);
+    },
+    [setEditorInactive, tiptapEditor],
+  );
+
+  useEffect(() => {
+    if (activeWorkspaceSection !== "write") return;
+    if (!editorFocusSuppressedRef.current) return;
+    if (saveAsModalOpen) return;
+
+    const ed = tiptapEditor;
+    if (!ed) return;
+
+    const deactivate = () => visuallyDeactivateEditor(ed);
+    deactivate();
+    const raf = requestAnimationFrame(deactivate);
+    const timer = window.setTimeout(deactivate, 0);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [activeWorkspaceSection, tiptapEditor, saveAsModalOpen]);
 
   const handleSpellcheckPref = useCallback((spellcheck: boolean) => {
     setWritingAssistancePrefs(writeWritingAssistancePrefs({ spellcheck }));
@@ -463,8 +521,10 @@ export function AppShell() {
     return filterFileTree(anchor.children ?? []);
   }, [filteredTree, supportedTree, workspaceBrowsePath]);
 
+  const breadcrumbAnchorPath = workspaceBrowsePath ?? supportedTree?.path ?? null;
+
   useEffect(() => {
-    if (!supportedTree?.path) {
+    if (!breadcrumbAnchorPath) {
       setWorkspaceVolumeLabel(null);
       return;
     }
@@ -476,7 +536,7 @@ export function AppShell() {
     void (async () => {
       try {
         const name = await invoke<string>("get_volume_display_name_for_path", {
-          path: supportedTree.path,
+          path: breadcrumbAnchorPath,
         });
         if (!cancelled) setWorkspaceVolumeLabel(name.trim() || null);
       } catch {
@@ -486,7 +546,7 @@ export function AppShell() {
     return () => {
       cancelled = true;
     };
-  }, [supportedTree?.path]);
+  }, [breadcrumbAnchorPath]);
 
   /** Keep browse/selection paths inside the selected workspace root. */
   useEffect(() => {
@@ -506,7 +566,7 @@ export function AppShell() {
     setBreadcrumbFolderSegments([]);
   }, [workspaceBrowsePath, supportedTree?.path]);
 
-  const breadcrumbVolumeFirst = workspaceVolumeLabel?.trim() || "Files";
+  const breadcrumbVolumeFirst = workspaceVolumeLabel?.trim() || "Local Drive";
   const breadcrumbRootDisplayLabel = supportedTree?.name?.trim() || "Workspace";
 
   const navigateBreadcrumbDisplayIndex = useCallback(
@@ -548,6 +608,62 @@ export function AppShell() {
   const activeDocument = activeTabId ? openDocuments[activeTabId] : null;
   const scratchEditorBody =
     activeDocument?.content ?? (openTabIds.length === 0 ? scratchDraftContent : "");
+
+  const formatCategorySelection = useMemo(() => {
+    if (activeDocument) {
+      return normalizeFormatCategorySelection(
+        activeDocument.formatCategorySelection ?? activeDocument.formatPlatformSelection,
+      );
+    }
+    if (openTabIds.length === 0) {
+      return scratchFormatCategorySelection;
+    }
+    return defaultFormatCategorySelection();
+  }, [activeDocument, openTabIds.length, scratchFormatCategorySelection]);
+
+  const formatCategoryAmounts = useMemo(() => {
+    if (activeDocument) {
+      return normalizeFormatCategoryAmounts(
+        activeDocument.formatCategoryAmounts ?? activeDocument.formatPlatformAmounts,
+      );
+    }
+    if (openTabIds.length === 0) {
+      return scratchFormatCategoryAmounts;
+    }
+    return defaultFormatCategoryAmounts();
+  }, [activeDocument, openTabIds.length, scratchFormatCategoryAmounts]);
+
+  const handleFormatCategorySelectionChange = useCallback(
+    (selection: FormatCategorySelection) => {
+      if (activeTabId && activeDocument) {
+        setOpenDocuments((prev) => ({
+          ...prev,
+          [activeTabId]: { ...prev[activeTabId]!, formatCategorySelection: selection },
+        }));
+        return;
+      }
+      if (openTabIds.length === 0) {
+        setScratchFormatCategorySelection(selection);
+      }
+    },
+    [activeTabId, activeDocument, openTabIds.length],
+  );
+
+  const handleFormatCategoryAmountsChange = useCallback(
+    (amounts: FormatCategoryAmounts) => {
+      if (activeTabId && activeDocument) {
+        setOpenDocuments((prev) => ({
+          ...prev,
+          [activeTabId]: { ...prev[activeTabId]!, formatCategoryAmounts: amounts },
+        }));
+        return;
+      }
+      if (openTabIds.length === 0) {
+        setScratchFormatCategoryAmounts(amounts);
+      }
+    },
+    [activeTabId, activeDocument, openTabIds.length],
+  );
 
   const isDirty = useMemo(() => {
     if (activeTabId && activeDocument) {
@@ -609,8 +725,7 @@ export function AppShell() {
         return;
       }
       const slice = ed.state.doc.textBetween(from, to, "\n", "\0");
-      const m = slice.trim().match(/\b[\w'-]+\b/g);
-      setSelectedWordCount(m ? m.length : 0);
+      setSelectedWordCount(countSpellingWords(slice));
     };
     ed.on("selectionUpdate", syncSelectedWords);
     ed.on("transaction", syncSelectedWords);
@@ -744,7 +859,12 @@ export function AppShell() {
     }
     if (!editorEditable) return;
     const title = activeDocument?.title ?? (openTabIds.length === 0 ? scratchDocumentTitle : "Untitled");
-    setSaveAsInitialFileName(defaultSaveFileName(title));
+    const suggestedFileName = defaultSaveFileName(title);
+    editorFocusBeforeSaveAsRef.current = editorFocusSuppressedRef.current;
+    visuallyDeactivateEditor(tiptapEditor);
+    setEditorInactive(true);
+    setSaveAsInitialFileName(suggestedFileName);
+    setSaveAsLiveFileName(suggestedFileName);
     setSaveAsDestinationPath(workspaceBrowsePath ?? supportedTree?.path ?? null);
     setSaveAsModalOpen(true);
   }, [
@@ -755,7 +875,28 @@ export function AppShell() {
     workspaceBrowsePath,
     supportedTree?.path,
     hasWorkspaceFolder,
+    tiptapEditor,
+    setEditorInactive,
   ]);
+
+  const finishSaveAsModal = useCallback(() => {
+    setSaveAsModalOpen(false);
+    setSaveAsLiveFileName("");
+    const wasSuppressedBeforeOpen = editorFocusBeforeSaveAsRef.current;
+    editorFocusBeforeSaveAsRef.current = null;
+    if (wasSuppressedBeforeOpen === false) {
+      setEditorInactive(false);
+    }
+  }, [setEditorInactive]);
+
+  const handleSaveAsFileNameChange = useCallback((fileName: string) => {
+    setSaveAsLiveFileName(fileName);
+  }, []);
+
+  const closeSaveAsModal = useCallback(() => {
+    if (saveAsSubmitting) return;
+    finishSaveAsModal();
+  }, [saveAsSubmitting, finishSaveAsModal]);
 
   const pickSaveAsDestination = useCallback(async () => {
     if (!workspaceRootPath) {
@@ -782,47 +923,66 @@ export function AppShell() {
 
   const commitSaveAsFromModal = useCallback(
     async ({ fileName, organize }: { fileName: string; organize: SaveAsOrganizeMode }) => {
-      if (!saveAsDestinationPath) {
-        window.alert("Choose a destination folder.");
+      const validationError = validateSaveAsOutputPath(saveAsDestinationPath, fileName);
+      if (validationError) {
+        window.alert(validationError);
         return;
       }
-      if (workspaceRootPath && !isPathUnderWorkspaceRoot(workspaceRootPath, saveAsDestinationPath)) {
+      if (workspaceRootPath && saveAsDestinationPath && !isPathUnderWorkspaceRoot(workspaceRootPath, saveAsDestinationPath)) {
         window.alert("Choose a destination inside your workspace folder.");
         return;
       }
-      const trimmed = fileName.trim();
-      if (!trimmed) {
-        window.alert("Enter a file name.");
+
+      const resolved = resolveSaveAsOutputPath(saveAsDestinationPath!, fileName, organize);
+      if (!resolved) {
+        window.alert("Enter a valid file name.");
         return;
       }
 
-      const normalizedFull = normalizeMarkdownSavePath(joinPath(saveAsDestinationPath, trimmed));
-      const leaf = fileNameFromPath(normalizedFull);
-      const { base } = splitFileBaseAndExtension(leaf);
-      const nameErr = validateFolderName(base);
-      if (nameErr) {
-        window.alert(nameErr);
-        return;
-      }
-
+      const { path: outPath, leaf, folderBase } = resolved;
       const markdown = getDocumentMarkdown(tiptapEditor, activeDocument?.content ?? scratchDraftContent);
+      const folderContext = getProjectStructure({
+        notes: activeDocument?.notes ?? "",
+        editor: tiptapEditor,
+        documentMarkdown: markdown,
+        formatResults: formatGenerationResults,
+        twitterCollection: generatedTwitterCollection,
+      });
       setSaveAsSubmitting(true);
       try {
-        let outPath: string;
-        if (organize === "file") {
-          outPath = normalizedFull;
-        } else {
-          const pkgDir = await invoke<string>("create_unique_directory", {
+        if (organize === "folder") {
+          const pkgDir = await invoke<string>("ensure_directory", {
             parentPath: saveAsDestinationPath,
-            baseName: base,
+            folderName: folderBase,
           });
-          outPath = normalizeMarkdownSavePath(joinPath(pkgDir, leaf));
+
+          for (const relativePath of projectSubfolderPathsToCreate(folderContext)) {
+            let parent = pkgDir;
+            for (const segment of relativePath.split("/")) {
+              parent = await invoke<string>("ensure_directory", {
+                parentPath: parent,
+                folderName: segment,
+              });
+            }
+          }
         }
+
+        const exists = await invoke<boolean>("path_exists", { path: outPath });
+        if (exists) {
+          const ok = await confirm(`"${leaf}" already exists at this location. Replace it?`, {
+            title: "Save As",
+            kind: "warning",
+          });
+          if (!ok) return;
+        }
+
         await invoke("write_text_file", { path: outPath, contents: markdown });
-        await saveDocumentNotes(outPath, activeDocument?.notes ?? "");
+        if (folderContext.hasNotes) {
+          await saveDocumentNotes(outPath, activeDocument?.notes ?? "");
+        }
         finalizeSavedPath(outPath, markdown);
         await reloadWorkspaceTree();
-        setSaveAsModalOpen(false);
+        finishSaveAsModal();
       } catch (e) {
         window.alert(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
@@ -837,12 +997,37 @@ export function AppShell() {
       scratchDraftContent,
       finalizeSavedPath,
       reloadWorkspaceTree,
+      finishSaveAsModal,
+      formatGenerationResults,
+      generatedTwitterCollection,
     ],
   );
 
   const saveAsDestinationDisplay = saveAsDestinationPath
     ? fileNameFromPath(saveAsDestinationPath)
     : "Choose folder…";
+
+  const saveAsFolderPreviewContext = useMemo(
+    () =>
+      getProjectStructure({
+        notes: activeDocument?.notes ?? "",
+        editor: tiptapEditor,
+        documentMarkdown: getDocumentMarkdown(
+          tiptapEditor,
+          activeDocument?.content ?? scratchDraftContent,
+        ),
+        formatResults: formatGenerationResults,
+        twitterCollection: generatedTwitterCollection,
+      }),
+    [
+      activeDocument?.notes,
+      activeDocument?.content,
+      scratchDraftContent,
+      tiptapEditor,
+      formatGenerationResults,
+      generatedTwitterCollection,
+    ],
+  );
 
   const performExportPdf = useCallback(async () => {
     if (!isTauriRuntime()) {
@@ -1008,6 +1193,7 @@ export function AppShell() {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const el = e.target as HTMLElement | null;
+      if (el?.closest('[role="dialog"]')) return;
       if (el?.closest("[data-floating-text-menu]")) return;
       if (el?.closest("input, textarea") && !el.closest("#harvy-editor")) return;
       const k = e.key.toLowerCase();
@@ -1254,13 +1440,14 @@ export function AppShell() {
   const editorTitle =
     activeDocument?.title ??
     (openTabIds.length === 0 ? scratchDocumentTitle : "Untitled");
-  const editorTitleBase = splitFileBaseAndExtension(editorTitle).base || "Untitled";
+  const editorTitleBase = saveAsModalOpen
+    ? documentTitleBaseFromSaveAsFileName(saveAsLiveFileName)
+    : splitFileBaseAndExtension(editorTitle).base || "Untitled";
   const formatDocumentId = activeTabId ?? (openTabIds.length === 0 ? "scratch" : null);
 
   const handleGenerateFormats = useCallback(async () => {
-    // TODO(format): dispatch YouTube, Substack, Instagram, TikTok, LinkedIn via native commands when implemented.
-    if (!formatPlatformSelection.x) {
-      setFormatGenerationError("Select X / Twitter to generate tweets.");
+    if (!hasSelectedFormatCategories(formatCategorySelection)) {
+      setFormatGenerationError("Select at least one format to generate.");
       return;
     }
 
@@ -1272,27 +1459,34 @@ export function AppShell() {
       return;
     }
 
-    const targetCount = estimateFormatOutputCount(
-      stats.words,
-      formatPlatformAmounts.x,
-      "x",
-    );
-
     setIsGeneratingFormats(true);
     setFormatGenerationError(null);
+    setFormatGenerationResults(null);
 
     try {
-      const inspirationExamples = collectInspirationExamplesForPlatform(collectItems, "x");
-
-      const result = await requestTwitterFormatGeneration({
+      const result = await requestFormatGeneration({
         essayTitle: editorTitleBase,
         essayText,
-        targetCount,
+        wordCount: stats.words,
         documentId: formatDocumentId,
-        inspirationExamples,
+        selectedFormats: formatCategorySelection,
+        categoryAmounts: formatCategoryAmounts,
+        collectItems,
       });
-      const collection = tweetItemsFromGeneration(result);
-      setGeneratedTwitterCollection(collection);
+
+      setFormatGenerationResults(result);
+
+      const partialError = formatOrchestratorSummary(result);
+      if (partialError) {
+        setFormatGenerationError(partialError);
+      }
+
+      const tweetsNotesCollection = tweetsNotesCollectionFromOrchestrator(result);
+      if (tweetsNotesCollection) {
+        setGeneratedTwitterCollection(tweetItemsFromCollection(tweetsNotesCollection));
+      } else if (formatCategorySelection.tweets_notes) {
+        setGeneratedTwitterCollection(null);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Format generation failed";
       setFormatGenerationError(message);
@@ -1301,11 +1495,11 @@ export function AppShell() {
     }
   }, [
     collectItems,
-    formatPlatformSelection.x,
+    formatCategorySelection,
+    formatCategoryAmounts,
     tiptapEditor,
     scratchEditorBody,
     stats.words,
-    formatPlatformAmounts.x,
     editorTitleBase,
     formatDocumentId,
   ]);
@@ -1355,7 +1549,7 @@ export function AppShell() {
 
   /** Inline rename for an open file tab, or for the scratch buffer when no tabs are open. */
   const titleRenameEnabled =
-    Boolean(activeTabId && activeDocument) || openTabIds.length === 0;
+    (Boolean(activeTabId && activeDocument) || openTabIds.length === 0) && !saveAsModalOpen;
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -1614,10 +1808,10 @@ export function AppShell() {
       onNotesChange={updateActiveDocumentNotes}
       proofreadIssues={proofreadIssues}
       workspaceSection={activeWorkspaceSection}
-      formatPlatformSelection={formatPlatformSelection}
-      onFormatPlatformSelectionChange={setFormatPlatformSelection}
-      formatPlatformAmounts={formatPlatformAmounts}
-      onFormatPlatformAmountsChange={setFormatPlatformAmounts}
+      formatCategorySelection={formatCategorySelection}
+      onFormatCategorySelectionChange={handleFormatCategorySelectionChange}
+      formatCategoryAmounts={formatCategoryAmounts}
+      onFormatCategoryAmountsChange={handleFormatCategoryAmountsChange}
       isGeneratingFormats={isGeneratingFormats}
       formatGenerationError={formatGenerationError}
       onGenerateFormats={() => void handleGenerateFormats()}
@@ -1700,7 +1894,11 @@ export function AppShell() {
             <FormatGalleryPanel
               documentTitle={editorTitleBase}
               documentPreviewBlocks={formatPreviewBlocks}
-              platformSelection={formatPlatformSelection}
+              categorySelection={formatCategorySelection}
+              categoryAmounts={formatCategoryAmounts}
+              wordCount={stats.words}
+              isGeneratingFormats={isGeneratingFormats}
+              formatGenerationResults={formatGenerationResults}
               generatedTwitterCollection={generatedTwitterCollection}
               onGeneratedTwitterTweetsChange={handleGeneratedTwitterTweetsChange}
               onTweetFavoritedForCollect={handleTweetFavoritedForCollect}
@@ -1738,6 +1936,9 @@ export function AppShell() {
               onChangeText={updateActiveDocumentContent}
               onEditorReady={handleEditorReady}
               onTypingActivity={emitEditorTypingActivity}
+              editorVisuallyInactive={editorVisuallyInactive}
+              editorFocusSuppressedRef={editorFocusSuppressedRef}
+              onEditorUserActivated={handleEditorUserActivated}
             />
             <FloatingTextMenu
               editor={tiptapEditor}
@@ -1786,11 +1987,12 @@ export function AppShell() {
           </div>
           <WorkspaceSectionSwitcher
             activeSection={activeWorkspaceSection}
-            onSectionChange={setActiveWorkspaceSection}
-            className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20 transition-[left] duration-500 ease-in-out"
+            onSectionChange={handleWorkspaceSectionChange}
+            chromeHidden={isTopChromeHidden}
+            className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
             style={{
               left: isWorkspaceSidebarOpen
-                ? WORKSPACE_SIDEBAR_WIDTH_PX
+                ? `${WORKSPACE_SIDEBAR_WIDTH_PX}px`
                 : "var(--harvy-workspace-section-rail-left-collapsed)",
             }}
           />
@@ -1829,8 +2031,9 @@ export function AppShell() {
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
             <WorkspaceSectionSwitcher
               activeSection={activeWorkspaceSection}
-              onSectionChange={setActiveWorkspaceSection}
-              className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20 transition-[left] duration-500 ease-in-out"
+              onSectionChange={handleWorkspaceSectionChange}
+              chromeHidden={isTopChromeHidden}
+              className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
               style={{
                 left: isWorkspaceSidebarOpen
                   ? 0
@@ -1893,16 +2096,15 @@ export function AppShell() {
       />
       <SaveAsModal
         open={saveAsModalOpen}
-        onClose={() => {
-          if (saveAsSubmitting) return;
-          setSaveAsModalOpen(false);
-        }}
+        onClose={closeSaveAsModal}
         initialFileName={saveAsInitialFileName}
         destinationPath={saveAsDestinationPath}
         destinationDisplay={saveAsDestinationDisplay}
         isSubmitting={saveAsSubmitting}
         onPickDestination={pickSaveAsDestination}
         onSave={(payload) => void commitSaveAsFromModal(payload)}
+        onFileNameChange={handleSaveAsFileNameChange}
+        folderPreviewContext={saveAsFolderPreviewContext}
       />
       <AboutModal open={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
     </div>

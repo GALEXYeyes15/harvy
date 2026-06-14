@@ -1,151 +1,136 @@
-import type { GeneratedTwitterCollection } from "./formatGeneratedOutputs";
-import type { FormatPlatformId, FormatPlatformSelection } from "./formatPlatforms";
-
-/** Minimum items in a category before it collapses into one collection card. */
-export const FORMAT_COLLECTION_THRESHOLD = 5;
-
-export type FormatOutputItem = {
-  id: string;
-  title: string;
-  subtitle?: string;
-};
-
-export type FormatCategoryGroup = {
-  category: string;
-  platform: FormatPlatformId;
-  items: FormatOutputItem[];
-};
+import type { FormatGenerationOrchestratorResult } from "./generation/orchestratorTypes";
+import { isFormatCategorySuccess } from "./generation/orchestratorResults";
+import { estimateFormatOutputCount } from "./formatOutputEstimation";
+import {
+  FORMAT_CATEGORIES,
+  type FormatCategoryAmounts,
+  type FormatCategoryId,
+  type FormatCategorySelection,
+} from "./formatCategories";
 
 export type FormatGalleryCard =
   | {
-      kind: "individual";
-      id: string;
-      platform: FormatPlatformId;
-      category: string;
-      title: string;
-      subtitle?: string;
-    }
-  | {
       kind: "collection";
       id: string;
-      platform: FormatPlatformId;
+      categoryId: FormatCategoryId;
       category: string;
       title: string;
       count: number;
+      loading?: boolean;
+      error?: string;
+    }
+  | {
+      kind: "individual";
+      id: string;
+      categoryId: FormatCategoryId;
+      category: string;
+      title: string;
+      index: number;
+      content?: string;
+      loading?: boolean;
+      error?: string;
     };
 
-/** Placeholder outputs — no generation yet. */
-export const PLACEHOLDER_FORMAT_GROUPS: FormatCategoryGroup[] = [
-  {
-    category: "Tweets",
-    platform: "x",
-    items: Array.from({ length: 50 }, (_, index) => ({
-      id: `tweet-${index + 1}`,
-      title: `Tweet ${index + 1}`,
-      subtitle: "Social post",
-    })),
-  },
-  {
-    category: "YouTube scripts",
-    platform: "youtube",
-    items: [
-      { id: "yt-1", title: "Opening hook", subtitle: "YouTube script" },
-      { id: "yt-2", title: "Product walkthrough", subtitle: "YouTube script" },
-      { id: "yt-3", title: "Outro CTA", subtitle: "YouTube script" },
-    ],
-  },
-  {
-    category: "Newsletter",
-    platform: "substack",
-    items: [
-      { id: "nl-1", title: "Weekly digest", subtitle: "Newsletter" },
-      { id: "nl-2", title: "Launch announcement", subtitle: "Newsletter" },
-    ],
-  },
-  {
-    category: "Instagram posts",
-    platform: "instagram",
-    items: [
-      { id: "ig-1", title: "Carousel hook", subtitle: "Instagram post" },
-      { id: "ig-2", title: "Story caption", subtitle: "Instagram post" },
-      { id: "ig-3", title: "Reel script", subtitle: "Instagram post" },
-    ],
-  },
-  {
-    category: "LinkedIn posts",
-    platform: "linkedin",
-    items: [
-      { id: "li-1", title: "Founder story", subtitle: "LinkedIn post" },
-      { id: "li-2", title: "Product update", subtitle: "LinkedIn post" },
-      { id: "li-3", title: "Hiring note", subtitle: "LinkedIn post" },
-      { id: "li-4", title: "Customer win", subtitle: "LinkedIn post" },
-    ],
-  },
-  {
-    category: "Short form scripts",
-    platform: "tiktok",
-    items: [
-      { id: "sf-1", title: "Hook + payoff", subtitle: "Short-form script" },
-      { id: "sf-2", title: "Product demo", subtitle: "Short-form script" },
-      { id: "sf-3", title: "Behind the scenes", subtitle: "Short-form script" },
-    ],
-  },
-];
+export const CATEGORY_WORKSPACE_CARD_TITLE: Record<FormatCategoryId, string> = {
+  tweets_notes: "Tweets / Notes",
+  short_form_outline: "Short Form Outline",
+  long_form_outline: "Long Form Outline",
+  newsletter: "Newsletter",
+  podcast_notes: "Podcast Notes",
+};
 
-/** Categories with 5+ items become one collection card; fewer render as individual cards. */
-export function buildFormatGalleryCards(groups: FormatCategoryGroup[]): FormatGalleryCard[] {
+const CATEGORY_GALLERY_LABEL: Record<FormatCategoryId, string> = {
+  tweets_notes: "Tweets / Notes",
+  short_form_outline: "Short Form Outline",
+  long_form_outline: "Long Form Outline",
+  newsletter: "Newsletter",
+  podcast_notes: "Podcast Notes",
+};
+
+export type BuildFormatWorkspaceCardsInput = {
+  selection: FormatCategorySelection;
+  categoryAmounts: FormatCategoryAmounts;
+  wordCount: number;
+  isGenerating: boolean;
+  orchestratorResults: FormatGenerationOrchestratorResult | null;
+  generatedTweetsNotesCount: number | null;
+};
+
+function categoryOutputCount(
+  categoryId: FormatCategoryId,
+  wordCount: number,
+  categoryAmounts: FormatCategoryAmounts,
+): number {
+  return estimateFormatOutputCount(wordCount, categoryAmounts[categoryId], categoryId);
+}
+
+function categoryJobError(
+  categoryId: FormatCategoryId,
+  orchestratorResults: FormatGenerationOrchestratorResult | null,
+): string | undefined {
+  const result = orchestratorResults?.[categoryId];
+  if (result?.status === "error") return result.error;
+  return undefined;
+}
+
+function categoryOutputs(
+  categoryId: FormatCategoryId,
+  orchestratorResults: FormatGenerationOrchestratorResult | null,
+): string[] {
+  const result = orchestratorResults?.[categoryId];
+  if (!isFormatCategorySuccess(result)) return [];
+  return result.outputs.map((output) => output.content);
+}
+
+/** Build gallery cards from selected categories and amount sliders. */
+export function buildFormatWorkspaceCards(input: BuildFormatWorkspaceCardsInput): FormatGalleryCard[] {
   const cards: FormatGalleryCard[] = [];
 
-  for (const group of groups) {
-    if (group.items.length >= FORMAT_COLLECTION_THRESHOLD) {
+  for (const { id: categoryId } of FORMAT_CATEGORIES) {
+    if (!input.selection[categoryId]) continue;
+
+    const category = CATEGORY_GALLERY_LABEL[categoryId];
+    const title = CATEGORY_WORKSPACE_CARD_TITLE[categoryId];
+    const outputCount = categoryOutputCount(categoryId, input.wordCount, input.categoryAmounts);
+    const loading = input.isGenerating;
+    const error = loading ? undefined : categoryJobError(categoryId, input.orchestratorResults);
+    const outputs = categoryOutputs(categoryId, input.orchestratorResults);
+
+    if (categoryId === "tweets_notes") {
+      const count =
+        input.generatedTweetsNotesCount ??
+        (outputs.length > 0 ? outputs.length : outputCount > 0 ? outputCount : 1);
+
       cards.push({
         kind: "collection",
-        id: `collection-${group.category}`,
-        platform: group.platform,
-        category: group.category,
-        title: group.category,
-        count: group.items.length,
+        id: "collection-tweets-notes",
+        categoryId: "tweets_notes",
+        category,
+        title,
+        count,
+        loading,
+        error,
       });
       continue;
     }
 
-    for (const item of group.items) {
+    const cardCount = Math.max(outputCount, 1);
+    for (let index = 0; index < cardCount; index += 1) {
       cards.push({
         kind: "individual",
-        id: item.id,
-        platform: group.platform,
-        category: group.category,
-        title: item.title,
-        subtitle: item.subtitle,
+        id: `${categoryId}-${index + 1}`,
+        categoryId,
+        category,
+        title,
+        index: index + 1,
+        content: outputs[index],
+        loading,
+        error: index === 0 ? error : undefined,
       });
     }
   }
 
   return cards;
-}
-
-export function applyGeneratedTwitterCollection(
-  cards: FormatGalleryCard[],
-  generated: GeneratedTwitterCollection | null,
-): FormatGalleryCard[] {
-  if (!generated) return cards;
-  return cards.map((card) => {
-    if (card.kind === "collection" && card.platform === "x") {
-      return {
-        ...card,
-        title: "Tweets",
-        count: generated.tweets.length,
-      };
-    }
-    return card;
-  });
-}
-
-export function filterFormatGalleryCards(
-  cards: FormatGalleryCard[],
-  selection: FormatPlatformSelection,
-): FormatGalleryCard[] {
-  return cards.filter((card) => selection[card.platform]);
 }
 
 export function formatGalleryCardLabel(card: FormatGalleryCard): string {
@@ -155,23 +140,21 @@ export function formatGalleryCardLabel(card: FormatGalleryCard): string {
   return card.title;
 }
 
-/** Width:height aspect ratio per content type (featured card excluded). */
 export type FormatCardAspect = "16:9" | "3:4" | "9:16" | "8.5:11" | "1:1";
 
 export function formatGalleryCardAspect(card: FormatGalleryCard): FormatCardAspect {
   if (card.kind === "collection") return "1:1";
 
-  switch (card.platform) {
-    case "youtube":
+  switch (card.categoryId) {
+    case "long_form_outline":
       return "16:9";
-    case "linkedin":
-    case "instagram":
-      return "3:4";
-    case "tiktok":
-      return "9:16";
-    case "substack":
+    case "newsletter":
       return "8.5:11";
-    case "x":
+    case "podcast_notes":
+      return "3:4";
+    case "short_form_outline":
+      return "9:16";
+    case "tweets_notes":
     default:
       return "3:4";
   }

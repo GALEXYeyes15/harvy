@@ -55,7 +55,9 @@ export function CenteredOverlayModal({
   useEffect(() => {
     if (!open) return;
 
-    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    if (previouslyFocusedRef.current === null) {
+      previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    }
     document.body.style.overflow = "hidden";
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -97,9 +99,17 @@ export function CenteredOverlayModal({
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = "";
-      previouslyFocusedRef.current?.focus?.();
     };
   }, [open, handleClose, autoFocusCloseButton, showHeaderClose]);
+
+  useEffect(() => {
+    if (open) return;
+    const previouslyFocused = previouslyFocusedRef.current;
+    previouslyFocusedRef.current = null;
+    if (previouslyFocused && document.contains(previouslyFocused)) {
+      previouslyFocused.focus();
+    }
+  }, [open]);
 
   if (!open) return null;
 

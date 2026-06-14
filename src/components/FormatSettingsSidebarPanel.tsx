@@ -1,20 +1,24 @@
-import { Check, Zap } from "lucide-react";
+import { Check, ChevronDown, Zap } from "lucide-react";
+import { useState } from "react";
 import { estimateFormatOutputCount } from "../features/format/formatOutputEstimation";
 import {
-  FORMAT_PLATFORMS,
-  type FormatPlatformAmounts,
-  type FormatPlatformId,
-  type FormatPlatformSelection,
-} from "../features/format/formatPlatforms";
+  allFormatCategoriesSelected,
+  areAllFormatCategoriesSelected,
+  defaultFormatCategorySelection,
+  FORMAT_CATEGORIES,
+  type FormatCategoryAmounts,
+  type FormatCategoryId,
+  type FormatCategorySelection,
+} from "../features/format/formatCategories";
+import { FormatCategoryIcon } from "./FormatCategoryIcon";
 import { FormatPlatformAmountSlider } from "./FormatPlatformAmountSlider";
-import { FormatPlatformIcon } from "./FormatPlatformIcon";
 
-function PlatformCheckToggle({ selected }: { selected: boolean }) {
+function CategoryCheckToggle({ selected }: { selected: boolean }) {
   return (
     <span
       aria-hidden
-      className={`flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-sm transition-colors duration-150 ${
-        selected ? "bg-[#2fbf71]" : "bg-white/[0.08]"
+      className={`harvy-checkbox flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-sm ${
+        selected ? "harvy-checkbox--checked" : ""
       }`}
     >
       {selected ? <Check size={14} strokeWidth={2.75} className="text-white" /> : null}
@@ -22,12 +26,41 @@ function PlatformCheckToggle({ selected }: { selected: boolean }) {
   );
 }
 
+function CategorySettingsDropdown({
+  expanded,
+  categoryLabel,
+  onToggle,
+}: {
+  expanded: boolean;
+  categoryLabel: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={`${expanded ? "Collapse" : "Expand"} ${categoryLabel} settings`}
+      aria-expanded={expanded}
+      onClick={onToggle}
+      className="harvy-format-platform-dropdown"
+    >
+      <ChevronDown
+        size={12}
+        strokeWidth={2}
+        aria-hidden
+        className={`shrink-0 transition-transform duration-200 ease-out ${
+          expanded ? "rotate-180" : ""
+        }`}
+      />
+    </button>
+  );
+}
+
 type FormatSettingsSidebarPanelProps = {
   essayWordCount: number;
-  platformSelection: FormatPlatformSelection;
-  onPlatformSelectionChange: (selection: FormatPlatformSelection) => void;
-  platformAmounts: FormatPlatformAmounts;
-  onPlatformAmountsChange: (amounts: FormatPlatformAmounts) => void;
+  categorySelection: FormatCategorySelection;
+  onCategorySelectionChange: (selection: FormatCategorySelection) => void;
+  categoryAmounts: FormatCategoryAmounts;
+  onCategoryAmountsChange: (amounts: FormatCategoryAmounts) => void;
   isGeneratingFormats: boolean;
   formatGenerationError: string | null;
   onGenerateFormats: () => void;
@@ -35,20 +68,41 @@ type FormatSettingsSidebarPanelProps = {
 
 export function FormatSettingsSidebarPanel({
   essayWordCount,
-  platformSelection,
-  onPlatformSelectionChange,
-  platformAmounts,
-  onPlatformAmountsChange,
+  categorySelection,
+  onCategorySelectionChange,
+  categoryAmounts,
+  onCategoryAmountsChange,
   isGeneratingFormats,
   formatGenerationError,
   onGenerateFormats,
 }: FormatSettingsSidebarPanelProps) {
-  const togglePlatform = (id: FormatPlatformId) => {
-    onPlatformSelectionChange({ ...platformSelection, [id]: !platformSelection[id] });
+  const [expandedCategoryId, setExpandedCategoryId] = useState<FormatCategoryId | null>(null);
+
+  const toggleCategory = (id: FormatCategoryId) => {
+    const willEnable = !categorySelection[id];
+    onCategorySelectionChange({ ...categorySelection, [id]: willEnable });
+    if (!willEnable) {
+      setExpandedCategoryId((current) => (current === id ? null : current));
+    }
   };
 
-  const setPlatformAmount = (id: FormatPlatformId, amount: number) => {
-    onPlatformAmountsChange({ ...platformAmounts, [id]: amount });
+  const toggleCategoryExpanded = (id: FormatCategoryId) => {
+    setExpandedCategoryId((current) => (current === id ? null : id));
+  };
+
+  const setCategoryAmount = (id: FormatCategoryId, amount: number) => {
+    onCategoryAmountsChange({ ...categoryAmounts, [id]: amount });
+  };
+
+  const allSelected = areAllFormatCategoriesSelected(categorySelection);
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      onCategorySelectionChange(defaultFormatCategorySelection());
+      setExpandedCategoryId(null);
+      return;
+    }
+    onCategorySelectionChange(allFormatCategoriesSelected());
   };
 
   return (
@@ -60,47 +114,81 @@ export function FormatSettingsSidebarPanel({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <ul className="mt-8 space-y-0.5 pb-2" role="list">
-        {FORMAT_PLATFORMS.map((platform) => {
-          const selected = platformSelection[platform.id];
+        <div className="mt-8 flex items-center justify-end px-1 pb-1.5">
+          <button
+            type="button"
+            onClick={toggleSelectAll}
+            className="harvy-format-select-all"
+            aria-pressed={allSelected}
+          >
+            {allSelected ? "Deselect All" : "Select All"}
+          </button>
+        </div>
+        <ul className="space-y-0.5 pb-2" role="list">
+        {FORMAT_CATEGORIES.map((category) => {
+          const selected = categorySelection[category.id];
+          const expanded = expandedCategoryId === category.id;
           return (
-            <li key={platform.id}>
-              <button
-                type="button"
-                role="checkbox"
-                aria-checked={selected}
-                aria-expanded={selected}
-                onClick={() => togglePlatform(platform.id)}
-                className="group flex w-full items-center gap-3 rounded-lg px-1 py-2.5 text-left transition-colors hover:bg-white/[0.04]"
-              >
-                <span
-                  className="flex h-6 w-6 shrink-0 items-center justify-center"
-                  style={{ color: platform.brandColor }}
+            <li key={category.id}>
+              <div className="group flex w-full items-center gap-3 rounded-lg px-1 py-2.5 transition-colors hover:bg-white/[0.04]">
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={selected}
+                  onClick={() => toggleCategory(category.id)}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 >
-                  <FormatPlatformIcon platform={platform.id} className="h-[18px] w-[18px]" />
-                </span>
-                <span className="min-w-0 flex-1 text-[14px] font-medium leading-snug text-ink/95 dark:text-white/92">
-                  {platform.label}
-                </span>
-                <PlatformCheckToggle selected={selected} />
-              </button>
-
-              {selected ? (
-                <div className="px-1 pb-3 pl-9 pr-1 pt-0.5">
-                  <p className="mb-1.5 text-[11px] font-medium text-muted/70 dark:text-white/45">
-                    Amount
-                  </p>
-                  <FormatPlatformAmountSlider
-                    value={platformAmounts[platform.id]}
-                    displayValue={estimateFormatOutputCount(
-                      essayWordCount,
-                      platformAmounts[platform.id],
-                      platform.id,
-                    )}
-                    onChange={(amount) => setPlatformAmount(platform.id, amount)}
-                  />
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center text-muted/70 dark:text-white/55">
+                    <FormatCategoryIcon category={category.id} className="h-[18px] w-[18px]" />
+                  </span>
+                  <span className="min-w-0 flex-1 text-[14px] font-medium leading-snug text-ink/95 dark:text-white/92">
+                    {category.label}
+                  </span>
+                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {selected ? (
+                    <CategorySettingsDropdown
+                      expanded={expanded}
+                      categoryLabel={category.label}
+                      onToggle={() => toggleCategoryExpanded(category.id)}
+                    />
+                  ) : null}
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={selected}
+                    aria-label={`${selected ? "Disable" : "Enable"} ${category.label}`}
+                    onClick={() => toggleCategory(category.id)}
+                    className="shrink-0 border-0 bg-transparent p-0"
+                  >
+                    <CategoryCheckToggle selected={selected} />
+                  </button>
                 </div>
-              ) : null}
+              </div>
+
+              <div
+                className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                  selected && expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                }`}
+                aria-hidden={!(selected && expanded)}
+              >
+                <div className="overflow-hidden">
+                  <div className="px-1 pb-3 pl-9 pr-1 pt-0.5">
+                    <p className="mb-1.5 text-[11px] font-medium text-muted/70 dark:text-white/45">
+                      Amount
+                    </p>
+                    <FormatPlatformAmountSlider
+                      value={categoryAmounts[category.id]}
+                      displayValue={estimateFormatOutputCount(
+                        essayWordCount,
+                        categoryAmounts[category.id],
+                        category.id,
+                      )}
+                      onChange={(amount) => setCategoryAmount(category.id, amount)}
+                    />
+                  </div>
+                </div>
+              </div>
             </li>
           );
         })}

@@ -1,3 +1,4 @@
+import { countSpellingWords } from "./spellingNormalize";
 import type { MechanicsRuleHit } from "./types";
 
 const LONG_SENTENCE_WORD_THRESHOLD = 38;
@@ -55,8 +56,7 @@ function splitSentences(text: string): Array<{ text: string; start: number; end:
 }
 
 function countWords(sentence: string): number {
-  const words = sentence.match(/\b[\w']+\b/g);
-  return words?.length ?? 0;
+  return countSpellingWords(sentence);
 }
 
 /** Flag sentences longer than ~35–40 words. */

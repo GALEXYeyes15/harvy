@@ -1,5 +1,5 @@
-import { TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
+import { focusEditorAtClientCoords } from "./editorCanvasFocus";
 import {
   addWordToCustomDictionary,
   ignoreSpellingWordForDocument,
@@ -39,12 +39,7 @@ function resolveMenuAnchor(
 }
 
 function focusViewAtCoords(view: EditorView, clientX: number, clientY: number): void {
-  const hit = view.posAtCoords({ left: clientX, top: clientY });
-  if (hit) {
-    const $pos = view.state.doc.resolve(hit.pos);
-    view.dispatch(view.state.tr.setSelection(TextSelection.near($pos)));
-  }
-  view.focus();
+  focusEditorAtClientCoords(view, clientX, clientY);
 }
 
 function runClipboardCommand(view: EditorView, command: "cut" | "copy" | "paste"): void {
