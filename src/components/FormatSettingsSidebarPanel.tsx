@@ -1,5 +1,5 @@
-import { Check, ChevronDown, Zap } from "lucide-react";
-import { useState } from "react";
+import { Check, ChevronDown, Loader2, Zap } from "lucide-react";
+import { useMemo, useState } from "react";
 import { estimateFormatOutputCount } from "../features/format/formatOutputEstimation";
 import {
   allFormatCategoriesSelected,
@@ -63,8 +63,13 @@ type FormatSettingsSidebarPanelProps = {
   onCategoryAmountsChange: (amounts: FormatCategoryAmounts) => void;
   isGeneratingFormats: boolean;
   formatGenerationError: string | null;
-  onGenerateFormats: () => void;
+  onGenerateFormats: () => void | Promise<void>;
 };
+
+function generateFormatsButtonLabel(isGenerating: boolean, formatCount: number): string {
+  if (!isGenerating) return "Generate Formats";
+  return formatCount === 1 ? "Generating 1 format..." : `Generating ${formatCount} formats...`;
+}
 
 export function FormatSettingsSidebarPanel({
   essayWordCount,
@@ -95,6 +100,11 @@ export function FormatSettingsSidebarPanel({
   };
 
   const allSelected = areAllFormatCategoriesSelected(categorySelection);
+
+  const selectedFormatCount = useMemo(
+    () => FORMAT_CATEGORIES.filter((category) => categorySelection[category.id]).length,
+    [categorySelection],
+  );
 
   const toggleSelectAll = () => {
     if (allSelected) {
@@ -204,11 +214,16 @@ export function FormatSettingsSidebarPanel({
         <button
           type="button"
           className="harvy-format-generate-button flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-semibold tracking-[-0.01em] disabled:cursor-not-allowed disabled:opacity-55"
-          onClick={onGenerateFormats}
+          onClick={() => void onGenerateFormats()}
           disabled={isGeneratingFormats}
+          aria-busy={isGeneratingFormats}
         >
-          <Zap size={15} strokeWidth={2.25} aria-hidden className="shrink-0" />
-          {isGeneratingFormats ? "Generating..." : "Generate Formats"}
+          {isGeneratingFormats ? (
+            <Loader2 size={15} strokeWidth={2.25} aria-hidden className="shrink-0 animate-spin" />
+          ) : (
+            <Zap size={15} strokeWidth={2.25} aria-hidden className="shrink-0" />
+          )}
+          {generateFormatsButtonLabel(isGeneratingFormats, selectedFormatCount)}
         </button>
       </div>
     </div>

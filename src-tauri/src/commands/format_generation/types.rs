@@ -50,6 +50,7 @@ pub type TwitterFormatItem = FormatOutputItem;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FormatCategorySelection {
     pub tweets_notes: bool,
+    pub mid_form_post: bool,
     pub short_form_outline: bool,
     pub long_form_outline: bool,
     pub newsletter: bool,
@@ -59,6 +60,7 @@ pub struct FormatCategorySelection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FormatCategoryAmounts {
     pub tweets_notes: i64,
+    pub mid_form_post: i64,
     pub short_form_outline: i64,
     pub long_form_outline: i64,
     pub newsletter: i64,
@@ -100,6 +102,8 @@ pub enum FormatCategoryJobResult {
 pub struct FormatGenerationOrchestratorResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tweets_notes: Option<FormatCategoryJobResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mid_form_post: Option<FormatCategoryJobResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub short_form_outline: Option<FormatCategoryJobResult>,
     #[serde(skip_serializing_if = "Option::is_none")]

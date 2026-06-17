@@ -10,7 +10,7 @@ export type CollectItem = {
 };
 
 export const COLLECT_FORMAT_OPTIONS = [
-  "Note",
+  "Notes",
   "Article",
   "Tweet",
   "Video",

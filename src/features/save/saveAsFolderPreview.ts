@@ -50,6 +50,7 @@ const EXPORT_CATEGORY_CONFIG: Record<
   Exclude<FormatCategoryId, "tweets_notes">,
   ExportCategoryConfig
 > = {
+  mid_form_post: { folderName: "Mid Form Posts", filePrefix: "Mid Form Post" },
   newsletter: { folderName: "Newsletters", filePrefix: "Newsletter" },
   podcast_notes: { folderName: "Podcasts", filePrefix: "Podcast" },
   short_form_outline: { folderName: "Short Form", filePrefix: "Short Form" },
@@ -57,6 +58,7 @@ const EXPORT_CATEGORY_CONFIG: Record<
 };
 
 const EXPORT_CATEGORY_ORDER: Exclude<FormatCategoryId, "tweets_notes">[] = [
+  "mid_form_post",
   "newsletter",
   "podcast_notes",
   "short_form_outline",

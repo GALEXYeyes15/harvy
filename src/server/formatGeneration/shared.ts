@@ -1,6 +1,7 @@
 import type { FormatCategoryId } from "../../features/format/formatCategories";
 import type { FormatCollectionResult, FormatOutputItem } from "../../features/format/formatOutputTypes";
-import { extractOpenAIOutputText, getOpenAIClient, type OpenAIResponseShape } from "../openaiClient";
+import { runJsonGenerationJob } from "../aiGenerationClient";
+import { parseModelJsonText } from "../parseModelJson";
 
 export const MAX_FORMAT_OUTPUT_COUNT = 100;
 
@@ -8,22 +9,16 @@ export async function runOpenAIFormatCollectionJob(
   systemPrompt: string,
   userPrompt: string,
 ): Promise<string> {
-  const response = await getOpenAIClient().responses.create({
-    model: "gpt-4o",
-    input: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-    text: {
-      format: { type: "json_object" },
-    },
-  });
-
-  const output = extractOpenAIOutputText(response as OpenAIResponseShape);
-  if (!output) {
-    throw new Error("OpenAI returned an empty response");
+  if (import.meta.env.DEV) {
+    console.log("[harvy] ANTHROPIC SYSTEM PROMPT", systemPrompt);
+    console.log("[harvy] ANTHROPIC USER PROMPT", userPrompt);
   }
-  return output;
+  return runJsonGenerationJob(systemPrompt, userPrompt);
+}
+
+/** Parse model text into a JSON value (handles markdown fences and preamble). */
+export function parseFormatCollectionModelJson(raw: string): unknown {
+  return parseModelJsonText(raw, "format_generation");
 }
 
 function readItemContent(row: Record<string, unknown>): string {

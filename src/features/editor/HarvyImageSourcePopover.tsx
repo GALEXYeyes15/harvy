@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { buildUnsplashLoadAttrs, type HarvyImageLoadAttrs } from "./harvyImageAttribution";
 import { MOCK_UNSPLASH_IMAGES } from "./harvyImageMockUnsplash";
 import { searchUnsplashPhotos, type UnsplashImageResult } from "./unsplashSearch";
-import { invokeErrorMessage } from "./unsplashErrors";
+import { formatUnsplashSearchError, logUnsplashSearchFailure } from "./unsplashErrors";
 
 type ImageSourceTab = "upload" | "link" | "unsplash" | "giphy";
 
@@ -133,14 +133,17 @@ export function HarvyImageSourcePopover({
 
     setUnsplashLoading(true);
     setUnsplashError("");
+    setUnsplashResults([]);
     try {
       const results = await searchUnsplashPhotos(trimmed);
       setUnsplashResults(results);
       setUnsplashHasSearched(true);
     } catch (error) {
-      setUnsplashError(invokeErrorMessage(error));
-      setUnsplashHasSearched(true);
+      const message = formatUnsplashSearchError(error);
+      logUnsplashSearchFailure(message);
       setUnsplashResults([]);
+      setUnsplashHasSearched(true);
+      setUnsplashError(message);
     } finally {
       setUnsplashLoading(false);
     }

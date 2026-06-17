@@ -1,4 +1,4 @@
-import { Mail, MessageSquareText, Mic, Smartphone, Video } from "lucide-react";
+import { FileText, Mail, MessageSquareText, Mic, Smartphone, Video } from "lucide-react";
 import type { FormatCategoryId } from "../features/format/formatCategories";
 
 type FormatCategoryIconProps = {
@@ -12,6 +12,8 @@ export function FormatCategoryIcon({ category, className = "h-[18px] w-[18px]" }
   switch (category) {
     case "tweets_notes":
       return <MessageSquareText {...props} />;
+    case "mid_form_post":
+      return <FileText {...props} />;
     case "long_form_outline":
       return <Video {...props} />;
     case "short_form_outline":

@@ -48,7 +48,7 @@ export type SidebarRightProps = {
   onFormatCategoryAmountsChange?: (amounts: FormatCategoryAmounts) => void;
   isGeneratingFormats?: boolean;
   formatGenerationError?: string | null;
-  onGenerateFormats?: () => void;
+  onGenerateFormats?: () => void | Promise<void>;
 };
 
 function SidebarToolsTab({

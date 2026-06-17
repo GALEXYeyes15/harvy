@@ -1,9 +1,9 @@
+/**
+ * @deprecated Use `aiGenerationClient.ts` and `config/aiConfig.ts` instead.
+ * Retained temporarily for reference; no longer used by Harvy generation paths.
+ */
 import OpenAI from "openai";
 
-/**
- * Lazy client: callers set `process.env.OPENAI_API_KEY` from `loadEnv` before each request,
- * so the key must not be read only at module load time.
- */
 let client: OpenAI | null = null;
 
 export function getOpenAIClient(): OpenAI {

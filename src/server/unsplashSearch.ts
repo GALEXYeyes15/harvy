@@ -1,5 +1,3 @@
-import { UNSPLASH_MISSING_KEY_MESSAGE } from "../features/editor/unsplashErrors";
-
 export type UnsplashImageResult = {
   id: string;
   thumbUrl: string;
@@ -63,7 +61,9 @@ export async function searchUnsplashPhotos(query: string): Promise<UnsplashImage
 
   const apiKey = process.env.UNSPLASH_ACCESS_KEY?.trim() ?? "";
   if (!apiKey) {
-    throw new Error(UNSPLASH_MISSING_KEY_MESSAGE);
+    throw new Error(
+      "Missing Unsplash API key. Add UNSPLASH_ACCESS_KEY to .env.local and restart Harvy.",
+    );
   }
 
   const url = new URL("https://api.unsplash.com/search/photos");
@@ -79,18 +79,11 @@ export async function searchUnsplashPhotos(query: string): Promise<UnsplashImage
 
   if (!response.ok) {
     const detail = (await response.text()).trim();
-    let message = `Unsplash request failed (${response.status})`;
-    if (detail) {
-      try {
-        const parsed = JSON.parse(detail) as { errors?: string[] };
-        const first = parsed.errors?.[0]?.trim();
-        if (first) message = `Unsplash request failed (${response.status}): ${first}`;
-        else message = `Unsplash request failed (${response.status}): ${detail}`;
-      } catch {
-        message = `Unsplash request failed (${response.status}): ${detail}`;
-      }
-    }
-    throw new Error(message);
+    throw new Error(
+      detail
+        ? `Unsplash request failed (${response.status}): ${detail}`
+        : `Unsplash request failed (${response.status})`,
+    );
   }
 
   const payload = (await response.json()) as { results?: UnsplashApiPhoto[] };

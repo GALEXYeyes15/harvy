@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import { generateFormatOutputs } from "./src/server/formatGeneration/orchestrator";
 import { runProofread } from "./src/server/openaiProofread";
+import { ANTHROPIC_API_KEY_ENV } from "./src/config/aiConfig";
 import { searchUnsplashPhotos } from "./src/server/unsplashSearch";
 import { UNSPLASH_MISSING_KEY_MESSAGE } from "./src/features/editor/unsplashErrors";
 
@@ -25,7 +26,7 @@ function harvyApiPlugin(env: Record<string, string>): Plugin {
           try {
             const unsplashKey = env.UNSPLASH_ACCESS_KEY?.trim() ?? "";
             if (!unsplashKey) {
-              console.warn("[harvy:unsplash] UNSPLASH_ACCESS_KEY is not set in .env.local");
+              console.warn("[harvy] UNSPLASH_ACCESS_KEY is missing in Vite dev env");
               res.statusCode = 500;
               res.end(UNSPLASH_MISSING_KEY_MESSAGE);
               return;
@@ -55,14 +56,14 @@ function harvyApiPlugin(env: Record<string, string>): Plugin {
           return;
         }
 
-        const apiKey = env.OPENAI_API_KEY ?? "";
+        const apiKey = env[ANTHROPIC_API_KEY_ENV] ?? "";
         const ensureApiKey = () => {
           if (!apiKey) {
             res.statusCode = 500;
-            res.end("OPENAI_API_KEY not configured");
+            res.end(`${ANTHROPIC_API_KEY_ENV} not configured`);
             return false;
           }
-          process.env.OPENAI_API_KEY = apiKey;
+          process.env[ANTHROPIC_API_KEY_ENV] = apiKey;
           return true;
         };
 

@@ -27,6 +27,7 @@ fn estimate_format_output_count(word_count: i64, slider: i64, dense: i64, sparse
 fn content_costs(category: &str) -> (i64, i64) {
     match category {
         "tweets_notes" => (20, 80),
+        "mid_form_post" => (150, 250),
         "short_form_outline" => (50, 200),
         "long_form_outline" => (500, 2000),
         "newsletter" => (1000, 3000),
@@ -45,6 +46,13 @@ fn selected_categories(request: &FormatGenerationRequest) -> Vec<CategoryJobSpec
             amount: amounts.tweets_notes,
             item_prefix: "tweets-notes",
             default_title: "Tweets / Notes — generated",
+        },
+        CategoryJobSpec {
+            id: "mid_form_post",
+            selected: selection.mid_form_post,
+            amount: amounts.mid_form_post,
+            item_prefix: "mid-form-post",
+            default_title: "Mid Form Post — generated",
         },
         CategoryJobSpec {
             id: "short_form_outline",
@@ -91,6 +99,17 @@ fn run_tweets_notes_job(
     }
 }
 
+fn run_mid_form_post_job(
+    essay_text: &str,
+    target_count: i64,
+    examples: &[super::types::FormatInspirationExample],
+) -> FormatCategoryJobResult {
+    match openai::generate_mid_form_post_collection(essay_text, target_count, examples) {
+        Ok(collection) => collection_to_success("mid_form_post", collection),
+        Err(error) => FormatCategoryJobResult::Error { error },
+    }
+}
+
 fn run_category_job(
     category: &str,
     essay_text: &str,
@@ -101,6 +120,9 @@ fn run_category_job(
 ) -> FormatCategoryJobResult {
     if category == "tweets_notes" {
         return run_tweets_notes_job(essay_text, target_count, examples);
+    }
+    if category == "mid_form_post" {
+        return run_mid_form_post_job(essay_text, target_count, examples);
     }
 
     let error = match category {
@@ -166,6 +188,7 @@ fn set_category_result(
 ) {
     match category {
         "tweets_notes" => result.tweets_notes = Some(job_result),
+        "mid_form_post" => result.mid_form_post = Some(job_result),
         "short_form_outline" => result.short_form_outline = Some(job_result),
         "long_form_outline" => result.long_form_outline = Some(job_result),
         "newsletter" => result.newsletter = Some(job_result),
@@ -178,6 +201,9 @@ pub fn generate_format_outputs(
     app: &AppHandle,
     request: FormatGenerationRequest,
 ) -> Result<FormatGenerationOrchestratorResult, String> {
+    // Reload .env files so API keys added/changed while the app is running are picked up.
+    crate::load_env_files();
+
     let trimmed = request.essay_text.trim();
     if trimmed.is_empty() {
         return Err("Essay text is empty".to_string());

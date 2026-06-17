@@ -7,6 +7,7 @@ type CategoryContentCost = {
 
 export const FORMAT_CATEGORY_CONTENT_COSTS: Record<FormatCategoryId, CategoryContentCost> = {
   tweets_notes: { dense: 20, sparse: 80 },
+  mid_form_post: { dense: 150, sparse: 250 },
   short_form_outline: { dense: 50, sparse: 200 },
   long_form_outline: { dense: 500, sparse: 2000 },
   newsletter: { dense: 1000, sparse: 3000 },
@@ -34,6 +35,8 @@ function formatOutputUnit(count: number, category: FormatCategoryId): string {
   switch (category) {
     case "tweets_notes":
       return count === 1 ? "tweet / note" : "tweets / notes";
+    case "mid_form_post":
+      return count === 1 ? "mid form post" : "mid form posts";
     case "short_form_outline":
       return count === 1 ? "short form outline" : "short form outlines";
     case "long_form_outline":

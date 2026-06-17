@@ -29,15 +29,12 @@ struct UnsplashPhoto {
     alt_description: Option<String>,
     #[serde(default)]
     description: Option<String>,
-    #[serde(default)]
     urls: UnsplashUrls,
-    #[serde(default)]
     links: UnsplashLinks,
-    #[serde(default)]
     user: UnsplashUser,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 struct UnsplashUrls {
     #[serde(default)]
     small: Option<String>,
@@ -49,21 +46,19 @@ struct UnsplashUrls {
     full: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 struct UnsplashLinks {
     #[serde(default)]
     html: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 struct UnsplashUser {
-    #[serde(default)]
     name: String,
-    #[serde(default)]
     links: UnsplashUserLinks,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 struct UnsplashUserLinks {
     #[serde(default)]
     html: Option<String>,
@@ -142,13 +137,6 @@ fn search_unsplash_photos_impl(query: &str) -> Result<Vec<UnsplashImageResult>, 
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().unwrap_or_default();
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
-            if let Some(errors) = json.get("errors").and_then(|value| value.as_array()) {
-                if let Some(first) = errors.first().and_then(|value| value.as_str()) {
-                    return Err(format!("Unsplash request failed ({status}): {first}"));
-                }
-            }
-        }
         let detail = body.trim();
         if detail.is_empty() {
             return Err(format!("Unsplash request failed ({status})"));

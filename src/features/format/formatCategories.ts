@@ -1,5 +1,6 @@
 export const FORMAT_CATEGORIES = [
   { id: "tweets_notes", label: "Tweets / Notes" },
+  { id: "mid_form_post", label: "Mid Form Post" },
   { id: "short_form_outline", label: "Short Form Outline" },
   { id: "long_form_outline", label: "Long Form Outline" },
   { id: "newsletter", label: "Newsletter" },
@@ -21,13 +22,14 @@ const LEGACY_PLATFORM_TO_CATEGORY: Record<string, FormatCategoryId> = {
   youtube: "long_form_outline",
   tiktok: "short_form_outline",
   substack: "newsletter",
-  linkedin: "podcast_notes",
-  instagram: "short_form_outline",
+  linkedin: "mid_form_post",
+  instagram: "mid_form_post",
 };
 
 /** Prior category keys (kebab-case) → current snake_case keys. */
 const LEGACY_CATEGORY_TO_CURRENT: Record<string, FormatCategoryId> = {
   "tweets-notes": "tweets_notes",
+  "mid-form-post": "mid_form_post",
   "short-form-video": "short_form_outline",
   "long-form-video": "long_form_outline",
   newsletters: "newsletter",
@@ -37,6 +39,7 @@ const LEGACY_CATEGORY_TO_CURRENT: Record<string, FormatCategoryId> = {
 export function defaultFormatCategorySelection(): FormatCategorySelection {
   return {
     tweets_notes: false,
+    mid_form_post: false,
     short_form_outline: false,
     long_form_outline: false,
     newsletter: false,
@@ -47,6 +50,7 @@ export function defaultFormatCategorySelection(): FormatCategorySelection {
 export function defaultFormatCategoryAmounts(): FormatCategoryAmounts {
   return {
     tweets_notes: FORMAT_CATEGORY_AMOUNT_DEFAULT,
+    mid_form_post: FORMAT_CATEGORY_AMOUNT_DEFAULT,
     short_form_outline: FORMAT_CATEGORY_AMOUNT_DEFAULT,
     long_form_outline: FORMAT_CATEGORY_AMOUNT_DEFAULT,
     newsletter: FORMAT_CATEGORY_AMOUNT_DEFAULT,

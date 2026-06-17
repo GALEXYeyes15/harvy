@@ -4,6 +4,7 @@ import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import type { Editor } from "@tiptap/core";
 import { PanelLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   readStoredThemeMode,
   resolveTheme,
@@ -1459,9 +1460,11 @@ export function AppShell() {
       return;
     }
 
-    setIsGeneratingFormats(true);
-    setFormatGenerationError(null);
-    setFormatGenerationResults(null);
+    flushSync(() => {
+      setIsGeneratingFormats(true);
+      setFormatGenerationError(null);
+      setFormatGenerationResults(null);
+    });
 
     try {
       const result = await requestFormatGeneration({
@@ -1491,7 +1494,9 @@ export function AppShell() {
       const message = error instanceof Error ? error.message : "Format generation failed";
       setFormatGenerationError(message);
     } finally {
-      setIsGeneratingFormats(false);
+      flushSync(() => {
+        setIsGeneratingFormats(false);
+      });
     }
   }, [
     collectItems,
@@ -1814,7 +1819,7 @@ export function AppShell() {
       onFormatCategoryAmountsChange={handleFormatCategoryAmountsChange}
       isGeneratingFormats={isGeneratingFormats}
       formatGenerationError={formatGenerationError}
-      onGenerateFormats={() => void handleGenerateFormats()}
+      onGenerateFormats={handleGenerateFormats}
     />
   );
 

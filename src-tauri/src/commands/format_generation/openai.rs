@@ -1,34 +1,27 @@
 use super::types::{FormatCollection, FormatInspirationExample, FormatOutputItem};
+use crate::ai_config::{
+    ANTHROPIC_API_KEY_ENV, ANTHROPIC_API_VERSION, ANTHROPIC_MESSAGES_URL, DEFAULT_MAX_OUTPUT_TOKENS,
+    DEFAULT_MODEL,
+};
+use crate::model_json::parse_model_json_value;
 use reqwest::blocking::Client;
 use serde::Serialize;
 use serde_json::Value;
 
-const OPENAI_RESPONSES_URL: &str = "https://api.openai.com/v1/responses";
-
 const INSPIRATION_PREAMBLE: &str = "Below are examples the user has saved in Harvy Collect. Use these as inspiration for structure and style only. Do not copy them. Do not reuse their specific claims unless those claims also appear in the essay.";
 
 #[derive(Serialize)]
-struct ResponsesRequest<'a> {
+struct AnthropicRequest<'a> {
     model: &'a str,
-    input: Vec<ResponseInputMessage<'a>>,
-    text: ResponsesTextConfig,
+    max_tokens: u32,
+    system: &'a str,
+    messages: Vec<AnthropicMessage<'a>>,
 }
 
 #[derive(Serialize)]
-struct ResponseInputMessage<'a> {
+struct AnthropicMessage<'a> {
     role: &'a str,
     content: &'a str,
-}
-
-#[derive(Serialize)]
-struct ResponsesTextConfig {
-    format: ResponsesTextFormat,
-}
-
-#[derive(Serialize)]
-struct ResponsesTextFormat {
-    #[serde(rename = "type")]
-    format_type: &'static str,
 }
 
 pub fn generate_tweets_notes_collection(
@@ -51,6 +44,26 @@ pub fn generate_tweets_notes_collection(
     )
 }
 
+pub fn generate_mid_form_post_collection(
+    essay_text: &str,
+    target_count: i64,
+    inspiration_examples: &[FormatInspirationExample],
+) -> Result<FormatCollection, String> {
+    let count = target_count.clamp(1, super::types::MAX_FORMAT_OUTPUT_COUNT);
+    let has_examples = !inspiration_examples.is_empty();
+    let system_prompt = mid_form_post_system_prompt(count, has_examples);
+    let user_prompt = tweets_notes_user_prompt(essay_text, inspiration_examples);
+    generate_category_collection(
+        &system_prompt,
+        &user_prompt,
+        "mid_form_post",
+        &["mid_form_post", "mid-form-post"],
+        count,
+        "mid-form-post",
+        &format!("Mid Form Post — {count} generated"),
+    )
+}
+
 /// @deprecated Use generate_tweets_notes_collection
 pub fn generate_twitter_collection(
     essay_text: &str,
@@ -69,33 +82,32 @@ pub fn generate_category_collection(
     item_prefix: &str,
     default_title: &str,
 ) -> Result<FormatCollection, String> {
-    let api_key = std::env::var("OPENAI_API_KEY")
-        .map_err(|_| "OPENAI_API_KEY is not configured".to_string())?
+    let api_key = std::env::var(ANTHROPIC_API_KEY_ENV)
+        .map_err(|_| format!("{ANTHROPIC_API_KEY_ENV} is not configured"))?
         .trim()
         .to_string();
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "[harvy] generate_category_collection: cwd={:?}, {} present={}, empty={}",
+        std::env::current_dir(),
+        ANTHROPIC_API_KEY_ENV,
+        std::env::var(ANTHROPIC_API_KEY_ENV).is_ok(),
+        api_key.is_empty()
+    );
     if api_key.is_empty() {
-        return Err("OPENAI_API_KEY is not configured".to_string());
+        return Err(format!("{ANTHROPIC_API_KEY_ENV} is not configured"));
     }
 
     let count = target_count.clamp(1, super::types::MAX_FORMAT_OUTPUT_COUNT);
 
-    let body = ResponsesRequest {
-        model: "gpt-4o",
-        input: vec![
-            ResponseInputMessage {
-                role: "system",
-                content: system_prompt,
-            },
-            ResponseInputMessage {
-                role: "user",
-                content: user_prompt,
-            },
-        ],
-        text: ResponsesTextConfig {
-            format: ResponsesTextFormat {
-                format_type: "json_object",
-            },
-        },
+    let body = AnthropicRequest {
+        model: DEFAULT_MODEL,
+        max_tokens: DEFAULT_MAX_OUTPUT_TOKENS,
+        system: system_prompt,
+        messages: vec![AnthropicMessage {
+            role: "user",
+            content: user_prompt,
+        }],
     };
 
     let client = Client::builder()
@@ -104,28 +116,38 @@ pub fn generate_category_collection(
         .map_err(|e| format!("Could not create HTTP client: {}", e))?;
 
     let response = client
-        .post(OPENAI_RESPONSES_URL)
-        .bearer_auth(api_key)
+        .post(ANTHROPIC_MESSAGES_URL)
+        .header("x-api-key", api_key)
+        .header("anthropic-version", ANTHROPIC_API_VERSION)
         .json(&body)
         .send()
-        .map_err(|e| format!("OpenAI request failed: {}", e))?;
+        .map_err(|e| format!("Anthropic request failed: {}", e))?;
 
     let status = response.status();
     let response_text = response
         .text()
-        .map_err(|e| format!("Could not read OpenAI response: {}", e))?;
+        .map_err(|e| format!("Could not read Anthropic response: {}", e))?;
 
     if !status.is_success() {
-        return Err(format!("OpenAI error ({}): {}", status, response_text));
+        return Err(format!("Anthropic error ({}): {}", status, response_text));
+    }
+
+    #[cfg(debug_assertions)]
+    {
+        eprintln!("[harvy] ANTHROPIC SYSTEM PROMPT:\n{system_prompt}");
+        eprintln!("[harvy] ANTHROPIC USER PROMPT:\n{user_prompt}");
+        eprintln!("[harvy] RAW ANTHROPIC ENVELOPE:\n{response_text}");
     }
 
     let payload: Value = serde_json::from_str(&response_text)
-        .map_err(|e| format!("OpenAI returned invalid JSON envelope: {}", e))?;
+        .map_err(|e| format!("Anthropic returned invalid JSON envelope: {}", e))?;
 
-    let output = extract_output_text(&payload).ok_or_else(|| "OpenAI returned an empty response".to_string())?;
+    let output = extract_output_text(&payload).ok_or_else(|| "Anthropic returned an empty response".to_string())?;
 
-    let parsed: Value = serde_json::from_str(&output)
-        .map_err(|_| "OpenAI returned invalid JSON".to_string())?;
+    #[cfg(debug_assertions)]
+    eprintln!("[harvy] RAW ANTHROPIC MODEL TEXT:\n{output}");
+
+    let parsed = parse_model_json_value(&output, "format_generation")?;
 
     normalize_category_collection(
         parsed,
@@ -154,6 +176,63 @@ pub fn generate_platform_collection(
         target_count,
         item_prefix,
         default_title,
+    )
+}
+
+fn mid_form_post_system_prompt(count: i64, has_inspiration_examples: bool) -> String {
+    let inspiration_rules = if has_inspiration_examples {
+        r#"
+- Collect examples may inform structure only when consistent with the essay's voice. The essay's style always takes priority over Collect examples.
+- Do not directly copy or lightly paraphrase the Collect examples.
+- Do not introduce ideas that appear only in the Collect examples and not in the essay."#
+    } else {
+        ""
+    };
+
+    format!(
+        r#"You compress essays into mid-form posts (150–250 words) suitable for LinkedIn, Instagram captions, Threads, Facebook, and similar platforms — without changing how the author sounds.
+
+Return ONLY valid JSON in this exact shape:
+{{
+  "category": "mid_form_post",
+  "type": "collection",
+  "title": "Mid Form Post — {count} generated",
+  "items": [
+    {{
+      "id": "mid-form-post-1",
+      "title": null,
+      "content": "Mid-form post text here...",
+      "status": "draft",
+      "favorite": false
+    }}
+  ]
+}}
+
+Rules:
+- Generate exactly {count} outputs.
+- Base outputs ONLY on the provided essay. Do not invent unrelated ideas.
+- Each output should focus on a single idea, lesson, story, or insight from the essay.
+- Aim for 150–250 words per output.
+- You are not rewriting the author's voice. You are compressing the author's voice.
+- Create a 150–250 word excerpt that could plausibly have appeared inside the original essay.
+- A reader familiar with the original essay should feel that the same person wrote both pieces.
+- The post should read as a condensed version of the source, not a social-media-optimized rewrite.
+
+VOICE PRESERVATION:
+- Match sentence length patterns from the source (long paragraphs if the source uses them; short sentences if the source uses them).
+- Match punctuation style. Do not introduce em dashes, semicolons, excessive colons, or other punctuation habits absent from the source.
+- Match pacing and rhythm. Do not turn reflective writing into motivational writing.
+- Match tone: analytical stays analytical; story-driven stays story-driven; technical stays technical; personal stays personal.
+- Preserve the author's vocabulary whenever possible.
+- Preserve the author's level of certainty. Do not make claims stronger than the source or add urgency or emotional intensity.
+
+AVOID unless already present in the source:
+- Generic social media patterns ("Here's what I learned", "The lesson is...", "If you've ever...", "This changed everything", "Most people don't realize...", and similar engagement clichés).
+- Hook-heavy openings, motivational phrasing, generic audience callouts, or punchier cadence than the original author.
+- Hashtags unless the essay explicitly requests them.
+- Use ids "mid-form-post-1" through "mid-form-post-{count}".
+- Set title to null and status to "draft" with favorite false for every item.{inspiration_rules}
+- Return JSON only. No markdown fences or explanations."#
     )
 }
 
@@ -229,6 +308,19 @@ fn tweets_notes_user_prompt(essay_text: &str, inspiration_examples: &[FormatInsp
 }
 
 fn extract_output_text(payload: &Value) -> Option<String> {
+    if let Some(content) = payload.get("content").and_then(|v| v.as_array()) {
+        for block in content {
+            let block_type = block.get("type").and_then(|v| v.as_str());
+            if block_type == Some("text") {
+                if let Some(text) = block.get("text").and_then(|v| v.as_str()) {
+                    if !text.trim().is_empty() {
+                        return Some(text.to_string());
+                    }
+                }
+            }
+        }
+    }
+
     if let Some(text) = payload.get("output_text").and_then(|v| v.as_str()) {
         if !text.trim().is_empty() {
             return Some(text.to_string());

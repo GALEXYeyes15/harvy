@@ -1,33 +1,29 @@
 export const UNSPLASH_MISSING_KEY_MESSAGE =
   "Missing Unsplash API key. Add UNSPLASH_ACCESS_KEY to .env.local and restart Harvy.";
 
-/** Tauri invoke rejects with a plain string, not an Error instance. */
-export function invokeErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string" && error.trim()) return error;
+const MISSING_KEY_RE =
+  /UNSPLASH_ACCESS_KEY|not configured|Missing Unsplash API key/i;
+
+export function extractErrorMessage(error: unknown): string {
+  if (typeof error === "string") return error.trim();
+  if (error instanceof Error) return error.message.trim();
   if (error && typeof error === "object") {
-    const maybe = error as { message?: unknown };
-    if (typeof maybe.message === "string" && maybe.message.trim()) {
-      return maybe.message;
-    }
+    const record = error as Record<string, unknown>;
+    if (typeof record.message === "string") return record.message.trim();
+    if (typeof record.error === "string") return record.error.trim();
   }
-  return "Unsplash search failed";
+  const fallback = String(error).trim();
+  return fallback === "[object Object]" ? "" : fallback;
 }
 
-export function formatUnsplashSearchError(message: string): string {
-  const normalized = message.trim();
-  if (!normalized) return "Unsplash search failed";
-  if (
-    normalized.includes("UNSPLASH_ACCESS_KEY is not configured") ||
-    normalized.includes("UNSPLASH_ACCESS_KEY not configured")
-  ) {
-    return UNSPLASH_MISSING_KEY_MESSAGE;
-  }
-  return normalized;
+export function formatUnsplashSearchError(error: unknown): string {
+  const raw = extractErrorMessage(error);
+  if (!raw) return "Unsplash search failed";
+  if (MISSING_KEY_RE.test(raw)) return UNSPLASH_MISSING_KEY_MESSAGE;
+  return raw;
 }
 
-export function logUnsplashDebug(message: string): void {
-  if (import.meta.env.DEV) {
-    console.warn(`[harvy:unsplash] ${message}`);
-  }
+export function logUnsplashSearchFailure(message: string): void {
+  if (!import.meta.env.DEV) return;
+  console.warn("[harvy] Unsplash search failed:", message);
 }

@@ -22,6 +22,8 @@ export function collectFormatsForCategory(category: FormatCategoryId): string[] 
   switch (category) {
     case "tweets_notes":
       return ["Tweet", "Note", "Notes"];
+    case "mid_form_post":
+      return ["LinkedIn", "Instagram", "Post", "Caption", "Threads", "Facebook"];
     case "short_form_outline":
       return ["Short Form", "TikTok", "Reel", "Video"];
     case "long_form_outline":

@@ -36,6 +36,7 @@ function resolveCategory(record: Record<string, unknown>): FormatCategoryId | nu
   if (typeof category === "string") {
     if (TWEETS_NOTES_ALIASES.has(category)) return "tweets_notes";
     if (
+      category === "mid_form_post" ||
       category === "short_form_outline" ||
       category === "long_form_outline" ||
       category === "newsletter" ||

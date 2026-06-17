@@ -1,16 +1,13 @@
-import { extractOpenAIOutputText, getOpenAIClient, type OpenAIResponseShape } from "./openaiClient";
+import { runJsonGenerationJob } from "./aiGenerationClient";
+import { parseModelJsonText } from "./parseModelJson";
 
 export async function runProofread(text: string): Promise<string> {
   if (!text) {
     return JSON.stringify({ issues: [] });
   }
 
-  const response = await getOpenAIClient().responses.create({
-    model: "gpt-4o",
-    input: [
-      {
-        role: "system",
-        content: `
+  const output = await runJsonGenerationJob(
+    `
 You are a writing assistant.
 
 Return your response strictly as a JSON object.
@@ -43,22 +40,13 @@ Rules:
 - Only emit "grammar" for objective grammatical errors (not style)
 - Only emit "suggestion" for clear clarity problems; otherwise omit it
 `,
-      },
-      {
-        role: "user",
-        content: text,
-      },
-    ],
-    text: {
-      format: { type: "json_object" },
-    },
-  });
-
-  const output = extractOpenAIOutputText(response as OpenAIResponseShape);
+    text,
+  );
 
   if (!output) {
     return JSON.stringify({ issues: [] });
   }
 
-  return output;
+  const parsed = parseModelJsonText(output, "proofread");
+  return JSON.stringify(parsed);
 }

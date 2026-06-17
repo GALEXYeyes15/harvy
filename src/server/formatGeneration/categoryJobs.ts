@@ -2,20 +2,40 @@ import type { FormatInspirationExample } from "../../features/collect/collectFor
 import type { FormatCategoryId } from "../../features/format/formatCategories";
 import type { FormatCollectionResult } from "../../features/format/formatOutputTypes";
 import {
+  buildMidFormPostSystemPrompt,
+  buildMidFormPostUserPrompt,
+} from "../../features/format/generation/prompts/midFormPostFormatPrompt";
+import {
   buildTweetsNotesSystemPrompt,
   buildTweetsNotesUserPrompt,
 } from "../../features/format/generation/prompts/tweetsNotesFormatPrompt";
 import {
   MAX_FORMAT_OUTPUT_COUNT,
   normalizeFormatCollectionPayload,
+  parseFormatCollectionModelJson,
   runOpenAIFormatCollectionJob,
 } from "./shared";
 
-const TWEETS_NOTES_JOB = {
-  itemIdPrefix: "tweets-notes",
-  defaultTitle: "Tweets / Notes — {count} generated",
-  buildSystemPrompt: buildTweetsNotesSystemPrompt,
-  buildUserPrompt: buildTweetsNotesUserPrompt,
+type FormatCategoryJobConfig = {
+  itemIdPrefix: string;
+  defaultTitle: string;
+  buildSystemPrompt: (count: number, hasInspirationExamples: boolean) => string;
+  buildUserPrompt: (essayText: string, inspirationExamples: FormatInspirationExample[]) => string;
+};
+
+const IMPLEMENTED_CATEGORY_JOBS: Partial<Record<FormatCategoryId, FormatCategoryJobConfig>> = {
+  tweets_notes: {
+    itemIdPrefix: "tweets-notes",
+    defaultTitle: "Tweets / Notes — {count} generated",
+    buildSystemPrompt: buildTweetsNotesSystemPrompt,
+    buildUserPrompt: buildTweetsNotesUserPrompt,
+  },
+  mid_form_post: {
+    itemIdPrefix: "mid-form-post",
+    defaultTitle: "Mid Form Post — {count} generated",
+    buildSystemPrompt: buildMidFormPostSystemPrompt,
+    buildUserPrompt: buildMidFormPostUserPrompt,
+  },
 };
 
 export async function runFormatCategoryJob(
@@ -29,7 +49,8 @@ export async function runFormatCategoryJob(
     throw new Error("Essay text is empty");
   }
 
-  if (category !== "tweets_notes") {
+  const jobConfig = IMPLEMENTED_CATEGORY_JOBS[category];
+  if (!jobConfig) {
     switch (category) {
       case "short_form_outline":
         // TODO(format): generate_short_form_outline_formats
@@ -52,22 +73,21 @@ export async function runFormatCategoryJob(
   const examples = inspirationExamples.filter((example) => example.preview.trim().length > 0);
 
   const output = await runOpenAIFormatCollectionJob(
-    TWEETS_NOTES_JOB.buildSystemPrompt(count, examples.length > 0),
-    TWEETS_NOTES_JOB.buildUserPrompt(trimmedEssay, examples),
+    jobConfig.buildSystemPrompt(count, examples.length > 0),
+    jobConfig.buildUserPrompt(trimmedEssay, examples),
   );
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(output);
-  } catch {
-    throw new Error("OpenAI returned invalid JSON");
+  if (import.meta.env.DEV) {
+    console.log("RAW ANTHROPIC MODEL TEXT", output);
   }
+
+  const parsed = parseFormatCollectionModelJson(output);
 
   return normalizeFormatCollectionPayload(
     parsed,
-    "tweets_notes",
+    category,
     count,
-    TWEETS_NOTES_JOB.itemIdPrefix,
-    TWEETS_NOTES_JOB.defaultTitle,
+    jobConfig.itemIdPrefix,
+    jobConfig.defaultTitle,
   );
 }

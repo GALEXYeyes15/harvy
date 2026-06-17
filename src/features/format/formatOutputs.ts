@@ -33,6 +33,7 @@ export type FormatGalleryCard =
 
 export const CATEGORY_WORKSPACE_CARD_TITLE: Record<FormatCategoryId, string> = {
   tweets_notes: "Tweets / Notes",
+  mid_form_post: "Mid Form Post",
   short_form_outline: "Short Form Outline",
   long_form_outline: "Long Form Outline",
   newsletter: "Newsletter",
@@ -41,6 +42,7 @@ export const CATEGORY_WORKSPACE_CARD_TITLE: Record<FormatCategoryId, string> = {
 
 const CATEGORY_GALLERY_LABEL: Record<FormatCategoryId, string> = {
   tweets_notes: "Tweets / Notes",
+  mid_form_post: "Mid Form Post",
   short_form_outline: "Short Form Outline",
   long_form_outline: "Long Form Outline",
   newsletter: "Newsletter",
@@ -150,6 +152,8 @@ export function formatGalleryCardAspect(card: FormatGalleryCard): FormatCardAspe
       return "16:9";
     case "newsletter":
       return "8.5:11";
+    case "mid_form_post":
+      return "3:4";
     case "podcast_notes":
       return "3:4";
     case "short_form_outline":

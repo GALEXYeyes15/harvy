@@ -2,7 +2,7 @@
 export const WORKSPACE_SIDEBAR_WIDTH_PX = 260;
 
 /** Collect / Write / Format switcher column width (3.25rem). */
-export const WORKSPACE_SECTION_SWITCHER_WIDTH_PX = 12;
+export const WORKSPACE_SECTION_SWITCHER_WIDTH_PX = 52;
 
 export type WorkspaceSection = "collect" | "write" | "format";
 

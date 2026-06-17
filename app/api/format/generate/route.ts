@@ -1,5 +1,6 @@
 import type { FormatGenerationRequest } from "../../../../src/features/format/generation/orchestratorTypes";
 import { generateFormatOutputs } from "../../../../src/server/formatGeneration/orchestrator";
+import { ANTHROPIC_API_KEY_ENV } from "../../../../src/config/aiConfig";
 
 /**
  * Next.js App Router handler (optional deploy target).
@@ -27,13 +28,13 @@ export async function POST(req: Request) {
     return new Response("Missing format selection or amounts", { status: 400 });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY ?? "";
+  const apiKey = process.env[ANTHROPIC_API_KEY_ENV] ?? "";
   if (!apiKey) {
-    return new Response("OPENAI_API_KEY not configured", { status: 500 });
+    return new Response(`${ANTHROPIC_API_KEY_ENV} not configured`, { status: 500 });
   }
 
   try {
-    process.env.OPENAI_API_KEY = apiKey;
+    process.env[ANTHROPIC_API_KEY_ENV] = apiKey;
     const result = await generateFormatOutputs({
       essayText,
       wordCount,
