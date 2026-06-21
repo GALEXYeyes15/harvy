@@ -1,5 +1,3 @@
-import type { FormatCategoryAmounts, FormatCategorySelection } from "../format/formatCategories";
-
 export type FileNode = {
   name: string;
   path: string;
@@ -19,10 +17,4 @@ export type WorkspaceDocument = {
   /** Sidebar scratchpad notes for this document (persisted under `Notes/` in project folders). */
   notes: string;
   lastSavedNotes: string;
-  formatCategorySelection?: FormatCategorySelection;
-  formatCategoryAmounts?: FormatCategoryAmounts;
-  /** @deprecated Migrated to formatCategorySelection on read. */
-  formatPlatformSelection?: Partial<Record<string, boolean>>;
-  /** @deprecated Migrated to formatCategoryAmounts on read. */
-  formatPlatformAmounts?: Partial<Record<string, number>>;
 };

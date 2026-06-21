@@ -24,7 +24,6 @@
     "lucide-react": "^1.8.0",
     "markdown-it": "^14.1.1",
     "nspell": "^2.1.5",
-    "openai": "^4.104.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "turndown": "^7.2.4",

@@ -1,11 +1,10 @@
-import { Check, Clock, Copy } from "lucide-react";
+import { Clock } from "lucide-react";
 import { SidebarLayoutIcon } from "./SidebarLayoutIcon";
+import { EditorExportMenu } from "./EditorExportMenu";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
 
 /** Idle wait (ms) before starting the 1s reveal animation. */
 const IDLE_BEFORE_REVEAL_MS = 2000;
-/** How long to show the checkmark after a successful copy. */
-const COPY_SUCCESS_MS = 1200;
 
 const ICON_SIZE = 19;
 const ICON_STROKE = 1.5;
@@ -24,6 +23,8 @@ type EditorAmbientControlsProps = {
   onToggleBothSidebars: () => void;
   /** Copy full document to clipboard (rich HTML + plain text when supported). */
   onCopyDocument: () => Promise<boolean>;
+  onSaveAsPdf: () => void | Promise<void>;
+  onPrint: () => void | Promise<void>;
   /** When true, use AppShell chrome visibility instead of local idle/typing reveal timing. */
   syncWithChrome?: boolean;
   /** Shared chrome hidden state from AppShell (top + bottom unified). */
@@ -37,13 +38,13 @@ export function EditorAmbientControls({
   activityHandlerRef,
   onToggleBothSidebars,
   onCopyDocument,
+  onSaveAsPdf,
+  onPrint,
   syncWithChrome,
   chromeHidden,
 }: EditorAmbientControlsProps) {
   const [showControls, setShowControls] = useState(false);
-  const [copySuccess, setCopySuccess] = useState(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearIdleTimer = useCallback(() => {
     if (idleTimerRef.current !== null) {
@@ -78,30 +79,6 @@ export function EditorAmbientControls({
     return () => clearIdleTimer();
   }, [scheduleReveal, clearIdleTimer]);
 
-  useEffect(() => {
-    return () => {
-      if (copyResetTimerRef.current !== null) {
-        clearTimeout(copyResetTimerRef.current);
-        copyResetTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  const handleCopyClick = useCallback(async () => {
-    try {
-      const ok = await onCopyDocument();
-      if (!ok) return;
-      setCopySuccess(true);
-      if (copyResetTimerRef.current !== null) clearTimeout(copyResetTimerRef.current);
-      copyResetTimerRef.current = setTimeout(() => {
-        copyResetTimerRef.current = null;
-        setCopySuccess(false);
-      }, COPY_SUCCESS_MS);
-    } catch {
-      setCopySuccess(false);
-    }
-  }, [onCopyDocument]);
-
   const visibleInSyncedMode = syncWithChrome ? !chromeHidden : showControls;
 
   return (
@@ -129,19 +106,11 @@ export function EditorAmbientControls({
         <button type="button" className={ICON_BTN} aria-label="Focus timer" onClick={() => undefined}>
           <Clock size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden />
         </button>
-        <button
-          type="button"
-          className={`${ICON_BTN} ${copySuccess ? "opacity-100" : ""}`}
-          aria-label={copySuccess ? "Copied" : "Copy document"}
-          title={copySuccess ? "Copied" : "Copy document"}
-          onClick={() => void handleCopyClick()}
-        >
-          {copySuccess ? (
-            <Check size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden />
-          ) : (
-            <Copy size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden />
-          )}
-        </button>
+        <EditorExportMenu
+          onCopyDocument={onCopyDocument}
+          onSaveAsPdf={onSaveAsPdf}
+          onPrint={onPrint}
+        />
       </div>
     </div>
   );

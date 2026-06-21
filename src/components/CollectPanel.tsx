@@ -8,7 +8,6 @@ import {
   type CollectItem,
 } from "../features/collect/collectItems";
 import { CollectItemModal } from "./CollectItemModal";
-import { OutliersView } from "./OutliersView";
 import { WorkspaceSectionMainContent } from "./WorkspaceSectionMainContent";
 
 const ADD_BUTTON =
@@ -16,11 +15,6 @@ const ADD_BUTTON =
 
 const SELECTION_ACTION_BUTTON =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted/55 transition-colors hover:bg-white/[0.06] hover:text-ink dark:hover:text-white/88";
-
-const SUB_VIEW_TAB =
-  "border-0 bg-transparent p-0 text-[1.375rem] font-semibold leading-none tracking-[-0.02em]";
-
-type CollectSubView = "outliers" | "collect";
 
 const CELL_SELECT =
   "w-full min-w-0 cursor-pointer appearance-none border-0 bg-transparent p-0 text-[12px] text-muted/70 shadow-none outline-none ring-0 focus:outline-none focus:ring-0 dark:text-white/50";
@@ -92,43 +86,7 @@ function CollectSelectionActions({
   );
 }
 
-function CollectSubViewTabs({
-  activeView,
-  onViewChange,
-}: {
-  activeView: CollectSubView;
-  onViewChange: (view: CollectSubView) => void;
-}) {
-  return (
-    <div className="flex items-baseline gap-7" role="tablist" aria-label="Collect views">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={activeView === "outliers"}
-        className={`${SUB_VIEW_TAB} text-ink ${
-          activeView === "outliers" ? "opacity-100" : "opacity-40"
-        }`}
-        onClick={() => onViewChange("outliers")}
-      >
-        Outliers
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={activeView === "collect"}
-        className={`${SUB_VIEW_TAB} text-ink ${
-          activeView === "collect" ? "opacity-100" : "opacity-40"
-        }`}
-        onClick={() => onViewChange("collect")}
-      >
-        Collect
-      </button>
-    </div>
-  );
-}
-
 export function CollectPanel({ items, onItemsChange, onAddPreviewToNotes }: CollectPanelProps) {
-  const [activeCollectView, setActiveCollectView] = useState<CollectSubView>("collect");
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
@@ -203,11 +161,12 @@ export function CollectPanel({ items, onItemsChange, onAddPreviewToNotes }: Coll
     <>
       <WorkspaceSectionMainContent>
         <header className="shrink-0">
-          <CollectSubViewTabs activeView={activeCollectView} onViewChange={setActiveCollectView} />
+          <h2 className="text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-ink">
+            Collect
+          </h2>
         </header>
 
-        {activeCollectView === "collect" ? (
-          <div className="harvy-collect-table mt-7">
+        <div className="harvy-collect-table mt-7">
             <table className="w-full border-collapse text-left">
             <thead className="sticky top-0 z-10 bg-stage">
               <tr className="border-b border-line/20 dark:border-white/[0.08]">
@@ -355,9 +314,6 @@ export function CollectPanel({ items, onItemsChange, onAddPreviewToNotes }: Coll
               <Plus size={15} strokeWidth={2} aria-hidden />
             </button>
         </div>
-        ) : (
-          <OutliersView />
-        )}
       </WorkspaceSectionMainContent>
 
       <CollectItemModal

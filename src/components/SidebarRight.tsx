@@ -3,12 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { EditorStats } from "../features/editor/stats";
 import { SIDEBAR_TOOLS_MODES, type SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
 import type { ProofreadIssue } from "../features/proofread/types";
-import type {
-  FormatCategoryAmounts,
-  FormatCategorySelection,
-} from "../features/format/formatCategories";
 import type { WorkspaceSection } from "../features/workspace/workspaceSection";
-import { FormatSettingsSidebarPanel } from "./FormatSettingsSidebarPanel";
 import { NotesSidebarPanel } from "./NotesSidebarPanel";
 
 const PANEL =
@@ -42,13 +37,8 @@ export type SidebarRightProps = {
   onNotesChange: (value: string) => void;
   proofreadIssues?: ProofreadIssue[];
   workspaceSection?: WorkspaceSection;
-  formatCategorySelection?: FormatCategorySelection;
-  onFormatCategorySelectionChange?: (selection: FormatCategorySelection) => void;
-  formatCategoryAmounts?: FormatCategoryAmounts;
-  onFormatCategoryAmountsChange?: (amounts: FormatCategoryAmounts) => void;
-  isGeneratingFormats?: boolean;
-  formatGenerationError?: string | null;
-  onGenerateFormats?: () => void | Promise<void>;
+  proseChecksEnabled?: boolean;
+  mechanicsChecksEnabled?: boolean;
 };
 
 function SidebarToolsTab({
@@ -141,14 +131,25 @@ function SectionLabel({ text }: { text: string }) {
   return <p className="mb-[10px] text-[11px] font-medium uppercase tracking-[0.1em] text-muted/70">{text}</p>;
 }
 
+function StatValue({ enabled, value }: { enabled: boolean; value: ReactNode }) {
+  if (!enabled) {
+    return <span className="text-muted/45">—</span>;
+  }
+  return value;
+}
+
 function EditSidebarView({
   stats,
   selectedWordCount,
   proofreadIssues = [],
+  proseChecksEnabled = true,
+  mechanicsChecksEnabled = true,
 }: {
   stats: EditorStats;
   selectedWordCount: number | null;
   proofreadIssues?: ProofreadIssue[];
+  proseChecksEnabled?: boolean;
+  mechanicsChecksEnabled?: boolean;
 }) {
   const spellings = proofreadIssues.filter((i) => i.type === "spelling").length;
   const grammar = proofreadIssues.filter((i) => i.type === "grammar").length;
@@ -191,15 +192,15 @@ function EditSidebarView({
         <div className={COMPACT_ROWS_GAP}>
           <StatRow
             label={<LabelAccent text="Adverbs / Hedging" colorHex="#8b5cf6" />}
-            value={stats.adverbs}
+            value={<StatValue enabled={proseChecksEnabled} value={stats.adverbs} />}
           />
           <StatRow
             label={<LabelAccent text="Passive Voice" colorHex="#2fbf71" />}
-            value={stats.passiveVoiceSentences}
+            value={<StatValue enabled={proseChecksEnabled} value={stats.passiveVoiceSentences} />}
           />
           <StatRow
             label={<LabelAccent text="Complex Sentences" colorHex="#f08c2e" />}
-            value={stats.complexSentences}
+            value={<StatValue enabled={proseChecksEnabled} value={stats.complexSentences} />}
           />
         </div>
 
@@ -208,11 +209,17 @@ function EditSidebarView({
         <SectionLabel text="Mechanics" />
 
         <div className={COMPACT_ROWS_GAP}>
-          <StatRow label={<ProofreadLabelAccent text="Spellings" type="spelling" />} value={spellings} />
-          <StatRow label={<ProofreadLabelAccent text="Grammar" type="grammar" />} value={grammar} />
+          <StatRow
+            label={<ProofreadLabelAccent text="Spellings" type="spelling" />}
+            value={<StatValue enabled={mechanicsChecksEnabled} value={spellings} />}
+          />
+          <StatRow
+            label={<ProofreadLabelAccent text="Grammar" type="grammar" />}
+            value={<StatValue enabled={mechanicsChecksEnabled} value={grammar} />}
+          />
           <StatRow
             label={<ProofreadLabelAccent text="Suggestions" type="suggestion" />}
-            value={suggestions}
+            value={<StatValue enabled={mechanicsChecksEnabled} value={suggestions} />}
           />
         </div>
       </div>
@@ -229,46 +236,9 @@ export function SidebarRight({
   onNotesChange,
   proofreadIssues = [],
   workspaceSection = "write",
-  formatCategorySelection,
-  onFormatCategorySelectionChange,
-  formatCategoryAmounts,
-  onFormatCategoryAmountsChange,
-  isGeneratingFormats = false,
-  formatGenerationError = null,
-  onGenerateFormats,
+  proseChecksEnabled = true,
+  mechanicsChecksEnabled = true,
 }: SidebarRightProps) {
-  if (workspaceSection === "format") {
-    if (
-      !formatCategorySelection ||
-      !onFormatCategorySelectionChange ||
-      !formatCategoryAmounts ||
-      !onFormatCategoryAmountsChange ||
-      !onGenerateFormats
-    ) {
-      return null;
-    }
-
-    return (
-      <div className={PANEL}>
-        <div
-          id="harvy-tools-panel"
-          className="flex min-h-0 flex-1 flex-col overflow-hidden px-7 pb-8 pt-3"
-        >
-          <FormatSettingsSidebarPanel
-            essayWordCount={stats.words}
-            categorySelection={formatCategorySelection}
-            onCategorySelectionChange={onFormatCategorySelectionChange}
-            categoryAmounts={formatCategoryAmounts}
-            onCategoryAmountsChange={onFormatCategoryAmountsChange}
-            isGeneratingFormats={isGeneratingFormats}
-            formatGenerationError={formatGenerationError}
-            onGenerateFormats={onGenerateFormats}
-          />
-        </div>
-      </div>
-    );
-  }
-
   if (workspaceSection === "collect") {
     return (
       <div className={PANEL}>
@@ -308,6 +278,8 @@ export function SidebarRight({
             stats={stats}
             selectedWordCount={selectedWordCount}
             proofreadIssues={proofreadIssues}
+            proseChecksEnabled={proseChecksEnabled}
+            mechanicsChecksEnabled={mechanicsChecksEnabled}
           />
         )}
       </div>

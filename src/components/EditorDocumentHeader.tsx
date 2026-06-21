@@ -11,6 +11,8 @@ type EditorDocumentHeaderProps = {
   overlayWorkspaceRail?: boolean;
   reserveWorkspaceToggleSlot: boolean;
   readabilityPanelOpen: boolean;
+  /** Hide document title row during distraction-free typing mode. */
+  titleHidden?: boolean;
   /** Hide sidebar toggle chrome during distraction-free typing mode. */
   chromeButtonsHidden?: boolean;
   onToggleReadabilityPanel: () => void;
@@ -46,6 +48,7 @@ export function EditorDocumentHeader({
   overlayWorkspaceRail = true,
   reserveWorkspaceToggleSlot,
   readabilityPanelOpen,
+  titleHidden = false,
   chromeButtonsHidden,
   onToggleReadabilityPanel,
   titleRenameEnabled,
@@ -210,7 +213,9 @@ export function EditorDocumentHeader({
           className={`min-w-0 shrink-0 transition-[width] duration-500 ease-in-out ${titleRowVisibleWidth}`}
         >
           <div
-            className={`relative z-[2] flex w-full min-w-0 flex-row items-center pb-2 pt-1.5 pr-10 ${LEADING_PAD_SYNC} ${chromeLeftPadding} pointer-events-auto`}
+            className={`relative z-[2] flex w-full min-w-0 flex-row items-center pb-2 pt-1.5 pr-10 ${LEADING_PAD_SYNC} ${chromeLeftPadding} pointer-events-auto transition-[opacity,transform] duration-500 ease-in-out ${
+              titleHidden ? "pointer-events-none -translate-y-2 opacity-0" : "translate-y-0 opacity-100"
+            }`}
           >
             <div className={titleRowClass}>
               {isEditingTitle ? (

@@ -1,8 +1,4 @@
-mod ai_config;
 mod commands;
-mod model_json;
-
-use ai_config::ANTHROPIC_API_KEY_ENV;
 
 use std::path::PathBuf;
 
@@ -39,21 +35,6 @@ pub(crate) fn load_env_files() {
         if loaded_paths.is_empty() {
             eprintln!("[harvy] no .env file found (checked project root and parent paths)");
         }
-        match std::env::var(ANTHROPIC_API_KEY_ENV) {
-            Ok(key) if !key.trim().is_empty() => {
-                eprintln!(
-                    "[harvy] {} is set ({} chars)",
-                    ANTHROPIC_API_KEY_ENV,
-                    key.trim().len()
-                );
-            }
-            _ => {
-                eprintln!(
-                    "[harvy] {} is missing — add it to .env.local at the project root and restart Harvy",
-                    ANTHROPIC_API_KEY_ENV
-                );
-            }
-        }
         match std::env::var("UNSPLASH_ACCESS_KEY") {
             Ok(key) if !key.trim().is_empty() => {
                 eprintln!(
@@ -73,24 +54,7 @@ pub(crate) fn load_env_files() {
 #[cfg(test)]
 mod tests {
     use super::load_env_files;
-    use crate::ai_config::ANTHROPIC_API_KEY_ENV;
     use crate::commands::unsplash::search_unsplash_photos;
-
-    #[test]
-    fn anthropic_api_key_loads_from_project_env_local() {
-        load_env_files();
-        let key = std::env::var(ANTHROPIC_API_KEY_ENV).unwrap_or_default();
-        if key.trim().is_empty() {
-            eprintln!(
-                "Skipping anthropic_api_key_loads_from_project_env_local: {ANTHROPIC_API_KEY_ENV} not in .env.local"
-            );
-            return;
-        }
-        assert!(
-            !key.trim().is_empty(),
-            "{ANTHROPIC_API_KEY_ENV} should be non-empty when set in .env.local"
-        );
-    }
 
     #[test]
     fn unsplash_pool_search_returns_results_when_key_configured() {
@@ -128,18 +92,6 @@ pub fn run() {
             commands::read_user_editor_rules,
             commands::ensure_user_editor_rules,
             commands::write_user_editor_rules,
-            commands::format_generation::generate_format_outputs,
-            commands::format_generation::generate_tweets_notes_formats,
-            commands::format_generation::generate_mid_form_post_formats,
-            commands::format_generation::generate_twitter_formats,
-            commands::format_generation::generate_short_form_outline_formats,
-            commands::format_generation::generate_long_form_outline_formats,
-            commands::format_generation::generate_newsletter_formats,
-            commands::format_generation::generate_podcast_notes_formats,
-            commands::format_outputs_store::load_format_collection,
-            commands::format_outputs_store::save_format_collection_command,
-            commands::format_outputs_store::load_twitter_formats,
-            commands::format_outputs_store::save_twitter_formats,
             commands::unsplash::search_unsplash_photos,
         ])
         .run(tauri::generate_context!())

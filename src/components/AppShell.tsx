@@ -4,7 +4,6 @@ import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import type { Editor } from "@tiptap/core";
 import { PanelLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import {
   readStoredThemeMode,
   resolveTheme,
@@ -27,49 +26,22 @@ import { OpenWindowsBar } from "./OpenWindowsBar";
 import { CollectPanel } from "./CollectPanel";
 import type { CollectItem } from "../features/collect/collectItems";
 import {
-  addTweetToCollectAsCraft,
-  type AddTweetToCollectResult,
-} from "../features/collect/addTweetToCollect";
-import {
   loadPersistedCollectItems,
   savePersistedCollectItems,
 } from "../features/collect/collectItemsPersistence";
-import { FormatGalleryPanel } from "./FormatGalleryPanel";
 import { WorkspaceSectionSwitcher } from "./WorkspaceSectionSwitcher";
 import {
   WORKSPACE_SIDEBAR_WIDTH_PX,
+  visibleWorkspaceSections,
   type WorkspaceSection,
 } from "../features/workspace/workspaceSection";
+import {
+  readWorkspaceSettings,
+  writeWorkspaceSettings,
+} from "../features/workspace/workspaceSettings";
 import { SaveAsModal, type SaveAsOrganizeMode } from "./SaveAsModal";
 import type { EditorCommand } from "../features/editor/commands";
 import { documentTextForStats, ingestTextFileContent } from "../features/editor/documentMarkdown";
-import { documentPreviewBlocksFromStored } from "../features/format/documentPreviewBlocks";
-import { formatDocumentKey } from "../features/format/formatDocumentKey";
-import {
-  tweetItemsFromCollection,
-  type GeneratedTwitterCollection,
-} from "../features/format/formatGeneratedOutputs";
-import {
-  loadPersistedTwitterFormats,
-  savePersistedTwitterFormats,
-  tweetsToGeneratedCollection,
-} from "../features/format/formatOutputsPersistence";
-import { requestFormatGeneration } from "../features/format/generation/generateFormatOutputs";
-import type { FormatGenerationOrchestratorResult } from "../features/format/generation/orchestratorTypes";
-import {
-  formatOrchestratorSummary,
-  tweetsNotesCollectionFromOrchestrator,
-} from "../features/format/generation/orchestratorResults";
-import {
-  defaultFormatCategoryAmounts,
-  defaultFormatCategorySelection,
-  hasSelectedFormatCategories,
-  normalizeFormatCategoryAmounts,
-  normalizeFormatCategorySelection,
-  type FormatCategoryAmounts,
-  type FormatCategorySelection,
-} from "../features/format/formatCategories";
-import type { TweetItem } from "../features/format/tweetCollection";
 import { setFileMenuHandlers } from "../features/menu/fileMenuBridge";
 import { setupNativeAppMenu } from "../features/menu/setupNativeAppMenu";
 import { visuallyDeactivateEditor } from "../features/editor/editorCanvasFocus";
@@ -77,6 +49,7 @@ import { runEditorFormat, type LinkFormatOptions } from "../features/editor/edit
 import { calculateEditorStats } from "../features/editor/stats";
 import { pickAndImportWorkspaceImage } from "../features/editor/imageAssets";
 import { copyDocumentToClipboard } from "../features/editor/documentClipboard";
+import { printDocumentFromEditor } from "../features/editor/documentPrint";
 import type { HarvyImageLoadAttrs } from "../features/editor/harvyImageAttribution";
 import {
   insertHarvyImagePlaceholderAtCursor,
@@ -128,11 +101,15 @@ import {
   projectSubfolderPathsToCreate,
 } from "../features/save/saveAsFolderPreview";
 import {
+  readFocusVisibilityPrefs,
+  writeFocusVisibilityPrefs,
+} from "../features/editor/focusVisibilitySettings";
+import {
   readWritingAssistancePrefs,
   writeWritingAssistancePrefs,
 } from "../features/writing-assistance/writingAssistanceSettings";
 import type { SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
-import { setMechanicsUnderlinesVisible } from "../features/proofread/mechanicsUnderlineLayer";
+import { setMechanicsUnderlinesVisible, clearProofreadDecorations } from "../features/proofread/mechanicsUnderlineLayer";
 import {
   grammarDecorationsKey,
   writingAssistanceViewRef,
@@ -235,12 +212,7 @@ export function AppShell() {
   const [searchQuery, setSearchQuery] = useState("");
   const [mode, setMode] = useState<SidebarToolsMode>("notes");
   const [activeWorkspaceSection, setActiveWorkspaceSection] = useState<WorkspaceSection>("write");
-  const [generatedTwitterCollection, setGeneratedTwitterCollection] =
-    useState<GeneratedTwitterCollection | null>(null);
-  const [formatGenerationResults, setFormatGenerationResults] =
-    useState<FormatGenerationOrchestratorResult | null>(null);
-  const [isGeneratingFormats, setIsGeneratingFormats] = useState(false);
-  const [formatGenerationError, setFormatGenerationError] = useState<string | null>(null);
+  const [enableCollect, setEnableCollect] = useState(() => readWorkspaceSettings().enableCollect);
   const [collectItems, setCollectItems] = useState<CollectItem[]>(() => loadPersistedCollectItems());
   const [isWorkspaceSidebarOpen, setIsWorkspaceSidebarOpen] = useState(true);
   /** `null` = browse at the selected workspace root. */
@@ -266,16 +238,13 @@ export function AppShell() {
   const [scratchLastSavedContent, setScratchLastSavedContent] = useState("");
   /** Display name for the scratch buffer (no tab row); shown in the document header. */
   const [scratchDocumentTitle, setScratchDocumentTitle] = useState("Untitled");
-  const [scratchFormatCategorySelection, setScratchFormatCategorySelection] =
-    useState<FormatCategorySelection>(defaultFormatCategorySelection);
-  const [scratchFormatCategoryAmounts, setScratchFormatCategoryAmounts] =
-    useState<FormatCategoryAmounts>(defaultFormatCategoryAmounts);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredThemeMode());
   const [systemPrefersDark, setSystemPrefersDark] = useState(() =>
     typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)").matches : false,
   );
 
   const [writingAssistancePrefs, setWritingAssistancePrefs] = useState(readWritingAssistancePrefs);
+  const [focusVisibilityPrefs, setFocusVisibilityPrefs] = useState(readFocusVisibilityPrefs);
 
   const [tiptapEditor, setTiptapEditor] = useState<Editor | null>(null);
   const [selectedWordCount, setSelectedWordCount] = useState<number | null>(null);
@@ -325,6 +294,27 @@ export function AppShell() {
     [setEditorInactive, tiptapEditor],
   );
 
+  const handleEnableCollectChange = useCallback((enabled: boolean) => {
+    setEnableCollect(enabled);
+    writeWorkspaceSettings({ enableCollect: enabled });
+    if (!enabled) {
+      setActiveWorkspaceSection("write");
+    }
+  }, []);
+
+  const showWorkspaceNavigation = enableCollect;
+
+  const workspaceSections = useMemo(
+    () => visibleWorkspaceSections(enableCollect),
+    [enableCollect],
+  );
+
+  useEffect(() => {
+    if (!enableCollect) {
+      setActiveWorkspaceSection("write");
+    }
+  }, [enableCollect]);
+
   useEffect(() => {
     if (activeWorkspaceSection !== "write") return;
     if (!editorFocusSuppressedRef.current) return;
@@ -343,13 +333,27 @@ export function AppShell() {
     };
   }, [activeWorkspaceSection, tiptapEditor, saveAsModalOpen]);
 
-  const handleSpellcheckPref = useCallback((spellcheck: boolean) => {
-    setWritingAssistancePrefs(writeWritingAssistancePrefs({ spellcheck }));
+  const handleEnableProseChecksChange = useCallback((enableProseChecks: boolean) => {
+    setWritingAssistancePrefs(writeWritingAssistancePrefs({ enableProseChecks }));
   }, []);
 
-  const handleGrammarChecksPref = useCallback((grammarChecks: boolean) => {
-    setWritingAssistancePrefs(writeWritingAssistancePrefs({ grammarChecks }));
+  const handleEnableMechanicsChecksChange = useCallback((enableMechanicsChecks: boolean) => {
+    setWritingAssistancePrefs(writeWritingAssistancePrefs({ enableMechanicsChecks }));
   }, []);
+
+  const handleFocusVisibilityPrefChange = useCallback(
+    (partial: Parameters<typeof writeFocusVisibilityPrefs>[0]) => {
+      setFocusVisibilityPrefs(writeFocusVisibilityPrefs(partial));
+    },
+    [],
+  );
+
+  const hideTopBarWhileTyping =
+    isTopChromeHidden && !focusVisibilityPrefs.keepTopBarVisibleWhileTyping;
+  const hideDocumentTitleWhileTyping =
+    isTopChromeHidden && !focusVisibilityPrefs.keepDocumentTitleVisibleWhileTyping;
+  const hideBottomToolsWhileTyping =
+    isTopChromeHidden && !focusVisibilityPrefs.keepBottomToolsVisibleWhileTyping;
   const openTabIdsRef = useRef(openTabIds);
   const activeTabIdRef = useRef(activeTabId);
   const handleCreateMarkdownFileRef = useRef<() => Promise<void>>(async () => {});
@@ -610,62 +614,6 @@ export function AppShell() {
   const scratchEditorBody =
     activeDocument?.content ?? (openTabIds.length === 0 ? scratchDraftContent : "");
 
-  const formatCategorySelection = useMemo(() => {
-    if (activeDocument) {
-      return normalizeFormatCategorySelection(
-        activeDocument.formatCategorySelection ?? activeDocument.formatPlatformSelection,
-      );
-    }
-    if (openTabIds.length === 0) {
-      return scratchFormatCategorySelection;
-    }
-    return defaultFormatCategorySelection();
-  }, [activeDocument, openTabIds.length, scratchFormatCategorySelection]);
-
-  const formatCategoryAmounts = useMemo(() => {
-    if (activeDocument) {
-      return normalizeFormatCategoryAmounts(
-        activeDocument.formatCategoryAmounts ?? activeDocument.formatPlatformAmounts,
-      );
-    }
-    if (openTabIds.length === 0) {
-      return scratchFormatCategoryAmounts;
-    }
-    return defaultFormatCategoryAmounts();
-  }, [activeDocument, openTabIds.length, scratchFormatCategoryAmounts]);
-
-  const handleFormatCategorySelectionChange = useCallback(
-    (selection: FormatCategorySelection) => {
-      if (activeTabId && activeDocument) {
-        setOpenDocuments((prev) => ({
-          ...prev,
-          [activeTabId]: { ...prev[activeTabId]!, formatCategorySelection: selection },
-        }));
-        return;
-      }
-      if (openTabIds.length === 0) {
-        setScratchFormatCategorySelection(selection);
-      }
-    },
-    [activeTabId, activeDocument, openTabIds.length],
-  );
-
-  const handleFormatCategoryAmountsChange = useCallback(
-    (amounts: FormatCategoryAmounts) => {
-      if (activeTabId && activeDocument) {
-        setOpenDocuments((prev) => ({
-          ...prev,
-          [activeTabId]: { ...prev[activeTabId]!, formatCategoryAmounts: amounts },
-        }));
-        return;
-      }
-      if (openTabIds.length === 0) {
-        setScratchFormatCategoryAmounts(amounts);
-      }
-    },
-    [activeTabId, activeDocument, openTabIds.length],
-  );
-
   const isDirty = useMemo(() => {
     if (activeTabId && activeDocument) {
       return isDocumentDirty(activeDocument);
@@ -691,13 +639,6 @@ export function AppShell() {
       : countSentenceComplexityFromStoredDocument(scratchEditorBody, activeDocument?.sourcePath ?? null);
     return calculateEditorStats(text, sentenceComplexity);
   }, [scratchEditorBody, tiptapEditor, activeDocument?.sourcePath]);
-
-  const formatPreviewBlocks = useMemo(() => {
-    const markdown = getDocumentMarkdown(tiptapEditor, scratchEditorBody);
-    return documentPreviewBlocksFromStored(markdown, {
-      sourcePath: activeDocument?.sourcePath ?? null,
-    });
-  }, [tiptapEditor, scratchEditorBody, activeDocument?.sourcePath]);
 
   useEffect(() => {
     // Initialize persisted rules file early so future edits always target user-owned rules.
@@ -946,8 +887,6 @@ export function AppShell() {
         notes: activeDocument?.notes ?? "",
         editor: tiptapEditor,
         documentMarkdown: markdown,
-        formatResults: formatGenerationResults,
-        twitterCollection: generatedTwitterCollection,
       });
       setSaveAsSubmitting(true);
       try {
@@ -999,8 +938,6 @@ export function AppShell() {
       finalizeSavedPath,
       reloadWorkspaceTree,
       finishSaveAsModal,
-      formatGenerationResults,
-      generatedTwitterCollection,
     ],
   );
 
@@ -1017,17 +954,8 @@ export function AppShell() {
           tiptapEditor,
           activeDocument?.content ?? scratchDraftContent,
         ),
-        formatResults: formatGenerationResults,
-        twitterCollection: generatedTwitterCollection,
       }),
-    [
-      activeDocument?.notes,
-      activeDocument?.content,
-      scratchDraftContent,
-      tiptapEditor,
-      formatGenerationResults,
-      generatedTwitterCollection,
-    ],
+    [activeDocument?.notes, activeDocument?.content, scratchDraftContent, tiptapEditor],
   );
 
   const performExportPdf = useCallback(async () => {
@@ -1444,109 +1372,6 @@ export function AppShell() {
   const editorTitleBase = saveAsModalOpen
     ? documentTitleBaseFromSaveAsFileName(saveAsLiveFileName)
     : splitFileBaseAndExtension(editorTitle).base || "Untitled";
-  const formatDocumentId = activeTabId ?? (openTabIds.length === 0 ? "scratch" : null);
-
-  const handleGenerateFormats = useCallback(async () => {
-    if (!hasSelectedFormatCategories(formatCategorySelection)) {
-      setFormatGenerationError("Select at least one format to generate.");
-      return;
-    }
-
-    const essayText = documentTextForStats(
-      getDocumentMarkdown(tiptapEditor, scratchEditorBody),
-    );
-    if (!essayText.trim()) {
-      setFormatGenerationError("Write an essay before generating formats.");
-      return;
-    }
-
-    flushSync(() => {
-      setIsGeneratingFormats(true);
-      setFormatGenerationError(null);
-      setFormatGenerationResults(null);
-    });
-
-    try {
-      const result = await requestFormatGeneration({
-        essayTitle: editorTitleBase,
-        essayText,
-        wordCount: stats.words,
-        documentId: formatDocumentId,
-        selectedFormats: formatCategorySelection,
-        categoryAmounts: formatCategoryAmounts,
-        collectItems,
-      });
-
-      setFormatGenerationResults(result);
-
-      const partialError = formatOrchestratorSummary(result);
-      if (partialError) {
-        setFormatGenerationError(partialError);
-      }
-
-      const tweetsNotesCollection = tweetsNotesCollectionFromOrchestrator(result);
-      if (tweetsNotesCollection) {
-        setGeneratedTwitterCollection(tweetItemsFromCollection(tweetsNotesCollection));
-      } else if (formatCategorySelection.tweets_notes) {
-        setGeneratedTwitterCollection(null);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Format generation failed";
-      setFormatGenerationError(message);
-    } finally {
-      flushSync(() => {
-        setIsGeneratingFormats(false);
-      });
-    }
-  }, [
-    collectItems,
-    formatCategorySelection,
-    formatCategoryAmounts,
-    tiptapEditor,
-    scratchEditorBody,
-    stats.words,
-    editorTitleBase,
-    formatDocumentId,
-  ]);
-
-  const handleGeneratedTwitterTweetsChange = useCallback(
-    (tweets: TweetItem[]) => {
-      const nextCollection = tweetsToGeneratedCollection(tweets);
-      setGeneratedTwitterCollection(nextCollection);
-      void savePersistedTwitterFormats(formatDocumentId, editorTitleBase, nextCollection);
-    },
-    [formatDocumentId, editorTitleBase],
-  );
-
-  const handleTweetFavoritedForCollect = useCallback(
-    (tweetText: string): AddTweetToCollectResult => {
-      const { items, result } = addTweetToCollectAsCraft(collectItems, tweetText);
-      if (result === "added") {
-        setCollectItems(items);
-      }
-      return result;
-    },
-    [collectItems],
-  );
-
-  useEffect(() => {
-    const documentKey = formatDocumentKey(activeTabId, openTabIds.length);
-    if (documentKey === "browse") {
-      setGeneratedTwitterCollection(null);
-      return;
-    }
-
-    let cancelled = false;
-    void loadPersistedTwitterFormats(formatDocumentId, editorTitleBase).then((loaded) => {
-      if (!cancelled) {
-        setGeneratedTwitterCollection(loaded);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTabId, openTabIds.length, formatDocumentId, editorTitleBase]);
 
   useEffect(() => {
     savePersistedCollectItems(collectItems);
@@ -1573,18 +1398,20 @@ export function AppShell() {
       : hasWorkspaceFolder
         ? "Select a tab above or pick a file from your workspace."
         : "Choose a workspace folder to open and save files.");
-  const showReadabilityHighlights = readabilityPanelOpen && mode === "edit";
-  const showMechanicsUnderlines = readabilityPanelOpen && mode === "edit";
-  /** Native misspelling underlines: same gate as grammar highlights (Edit tab + readability rail open + user pref). */
+  const showProseHighlights =
+    writingAssistancePrefs.enableProseChecks && readabilityPanelOpen && mode === "edit";
+  const showMechanicsUnderlines =
+    writingAssistancePrefs.enableMechanicsChecks && readabilityPanelOpen && mode === "edit";
+  /** Native misspelling underlines: gated with mechanics checks on the Edit tab. */
   const showEditModeSpellcheck =
-    writingAssistancePrefs.spellcheck && readabilityPanelOpen && mode === "edit";
+    writingAssistancePrefs.enableMechanicsChecks && readabilityPanelOpen && mode === "edit";
 
   useEffect(() => {
-    writingAssistanceViewRef.showReadabilityHighlights = showReadabilityHighlights;
+    writingAssistanceViewRef.showReadabilityHighlights = showProseHighlights;
     if (!tiptapEditor) return;
     const tr = tiptapEditor.state.tr.setMeta(grammarDecorationsKey, true);
     tiptapEditor.view.dispatch(tr);
-  }, [showReadabilityHighlights, tiptapEditor]);
+  }, [showProseHighlights, tiptapEditor]);
 
   useEffect(() => {
     if (!tiptapEditor) return;
@@ -1595,9 +1422,15 @@ export function AppShell() {
     void ensureHunspellLoaded();
   }, []);
 
-  /** Live rule-based mechanics (Spelling / Grammar / Suggestions) — runs in Edit mode regardless of sidebar. */
+  /** Live rule-based mechanics (Spelling / Grammar / Suggestions) — runs in Edit mode when enabled. */
   useEffect(() => {
     if (!tiptapEditor || mode !== "edit" || !editorEditable) {
+      return;
+    }
+
+    if (!writingAssistancePrefs.enableMechanicsChecks) {
+      setProofreadIssues([]);
+      clearProofreadDecorations(tiptapEditor.view);
       return;
     }
 
@@ -1618,7 +1451,7 @@ export function AppShell() {
       tiptapEditor.off("update", onUpdate);
       if (debounceId) clearTimeout(debounceId);
     };
-  }, [tiptapEditor, mode, editorEditable]);
+  }, [tiptapEditor, mode, editorEditable, writingAssistancePrefs.enableMechanicsChecks]);
   /** TipTap Placeholder extension only renders when the doc is empty; no real document text. */
   const editorPlaceholder = editorEditable ? "Start writing..." : undefined;
   const editorInstanceKey = activeTabId ?? (openTabIds.length === 0 ? "scratch" : "browse");
@@ -1655,6 +1488,10 @@ export function AppShell() {
   const handleCopyDocument = useCallback(async () => {
     return copyDocumentToClipboard(tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath);
   }, [tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath]);
+
+  const handlePrintDocument = useCallback(() => {
+    printDocumentFromEditor(tiptapEditor, copyDocumentFallbackMarkdown, editorTitleBase);
+  }, [tiptapEditor, copyDocumentFallbackMarkdown, editorTitleBase]);
 
   const handleInsertImage = useCallback(() => {
     if (!tiptapEditor || !editorEditable) return;
@@ -1813,25 +1650,20 @@ export function AppShell() {
       onNotesChange={updateActiveDocumentNotes}
       proofreadIssues={proofreadIssues}
       workspaceSection={activeWorkspaceSection}
-      formatCategorySelection={formatCategorySelection}
-      onFormatCategorySelectionChange={handleFormatCategorySelectionChange}
-      formatCategoryAmounts={formatCategoryAmounts}
-      onFormatCategoryAmountsChange={handleFormatCategoryAmountsChange}
-      isGeneratingFormats={isGeneratingFormats}
-      formatGenerationError={formatGenerationError}
-      onGenerateFormats={handleGenerateFormats}
+      proseChecksEnabled={writingAssistancePrefs.enableProseChecks}
+      mechanicsChecksEnabled={writingAssistancePrefs.enableMechanicsChecks}
     />
   );
 
   const tabBarRow = (
     <div
       className={`h-8 overflow-hidden transition-[background-color,border-color,box-shadow] duration-500 ease-in-out ${
-        isTopChromeHidden ? "border-transparent bg-stage shadow-none" : "bg-mist"
+        hideTopBarWhileTyping ? "border-transparent bg-stage shadow-none" : "bg-mist"
       }`}
     >
       <div
         className={`transition-[opacity,transform] duration-500 ease-in-out ${
-          isTopChromeHidden ? "pointer-events-none -translate-y-2 opacity-0" : "translate-y-0 opacity-100"
+          hideTopBarWhileTyping ? "pointer-events-none -translate-y-2 opacity-0" : "translate-y-0 opacity-100"
         }`}
       >
         <OpenWindowsBar
@@ -1840,7 +1672,7 @@ export function AppShell() {
           onSelectTab={setActiveTab}
           onCloseTab={closeTab}
           onCreateTab={createUntitledTab}
-          chromeHidden={isTopChromeHidden}
+          chromeHidden={hideTopBarWhileTyping}
           workspaceSidebarOpen={isWorkspaceSidebarOpen}
           overlayWorkspaceRail={sidebarOverlayLayout}
           reserveWorkspaceToggleSlot={!isWorkspaceSidebarOpen}
@@ -1852,27 +1684,24 @@ export function AppShell() {
   const documentHeaderRow = (
     <div
       className={`h-[2.125rem] overflow-hidden transition-[background-color,border-color,box-shadow] duration-500 ease-in-out ${
-        isTopChromeHidden ? "border-transparent bg-stage shadow-none" : "bg-mist/25"
+        hideTopBarWhileTyping && hideDocumentTitleWhileTyping
+          ? "border-transparent bg-stage shadow-none"
+          : "bg-mist/25"
       }`}
     >
-      <div
-        className={`transition-[opacity,transform] duration-500 ease-in-out ${
-          isTopChromeHidden ? "pointer-events-none -translate-y-2 opacity-0" : "translate-y-0 opacity-100"
-        }`}
-      >
-        <EditorDocumentHeader
-          documentTitleBase={editorTitleBase}
-          documentDirty={isDirty}
-          workspaceSidebarOpen={isWorkspaceSidebarOpen}
-          overlayWorkspaceRail={sidebarOverlayLayout}
-          reserveWorkspaceToggleSlot={!isWorkspaceSidebarOpen}
-          readabilityPanelOpen={readabilityPanelOpen}
-          chromeButtonsHidden={isTopChromeHidden}
-          onToggleReadabilityPanel={() => setReadabilityPanelOpen((v) => !v)}
-          titleRenameEnabled={titleRenameEnabled}
-          onCommitDocumentTitle={commitActiveDocumentTitleRename}
-        />
-      </div>
+      <EditorDocumentHeader
+        documentTitleBase={editorTitleBase}
+        documentDirty={isDirty}
+        workspaceSidebarOpen={isWorkspaceSidebarOpen}
+        overlayWorkspaceRail={sidebarOverlayLayout}
+        reserveWorkspaceToggleSlot={!isWorkspaceSidebarOpen}
+        readabilityPanelOpen={readabilityPanelOpen}
+        titleHidden={hideDocumentTitleWhileTyping}
+        chromeButtonsHidden={hideTopBarWhileTyping}
+        onToggleReadabilityPanel={() => setReadabilityPanelOpen((v) => !v)}
+        titleRenameEnabled={titleRenameEnabled}
+        onCommitDocumentTitle={commitActiveDocumentTitleRename}
+      />
     </div>
   );
 
@@ -1891,22 +1720,6 @@ export function AppShell() {
               items={collectItems}
               onItemsChange={setCollectItems}
               onAddPreviewToNotes={handleAddCollectPreviewToNotes}
-            />
-          </div>
-        ) : null}
-        {activeWorkspaceSection === "format" ? (
-          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <FormatGalleryPanel
-              documentTitle={editorTitleBase}
-              documentPreviewBlocks={formatPreviewBlocks}
-              categorySelection={formatCategorySelection}
-              categoryAmounts={formatCategoryAmounts}
-              wordCount={stats.words}
-              isGeneratingFormats={isGeneratingFormats}
-              formatGenerationResults={formatGenerationResults}
-              generatedTwitterCollection={generatedTwitterCollection}
-              onGeneratedTwitterTweetsChange={handleGeneratedTwitterTweetsChange}
-              onTweetFavoritedForCollect={handleTweetFavoritedForCollect}
             />
           </div>
         ) : null}
@@ -1929,10 +1742,8 @@ export function AppShell() {
               placeholder={editorPlaceholder}
               isEditable={editorEditable}
               spellcheckEnabled={showEditModeSpellcheck}
-              grammarChecksEnabled={
-                writingAssistancePrefs.grammarChecks && readabilityPanelOpen && mode === "edit"
-              }
-              showReadabilityHighlights={showReadabilityHighlights}
+              grammarChecksEnabled={showProseHighlights}
+              showReadabilityHighlights={showProseHighlights}
               showMechanicsUnderlines={showMechanicsUnderlines}
               workspaceRootPath={workspaceRootPath}
               pickLocalImage={pickLocalImage}
@@ -1954,8 +1765,10 @@ export function AppShell() {
               activityHandlerRef={editorTypingActivityHandlerRef}
               onToggleBothSidebars={toggleBothSidebars}
               onCopyDocument={handleCopyDocument}
+              onSaveAsPdf={performExportPdf}
+              onPrint={handlePrintDocument}
               syncWithChrome
-              chromeHidden={isTopChromeHidden}
+              chromeHidden={hideBottomToolsWhileTyping}
             />
           </div>
         </div>
@@ -1990,17 +1803,20 @@ export function AppShell() {
               </div>
             </div>
           </div>
-          <WorkspaceSectionSwitcher
-            activeSection={activeWorkspaceSection}
-            onSectionChange={handleWorkspaceSectionChange}
-            chromeHidden={isTopChromeHidden}
-            className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
-            style={{
-              left: isWorkspaceSidebarOpen
-                ? `${WORKSPACE_SIDEBAR_WIDTH_PX}px`
-                : "var(--harvy-workspace-section-rail-left-collapsed)",
-            }}
-          />
+          {showWorkspaceNavigation ? (
+            <WorkspaceSectionSwitcher
+              activeSection={activeWorkspaceSection}
+              onSectionChange={handleWorkspaceSectionChange}
+              sections={workspaceSections}
+              chromeHidden={isTopChromeHidden}
+              className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
+              style={{
+                left: isWorkspaceSidebarOpen
+                  ? `${WORKSPACE_SIDEBAR_WIDTH_PX}px`
+                  : "var(--harvy-workspace-section-rail-left-collapsed)",
+              }}
+            />
+          ) : null}
           <div
             aria-hidden={!isWorkspaceSidebarOpen}
             className={`absolute inset-y-0 left-0 z-10 overflow-hidden bg-stage transition-[width] duration-500 ease-in-out ${
@@ -2034,17 +1850,20 @@ export function AppShell() {
             </div>
           </div>
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
-            <WorkspaceSectionSwitcher
-              activeSection={activeWorkspaceSection}
-              onSectionChange={handleWorkspaceSectionChange}
-              chromeHidden={isTopChromeHidden}
-              className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
-              style={{
-                left: isWorkspaceSidebarOpen
-                  ? 0
-                  : "var(--harvy-workspace-section-rail-left-collapsed)",
-              }}
-            />
+            {showWorkspaceNavigation ? (
+              <WorkspaceSectionSwitcher
+                activeSection={activeWorkspaceSection}
+                onSectionChange={handleWorkspaceSectionChange}
+                sections={workspaceSections}
+                chromeHidden={isTopChromeHidden}
+                className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
+                style={{
+                  left: isWorkspaceSidebarOpen
+                    ? 0
+                    : "var(--harvy-workspace-section-rail-left-collapsed)",
+                }}
+              />
+            ) : null}
             {tabBarRow}
             <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden bg-stage">
               <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -2073,7 +1892,9 @@ export function AppShell() {
       {/* Same vertical band as OpenWindowsBar (h-8); flex centers the h-8 control like the tab row */}
       <div
         className={`pointer-events-none absolute left-2 top-0 z-30 flex h-8 items-center rounded-md px-0.5 transition-[opacity,background-color] duration-500 ease-in-out ${
-          isTopChromeHidden ? "bg-stage opacity-0" : "bg-mist/55 opacity-100"
+          hideTopBarWhileTyping
+            ? "pointer-events-none bg-stage opacity-0"
+            : "pointer-events-auto bg-mist/55 opacity-100"
         }`}
       >
         <ChromeSidebarToggleButton
@@ -2090,12 +1911,14 @@ export function AppShell() {
         onClose={() => setIsSettingsOpen(false)}
         themeMode={themeMode}
         onThemeModeChange={setThemeMode}
-        readabilityPanelOpen={readabilityPanelOpen}
-        onReadabilityPanelChange={setReadabilityPanelOpen}
-        spellcheckEnabled={writingAssistancePrefs.spellcheck}
-        grammarChecksEnabled={writingAssistancePrefs.grammarChecks}
-        onSpellcheckChange={handleSpellcheckPref}
-        onGrammarChecksChange={handleGrammarChecksPref}
+        enableProseChecks={writingAssistancePrefs.enableProseChecks}
+        enableMechanicsChecks={writingAssistancePrefs.enableMechanicsChecks}
+        onEnableProseChecksChange={handleEnableProseChecksChange}
+        onEnableMechanicsChecksChange={handleEnableMechanicsChecksChange}
+        focusVisibilityPrefs={focusVisibilityPrefs}
+        onFocusVisibilityPrefChange={handleFocusVisibilityPrefChange}
+        enableCollect={enableCollect}
+        onEnableCollectChange={handleEnableCollectChange}
         workspaceRootPath={workspaceRootPath}
         onChooseWorkspaceFolder={chooseWorkspaceFolder}
       />

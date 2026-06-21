@@ -14,6 +14,10 @@ export type CenteredOverlayModalProps = {
   backdropLabel: string;
   closeLabel: string;
   maxWidthClass?: string;
+  /** When set, replaces default w-full / max-height / maxWidthClass panel sizing. */
+  panelSizeClassName?: string;
+  /** Extra classes on the dialog panel (e.g. fixed height for Settings). */
+  panelClassName?: string;
   /** Region below the header (scroll / layout). */
   bodyClassName?: string;
   /** When false, skip auto-focusing the close button (e.g. focus a field in the body instead). */
@@ -36,6 +40,8 @@ export function CenteredOverlayModal({
   backdropLabel,
   closeLabel,
   maxWidthClass = "max-w-[min(1120px,calc(100vw-3rem))]",
+  panelSizeClassName,
+  panelClassName,
   bodyClassName = "min-h-0 flex-1 overflow-y-auto px-6 py-5",
   autoFocusCloseButton = true,
   closeButtonClassName,
@@ -113,6 +119,10 @@ export function CenteredOverlayModal({
 
   if (!open) return null;
 
+  const panelSizeClass =
+    panelSizeClassName ??
+    `max-h-[min(82vh,calc(100vh-3rem))] w-full ${maxWidthClass}`;
+
   return createPortal(
     <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-6`} role="presentation">
       <button
@@ -127,7 +137,7 @@ export function CenteredOverlayModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`relative flex max-h-[min(82vh,calc(100vh-3rem))] w-full ${maxWidthClass} min-h-0 flex-col overflow-hidden rounded-xl bg-page shadow-[0_24px_64px_-20px_rgba(28,25,23,0.16)] dark:shadow-[0_28px_80px_-24px_rgba(0,0,0,0.55)]`}
+        className={`relative flex min-h-0 flex-col overflow-hidden rounded-xl bg-page shadow-[0_24px_64px_-20px_rgba(28,25,23,0.16)] dark:shadow-[0_28px_80px_-24px_rgba(0,0,0,0.55)] ${panelSizeClass} ${panelClassName ?? ""}`}
       >
         <header
           className={

@@ -1,7 +1,6 @@
 import type { CSSProperties } from "react";
 import {
   WORKSPACE_SECTION_LABELS,
-  WORKSPACE_SECTIONS,
   type WorkspaceSection,
 } from "../features/workspace/workspaceSection";
 
@@ -12,6 +11,7 @@ const RAIL_MOTION_CLASS =
 type WorkspaceSectionSwitcherProps = {
   activeSection: WorkspaceSection;
   onSectionChange: (section: WorkspaceSection) => void;
+  sections: WorkspaceSection[];
   /** Shared with top chrome (tabs, header, ambient controls) during distraction-free writing. */
   chromeHidden?: boolean;
   className?: string;
@@ -21,6 +21,7 @@ type WorkspaceSectionSwitcherProps = {
 export function WorkspaceSectionSwitcher({
   activeSection,
   onSectionChange,
+  sections,
   chromeHidden = false,
   className,
   style,
@@ -41,7 +42,7 @@ export function WorkspaceSectionSwitcher({
       aria-label="Workspace sections"
     >
       <div className="flex w-full flex-col items-stretch gap-1.5">
-      {WORKSPACE_SECTIONS.map((section) => {
+      {sections.map((section) => {
         const active = activeSection === section;
         return (
           <button
