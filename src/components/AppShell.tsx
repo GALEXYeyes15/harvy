@@ -1699,7 +1699,7 @@ export function AppShell() {
         documentDirty={isDirty}
         workspaceSidebarOpen={isWorkspaceSidebarOpen}
         overlayWorkspaceRail={sidebarOverlayLayout}
-        reserveWorkspaceToggleSlot={!isWorkspaceSidebarOpen}
+        isWindowFullscreen={isWindowFullscreen}
         readabilityPanelOpen={readabilityPanelOpen}
         titleHidden={hideDocumentTitleWhileTyping}
         chromeButtonsHidden={hideTopBarWhileTyping}

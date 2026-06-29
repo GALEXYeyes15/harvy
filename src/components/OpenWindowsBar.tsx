@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback } from "react";
+import { tabNavLeadingPadding } from "../features/chrome/tabNavChromeInsets";
 import type { PageTab } from "../features/tabs/pageTabs";
 
 const TAB_NAV_BTN =
@@ -38,13 +39,7 @@ export function OpenWindowsBar({
   overlayWorkspaceRail = true,
   isWindowFullscreen = false,
 }: OpenWindowsBarProps) {
-  const collapsedNavPadding = isWindowFullscreen
-    ? "2.5rem"
-    : "calc(var(--harvy-traffic-light-inset, 0px) + 2.5rem)";
-
-  const leadingNavPadding = workspaceSidebarOpen
-    ? "var(--harvy-workspace-chrome-gutter)"
-    : collapsedNavPadding;
+  const leadingNavPadding = tabNavLeadingPadding(workspaceSidebarOpen, isWindowFullscreen);
 
   const goPrevTab = useCallback(() => {
     if (tabs.length === 0) return;

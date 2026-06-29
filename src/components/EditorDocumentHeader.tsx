@@ -1,5 +1,6 @@
 import { PanelRight } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { documentTitlePaddingLeft } from "../features/chrome/tabNavChromeInsets";
 import { ChromeSidebarToggleButton } from "./ChromeSidebarToggleButton";
 
 type EditorDocumentHeaderProps = {
@@ -9,7 +10,7 @@ type EditorDocumentHeaderProps = {
   workspaceSidebarOpen: boolean;
   /** When false (narrow “push” layout), workspace rail does not overlap chrome — no left margin. */
   overlayWorkspaceRail?: boolean;
-  reserveWorkspaceToggleSlot: boolean;
+  isWindowFullscreen?: boolean;
   readabilityPanelOpen: boolean;
   /** Hide document title row during distraction-free typing mode. */
   titleHidden?: boolean;
@@ -46,7 +47,7 @@ export function EditorDocumentHeader({
   documentDirty,
   workspaceSidebarOpen,
   overlayWorkspaceRail = true,
-  reserveWorkspaceToggleSlot,
+  isWindowFullscreen = false,
   readabilityPanelOpen,
   titleHidden = false,
   chromeButtonsHidden,
@@ -61,11 +62,7 @@ export function EditorDocumentHeader({
   const pendingCaretIndexRef = useRef<number | null>(null);
   const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const chromeLeftPadding = workspaceSidebarOpen
-    ? "pl-[calc(var(--harvy-traffic-light-inset,0px)+0.625rem)]"
-    : reserveWorkspaceToggleSlot
-      ? "pl-[calc(var(--harvy-traffic-light-inset,0px)+2.5rem)]"
-      : "pl-[calc(var(--harvy-traffic-light-inset,0px)+0.625rem)]";
+  const titlePaddingLeft = documentTitlePaddingLeft(workspaceSidebarOpen, isWindowFullscreen);
 
   const railShift = `transition-[margin-left] duration-500 ease-in-out ${
     overlayWorkspaceRail && workspaceSidebarOpen ? "ml-[260px]" : "ml-0"
@@ -216,9 +213,10 @@ export function EditorDocumentHeader({
           className={`min-w-0 shrink-0 transition-[width] duration-500 ease-in-out ${titleRowVisibleWidth}`}
         >
           <div
-            className={`relative z-[2] flex w-full min-w-0 flex-row items-center pb-2 pt-1.5 pr-10 ${LEADING_PAD_SYNC} ${chromeLeftPadding} pointer-events-auto transition-[opacity,transform] duration-500 ease-in-out ${
+            className={`relative z-[2] flex w-full min-w-0 flex-row items-center pb-2 pt-1.5 pr-10 ${LEADING_PAD_SYNC} pointer-events-auto transition-[opacity,transform] duration-500 ease-in-out ${
               titleHidden ? "pointer-events-none -translate-y-2 opacity-0" : "translate-y-0 opacity-100"
             }`}
+            style={{ paddingLeft: titlePaddingLeft }}
           >
             <div className={titleRowClass}>
               {isEditingTitle ? (

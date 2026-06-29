@@ -15,7 +15,7 @@
     --harvy-workspace-search-top: calc(2rem + 0.25rem + 0.75rem + 0.375rem + 1.125rem + 0.75rem);
     /* Mode rail: Collect glyph top aligns with search input top (button py-1 + fine-tune). */
     --harvy-workspace-section-rail-top: calc(var(--harvy-workspace-search-top) - 0.25rem + 10px);
-    /* Collapsed sidebar: match tab bar + document title pl-10 gutter (2.5rem). */
+    /* Collapsed sidebar: tab nav inset before back/forward buttons (2.5rem past traffic lights). */
     --harvy-workspace-section-rail-left-collapsed: .7rem;
     /* Open sidebar: gap between rail right edge and top-bar nav group (toggle / tab arrows). */
     --harvy-workspace-chrome-gutter: 0.75rem;

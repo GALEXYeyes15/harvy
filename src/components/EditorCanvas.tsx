@@ -40,9 +40,9 @@ import { resolveWorkspaceImageSrc } from "../features/editor/imageAssets";
 import { HarvyListItem } from "../features/editor/harvyListItem";
 import { HarvyOrderedList } from "../features/editor/harvyOrderedList";
 import { HarvyListKeyboard } from "../features/editor/harvyListKeyboard";
-import { HarvyPlainPaste } from "../features/editor/harvyPlainPaste";
 import { LinkEditorSelectionHighlight } from "../features/editor/linkEditorSelectionHighlight";
 import { HarvyMarkdownShortcuts } from "../features/editor/harvyMarkdownShortcuts";
+import { PlainTextPaste } from "../features/editor/plainTextPaste";
 import { HarvyOutlineParagraph } from "../features/outline/harvyOutlineParagraph";
 import type { SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
 
@@ -152,6 +152,7 @@ export function EditorCanvas({
           },
         }),
         HarvyOutlineParagraph,
+        PlainTextPaste,
         HarvyImage,
         HarvyPlaceholder.configure({
           placeholder: placeholder ?? "",
@@ -161,7 +162,6 @@ export function EditorCanvas({
         LinkEditorSelectionHighlight,
         HarvyMarkdownShortcuts,
         HarvyListKeyboard,
-        HarvyPlainPaste,
       ],
       content: toEditorHtml(text, { sourcePath: contentSourcePath }),
       editable: isEditable,
