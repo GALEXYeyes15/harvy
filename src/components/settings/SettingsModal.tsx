@@ -17,10 +17,12 @@ type SettingsModalProps = {
   onClose: () => void;
   themeMode: ThemeMode;
   onThemeModeChange: (mode: ThemeMode) => void;
-  enableProseChecks: boolean;
-  enableMechanicsChecks: boolean;
-  onEnableProseChecksChange: (enabled: boolean) => void;
-  onEnableMechanicsChecksChange: (enabled: boolean) => void;
+  readabilityPanelOpen: boolean;
+  onReadabilityPanelChange: (open: boolean) => void;
+  spellcheckEnabled: boolean;
+  grammarChecksEnabled: boolean;
+  onSpellcheckChange: (enabled: boolean) => void;
+  onGrammarChecksChange: (enabled: boolean) => void;
   focusVisibilityPrefs: FocusVisibilityPrefs;
   onFocusVisibilityPrefChange: (partial: Partial<FocusVisibilityPrefs>) => void;
   enableCollect: boolean;
@@ -34,10 +36,12 @@ export function SettingsModal({
   onClose,
   themeMode,
   onThemeModeChange,
-  enableProseChecks,
-  enableMechanicsChecks,
-  onEnableProseChecksChange,
-  onEnableMechanicsChecksChange,
+  readabilityPanelOpen,
+  onReadabilityPanelChange,
+  spellcheckEnabled,
+  grammarChecksEnabled,
+  onSpellcheckChange,
+  onGrammarChecksChange,
   focusVisibilityPrefs,
   onFocusVisibilityPrefChange,
   enableCollect,
@@ -46,6 +50,8 @@ export function SettingsModal({
   onChooseWorkspaceFolder,
 }: SettingsModalProps) {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("general");
+  const [focusMode, setFocusMode] = useState(false);
+  const [typewriterScroll, setTypewriterScroll] = useState(false);
 
   return (
     <CenteredOverlayModal
@@ -92,12 +98,18 @@ export function SettingsModal({
             ) : null}
             {activeSection === "editor" ? (
               <EditorPanel
-                enableProseChecks={enableProseChecks}
-                onEnableProseChecksChange={onEnableProseChecksChange}
-                enableMechanicsChecks={enableMechanicsChecks}
-                onEnableMechanicsChecksChange={onEnableMechanicsChecksChange}
+                showReadabilityPanel={readabilityPanelOpen}
+                onReadabilityChange={onReadabilityPanelChange}
+                spellcheckEnabled={spellcheckEnabled}
+                grammarChecksEnabled={grammarChecksEnabled}
+                onSpellcheckChange={onSpellcheckChange}
+                onGrammarChecksChange={onGrammarChecksChange}
                 focusVisibilityPrefs={focusVisibilityPrefs}
                 onFocusVisibilityPrefChange={onFocusVisibilityPrefChange}
+                focusMode={focusMode}
+                onFocusModeChange={setFocusMode}
+                typewriterScroll={typewriterScroll}
+                onTypewriterChange={setTypewriterScroll}
               />
             ) : null}
             {activeSection === "files" ? (
@@ -200,19 +212,31 @@ function AppearancePanel({
 }
 
 function EditorPanel({
-  enableProseChecks,
-  onEnableProseChecksChange,
-  enableMechanicsChecks,
-  onEnableMechanicsChecksChange,
+  showReadabilityPanel,
+  onReadabilityChange,
+  spellcheckEnabled,
+  grammarChecksEnabled,
+  onSpellcheckChange,
+  onGrammarChecksChange,
   focusVisibilityPrefs,
   onFocusVisibilityPrefChange,
+  focusMode,
+  onFocusModeChange,
+  typewriterScroll,
+  onTypewriterChange,
 }: {
-  enableProseChecks: boolean;
-  onEnableProseChecksChange: (v: boolean) => void;
-  enableMechanicsChecks: boolean;
-  onEnableMechanicsChecksChange: (v: boolean) => void;
+  showReadabilityPanel: boolean;
+  onReadabilityChange: (v: boolean) => void;
+  spellcheckEnabled: boolean;
+  grammarChecksEnabled: boolean;
+  onSpellcheckChange: (v: boolean) => void;
+  onGrammarChecksChange: (v: boolean) => void;
   focusVisibilityPrefs: FocusVisibilityPrefs;
   onFocusVisibilityPrefChange: (partial: Partial<FocusVisibilityPrefs>) => void;
+  focusMode: boolean;
+  onFocusModeChange: (v: boolean) => void;
+  typewriterScroll: boolean;
+  onTypewriterChange: (v: boolean) => void;
 }) {
   return (
     <div className="space-y-5">
@@ -222,18 +246,39 @@ function EditorPanel({
       </div>
       <ul className={`${SETTINGS_DIVIDE_Y} overflow-hidden rounded-lg bg-mist/80 dark:bg-ink/[0.035]`}>
         <ToggleRow
-          id="enable-prose-checks"
-          label="Prose"
-          description="Style checks like adverbs, passive voice, and complex sentences."
-          checked={enableProseChecks}
-          onChange={onEnableProseChecksChange}
+          id="spellcheck"
+          label="Spellcheck"
+          description="Uses the system dictionary in the editor. Misspellings are underlined; nothing is changed unless you choose a suggestion."
+          checked={spellcheckEnabled}
+          onChange={onSpellcheckChange}
         />
         <ToggleRow
-          id="enable-mechanics-checks"
-          label="Mechanics"
-          description="Spelling, grammar, and suggestion checks."
-          checked={enableMechanicsChecks}
-          onChange={onEnableMechanicsChecksChange}
+          id="grammar-checks"
+          label="Writing hints"
+          description="Light editorial underlines (spacing, repetition, gentle style cues). Right-click for optional fixes where available."
+          checked={grammarChecksEnabled}
+          onChange={onGrammarChecksChange}
+        />
+        <ToggleRow
+          id="readability-panel"
+          label="Show readability panel"
+          description="Right-side tools and stats while you write."
+          checked={showReadabilityPanel}
+          onChange={onReadabilityChange}
+        />
+        <ToggleRow
+          id="focus-mode"
+          label="Focus mode"
+          description="Placeholder — dims chrome around the editor."
+          checked={focusMode}
+          onChange={onFocusModeChange}
+        />
+        <ToggleRow
+          id="typewriter-scroll"
+          label="Typewriter scrolling"
+          description="Placeholder — keeps the caret in a fixed vertical position."
+          checked={typewriterScroll}
+          onChange={onTypewriterChange}
         />
       </ul>
       <div>

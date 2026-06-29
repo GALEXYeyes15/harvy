@@ -5,6 +5,7 @@ import { proofreadPlainTextAndPositions } from "../proofreadPlainMap";
 import type { ProofreadIssue } from "../types";
 import { ensureHunspellLoaded } from "./hunspellDictionary";
 import { runMechanicsProofread } from "./mechanicsEngine";
+import { filterIgnoredMechanicsSuggestions } from "./mechanicsSuggestionIgnore";
 
 function countByType(issues: ProofreadIssue[]): Record<ProofreadIssue["type"], number> {
   return {
@@ -33,7 +34,7 @@ export async function syncMechanicsProofread(
     console.log("[HarvyMechanics] engine run", { text: snapshot.text });
   }
 
-  const issues = runMechanicsProofread(snapshot.text);
+  const issues = filterIgnoredMechanicsSuggestions(runMechanicsProofread(snapshot.text));
 
   if (import.meta.env.DEV) {
     console.log("[HarvyMechanics] raw results", issues);

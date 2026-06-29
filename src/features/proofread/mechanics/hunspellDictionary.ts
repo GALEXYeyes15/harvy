@@ -6,7 +6,30 @@ const HUNSPELL_AFF_PATH = "/hunspell/en_US.aff";
 const HUNSPELL_DIC_PATH = "/hunspell/en_US.dic";
 
 let spell: HunspellChecker | null = null;
+let dictionaryWords: string[] = [];
 let loadPromise: Promise<void> | null = null;
+
+/** Parse Hunspell `.dic` text into lowercase lookup words for fuzzy matching. */
+export function parseHunspellDictionaryWords(dicText: string): string[] {
+  const lines = dicText.split(/\r?\n/);
+  const words = new Set<string>();
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i]?.trim();
+    if (!line) continue;
+
+    const slash = line.indexOf("/");
+    const raw = (slash >= 0 ? line.slice(0, slash) : line).trim();
+    if (!raw) continue;
+
+    const base = raw.toLowerCase();
+    if (base.length <= 2) continue;
+    if (!/^[a-z']+$/.test(base)) continue;
+    words.add(base);
+  }
+
+  return [...words];
+}
 
 async function loadHunspellInBrowser(): Promise<void> {
   const [aff, dic] = await Promise.all([
@@ -21,6 +44,7 @@ async function loadHunspellInBrowser(): Promise<void> {
   ]);
 
   spell = nspell(aff, dic);
+  dictionaryWords = parseHunspellDictionaryWords(dic);
 }
 
 async function loadHunspellInNode(): Promise<void> {
@@ -36,6 +60,12 @@ async function loadHunspellInNode(): Promise<void> {
   ]);
 
   spell = nspell(aff, dic);
+  dictionaryWords = parseHunspellDictionaryWords(dic);
+}
+
+/** Lowercase dictionary words for fuzzy spelling suggestions (empty until loaded). */
+export function getDictionaryWords(): readonly string[] {
+  return dictionaryWords;
 }
 
 /** Load en_US Hunspell dictionary (browser fetch or Node fs). Safe to call repeatedly. */

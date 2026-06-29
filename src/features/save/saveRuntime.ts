@@ -18,6 +18,11 @@ export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+export function isMacOSPlatform(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
+}
+
 export function fileNameFromPath(path: string): string {
   const parts = path.split(/[/\\]/);
   return parts[parts.length - 1] || path || "Untitled";

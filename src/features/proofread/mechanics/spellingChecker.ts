@@ -1,5 +1,6 @@
 import { isWordSpellingExempt } from "./spellingDictionary";
-import { getHunspell } from "./hunspellDictionary";
+import { fuzzySpellingSuggestions } from "./spellingFuzzyMatch";
+import { getDictionaryWords, getHunspell } from "./hunspellDictionary";
 import {
   normalizeSpellingApostrophes,
   normalizeSpellingToken,
@@ -32,31 +33,101 @@ function applyReplacementCase(original: string, replacement: string): string {
   return replacement;
 }
 
-function casingVariants(word: string): string[] {
-  const normalized = normalizeSpellingApostrophes(word);
-  const lower = normalized.toLowerCase();
-  const variants = new Set<string>([normalized, lower]);
-  if (normalized.length > 1) {
-    variants.add(normalized[0]!.toUpperCase() + normalized.slice(1).toLowerCase());
-    variants.add(normalized.toUpperCase());
-  }
-  return [...variants];
+/** Lowercase dictionary key used for lookups (apostrophe-normalized). */
+export function lookupSpellingWord(token: string): string {
+  return normalizeSpellingToken(token);
 }
 
-/** True when Hunspell considers the word correctly spelled (any common casing variant). */
-function isCorrectByHunspell(word: string): boolean {
+/** All-uppercase letter tokens (e.g. TEH, NASA) — still spell-checked. */
+export function isSpellingAcronymToken(word: string): boolean {
+  const normalized = normalizeSpellingApostrophes(word);
+  return normalized.length > 1 && /^[A-Z']+$/.test(normalized) && /[A-Z]/.test(normalized);
+}
+
+/**
+ * Title Case or internal caps (Phillips, Skool, McDonald).
+ * Excludes all-caps acronyms so obvious uppercase typos stay flagged.
+ */
+export function isLikelyProperNounOrBrand(word: string): boolean {
+  const normalized = normalizeSpellingApostrophes(word);
+  if (normalized.length <= 2) return false;
+  if (isSpellingAcronymToken(normalized)) return false;
+  if (!/^[A-Z]/.test(normalized)) return false;
+  return /[a-z]/.test(normalized);
+}
+
+/** True when Hunspell accepts the original token or its lowercase lookup form. */
+export function isSpellingCorrectInDictionary(word: string): boolean {
   const checker = getHunspell();
   if (!checker) return true;
 
-  return casingVariants(word).some((variant) => checker.correct(variant));
+  const original = normalizeSpellingApostrophes(word);
+  const lookupWord = lookupSpellingWord(word);
+  return checker.correct(original) || checker.correct(lookupWord);
+}
+
+/**
+ * Shared validity check for editor underlines and sidebar spelling counts.
+ * Original token casing is preserved in the document; only lookup uses lowercase.
+ */
+export function isSpellingTokenValid(word: string): boolean {
+  if (isWordSpellingExempt(word)) return true;
+  if (isSpellingCorrectInDictionary(word)) return true;
+  if (isLikelyProperNounOrBrand(word)) return true;
+  return false;
 }
 
 function suggestionForWord(word: string): string | undefined {
+  return getSpellingSuggestions(word, 1)[0];
+}
+
+/** Suggested replacements for a misspelled token (typo map, Hunspell, then fuzzy fallback). */
+export function getSpellingSuggestions(word: string, limit = 3): string[] {
+  if (limit <= 0) return [];
+
+  const lookupWord = lookupSpellingWord(word);
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (replacement: string) => {
+    const cased = applyReplacementCase(word, replacement);
+    const key = lookupSpellingWord(cased);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(cased);
+  };
+
+  const typoFix = COMMON_TYPOS[lookupWord];
+  if (typoFix) push(typoFix);
+
   const checker = getHunspell();
-  if (!checker) return undefined;
-  const lookup = normalizeSpellingApostrophes(word);
-  const suggestions = checker.suggest(lookup);
-  return suggestions[0];
+  if (checker) {
+    for (const suggestion of checker.suggest(lookupWord)) {
+      if (!suggestion?.trim()) continue;
+      push(suggestion);
+      if (out.length >= limit) break;
+    }
+  }
+
+  if (out.length < limit) {
+    const fuzzy = fuzzySpellingSuggestions(
+      lookupWord,
+      getDictionaryWords(),
+      limit - out.length,
+      seen,
+    );
+    for (const suggestion of fuzzy) {
+      push(suggestion);
+      if (out.length >= limit) break;
+    }
+  }
+
+  return out.slice(0, limit);
+}
+
+/** Preserve original casing when applying a dictionary suggestion. */
+export function applySpellingReplacementCase(original: string, replacement: string): string {
+  return applyReplacementCase(original, replacement);
 }
 
 /** Scan plain document text for misspellings (typo map + Hunspell). */
@@ -70,11 +141,12 @@ export function scanSpellingIssues(text: string): MechanicsRuleHit[] {
 
   while ((match = wordRe.exec(scanText)) !== null) {
     const word = match[0];
-    const lower = normalizeSpellingToken(word);
-    if (lower.length <= 2) continue;
-    if (isWordSpellingExempt(word)) continue;
+    const lookupWord = lookupSpellingWord(word);
+    if (lookupWord.length <= 2) continue;
 
-    const typoFix = COMMON_TYPOS[lower];
+    if (isSpellingTokenValid(word)) continue;
+
+    const typoFix = COMMON_TYPOS[lookupWord];
     if (typoFix) {
       hits.push({
         category: "spelling",
@@ -86,8 +158,6 @@ export function scanSpellingIssues(text: string): MechanicsRuleHit[] {
       });
       continue;
     }
-
-    if (isCorrectByHunspell(word)) continue;
 
     const replacement = suggestionForWord(word);
     hits.push({

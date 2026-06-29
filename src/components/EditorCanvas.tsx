@@ -24,7 +24,11 @@ import {
   handleEditorWritingSurfacePointerDown,
   rejectEditorFocusIfSuppressed,
 } from "../features/editor/editorCanvasFocus";
-import { handleEditorContextMenuEvent } from "../features/editor/editorContextMenu";
+import {
+  handleEditorContextMenuEvent,
+  tryOpenMechanicsSuggestionPopover,
+  tryOpenSpellingSuggestionPopover,
+} from "../features/editor/editorContextMenu";
 import {
   attachEditorLinkModifierCursor,
   handleEditorLinkPointerDown,
@@ -36,6 +40,7 @@ import { resolveWorkspaceImageSrc } from "../features/editor/imageAssets";
 import { HarvyListItem } from "../features/editor/harvyListItem";
 import { HarvyOrderedList } from "../features/editor/harvyOrderedList";
 import { HarvyListKeyboard } from "../features/editor/harvyListKeyboard";
+import { HarvyPlainPaste } from "../features/editor/harvyPlainPaste";
 import { LinkEditorSelectionHighlight } from "../features/editor/linkEditorSelectionHighlight";
 import { HarvyMarkdownShortcuts } from "../features/editor/harvyMarkdownShortcuts";
 import { HarvyOutlineParagraph } from "../features/outline/harvyOutlineParagraph";
@@ -156,6 +161,7 @@ export function EditorCanvas({
         LinkEditorSelectionHighlight,
         HarvyMarkdownShortcuts,
         HarvyListKeyboard,
+        HarvyPlainPaste,
       ],
       content: toEditorHtml(text, { sourcePath: contentSourcePath }),
       editable: isEditable,
@@ -278,6 +284,12 @@ export function EditorCanvas({
               onInsertImage: () => onInsertImageRef.current?.(),
               placeCaret: true,
             });
+          },
+          click: (view, event) => {
+            if (!isEditableRef.current) return false;
+            if ((event as MouseEvent).button !== 0) return false;
+            if (tryOpenSpellingSuggestionPopover(view, event as MouseEvent)) return true;
+            return tryOpenMechanicsSuggestionPopover(view, event as MouseEvent);
           },
           dblclick: (view, event) => {
             if (!isEditableRef.current) return false;

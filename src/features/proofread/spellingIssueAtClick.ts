@@ -126,21 +126,31 @@ export type SpellingPopoverAnchor = {
   pmTo: number;
 };
 
-/** Resolve spelling issue + viewport anchor for a double-click in the editor. */
-export function getSpellingIssueAtClick(
+/** Resolve spelling issue + viewport anchor for a pointer position in the editor. */
+export function getSpellingIssueAtPointer(
   view: EditorView,
-  event: MouseEvent,
+  clientX: number,
+  clientY: number,
   issues: readonly ProofreadIssue[] = [],
 ): SpellingPopoverAnchor | null {
-  const wordRange = getWordRangeForDoubleClick(view, event);
+  const hit = view.posAtCoords({ left: clientX, top: clientY });
+  if (!hit) return null;
+
+  const wordRange =
+    wordRangeAtPmPos(view.state.doc, hit.pos) ??
+    (hit.pos > 0 ? wordRangeAtPmPos(view.state.doc, hit.pos - 1) : null);
   if (!wordRange) return null;
 
-  const spelling = findSpellingRangeOverlappingPm(
-    view,
-    wordRange.from,
-    wordRange.to,
-    issues,
-  );
+  return spellingAnchorForPmRange(view, wordRange.from, wordRange.to, issues);
+}
+
+function spellingAnchorForPmRange(
+  view: EditorView,
+  pmFrom: number,
+  pmTo: number,
+  issues: readonly ProofreadIssue[],
+): SpellingPopoverAnchor | null {
+  const spelling = findSpellingRangeOverlappingPm(view, pmFrom, pmTo, issues);
   if (!spelling) return null;
 
   const c1 = view.coordsAtPos(spelling.from);
@@ -160,6 +170,20 @@ export function getSpellingIssueAtClick(
     pmFrom: spelling.from,
     pmTo: spelling.to,
   };
+}
+
+/** Resolve spelling issue + viewport anchor for a double-click in the editor. */
+export function getSpellingIssueAtClick(
+  view: EditorView,
+  event: MouseEvent,
+  issues: readonly ProofreadIssue[] = [],
+): SpellingPopoverAnchor | null {
+  const wordRange = getWordRangeForDoubleClick(view, event);
+  if (!wordRange) {
+    return getSpellingIssueAtPointer(view, event.clientX, event.clientY, issues);
+  }
+
+  return spellingAnchorForPmRange(view, wordRange.from, wordRange.to, issues);
 }
 
 /** @deprecated Use `getSpellingIssueAtClick`. */

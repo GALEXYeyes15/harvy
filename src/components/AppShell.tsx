@@ -30,6 +30,7 @@ import {
   savePersistedCollectItems,
 } from "../features/collect/collectItemsPersistence";
 import { WorkspaceSectionSwitcher } from "./WorkspaceSectionSwitcher";
+import { useWindowFullscreen } from "../features/window/useWindowFullscreen";
 import {
   WORKSPACE_SIDEBAR_WIDTH_PX,
   visibleWorkspaceSections,
@@ -90,6 +91,7 @@ import {
   documentTitleBaseFromSaveAsFileName,
   fileNameFromPath,
   getDocumentMarkdown,
+  isMacOSPlatform,
   isTauriRuntime,
   normalizeMarkdownSavePath,
   normalizePdfSavePath,
@@ -109,7 +111,7 @@ import {
   writeWritingAssistancePrefs,
 } from "../features/writing-assistance/writingAssistanceSettings";
 import type { SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
-import { setMechanicsUnderlinesVisible, clearProofreadDecorations } from "../features/proofread/mechanicsUnderlineLayer";
+import { setMechanicsUnderlinesVisible } from "../features/proofread/mechanicsUnderlineLayer";
 import {
   grammarDecorationsKey,
   writingAssistanceViewRef,
@@ -196,6 +198,10 @@ function getFolderSegmentsRelativeToRoot(rootPath: string, targetPath: string): 
 
 export function AppShell() {
   const sidebarOverlayLayout = useSidebarOverlayLayoutMode();
+  const isWindowFullscreen = useWindowFullscreen();
+  const workspaceSidebarToggleLeft = isWindowFullscreen
+    ? "0.5rem"
+    : "calc(var(--harvy-traffic-light-inset, 0px) + 0.5rem)";
   const [workspaceRootPath, setWorkspaceRootPath] = useState<string | null>(null);
   const [workspaceTree, setWorkspaceTree] = useState<FileNode | null>(null);
   const [isLoadingTree, setIsLoadingTree] = useState(false);
@@ -266,6 +272,14 @@ export function AppShell() {
     folderRenameRef.current = folderRename;
   }, [folderRename]);
 
+  useEffect(() => {
+    if (!isTauriRuntime() || !isMacOSPlatform()) return;
+    document.documentElement.classList.add("harvy-macos-overlay-titlebar");
+    return () => {
+      document.documentElement.classList.remove("harvy-macos-overlay-titlebar");
+    };
+  }, []);
+
   const [editorVisuallyInactive, setEditorVisuallyInactive] = useState(false);
   const editorFocusSuppressedRef = useRef(false);
   const editorFocusBeforeSaveAsRef = useRef<boolean | null>(null);
@@ -333,12 +347,12 @@ export function AppShell() {
     };
   }, [activeWorkspaceSection, tiptapEditor, saveAsModalOpen]);
 
-  const handleEnableProseChecksChange = useCallback((enableProseChecks: boolean) => {
-    setWritingAssistancePrefs(writeWritingAssistancePrefs({ enableProseChecks }));
+  const handleSpellcheckPref = useCallback((spellcheck: boolean) => {
+    setWritingAssistancePrefs(writeWritingAssistancePrefs({ spellcheck }));
   }, []);
 
-  const handleEnableMechanicsChecksChange = useCallback((enableMechanicsChecks: boolean) => {
-    setWritingAssistancePrefs(writeWritingAssistancePrefs({ enableMechanicsChecks }));
+  const handleGrammarChecksPref = useCallback((grammarChecks: boolean) => {
+    setWritingAssistancePrefs(writeWritingAssistancePrefs({ grammarChecks }));
   }, []);
 
   const handleFocusVisibilityPrefChange = useCallback(
@@ -1398,20 +1412,18 @@ export function AppShell() {
       : hasWorkspaceFolder
         ? "Select a tab above or pick a file from your workspace."
         : "Choose a workspace folder to open and save files.");
-  const showProseHighlights =
-    writingAssistancePrefs.enableProseChecks && readabilityPanelOpen && mode === "edit";
-  const showMechanicsUnderlines =
-    writingAssistancePrefs.enableMechanicsChecks && readabilityPanelOpen && mode === "edit";
-  /** Native misspelling underlines: gated with mechanics checks on the Edit tab. */
+  const showReadabilityHighlights = readabilityPanelOpen && mode === "edit";
+  const showMechanicsUnderlines = readabilityPanelOpen && mode === "edit";
+  /** Native misspelling underlines: same gate as grammar highlights (Edit tab + readability rail open + user pref). */
   const showEditModeSpellcheck =
-    writingAssistancePrefs.enableMechanicsChecks && readabilityPanelOpen && mode === "edit";
+    writingAssistancePrefs.spellcheck && readabilityPanelOpen && mode === "edit";
 
   useEffect(() => {
-    writingAssistanceViewRef.showReadabilityHighlights = showProseHighlights;
+    writingAssistanceViewRef.showReadabilityHighlights = showReadabilityHighlights;
     if (!tiptapEditor) return;
     const tr = tiptapEditor.state.tr.setMeta(grammarDecorationsKey, true);
     tiptapEditor.view.dispatch(tr);
-  }, [showProseHighlights, tiptapEditor]);
+  }, [showReadabilityHighlights, tiptapEditor]);
 
   useEffect(() => {
     if (!tiptapEditor) return;
@@ -1422,15 +1434,9 @@ export function AppShell() {
     void ensureHunspellLoaded();
   }, []);
 
-  /** Live rule-based mechanics (Spelling / Grammar / Suggestions) — runs in Edit mode when enabled. */
+  /** Live rule-based mechanics (Spelling / Grammar / Suggestions) — runs in Edit mode regardless of sidebar. */
   useEffect(() => {
     if (!tiptapEditor || mode !== "edit" || !editorEditable) {
-      return;
-    }
-
-    if (!writingAssistancePrefs.enableMechanicsChecks) {
-      setProofreadIssues([]);
-      clearProofreadDecorations(tiptapEditor.view);
       return;
     }
 
@@ -1451,7 +1457,7 @@ export function AppShell() {
       tiptapEditor.off("update", onUpdate);
       if (debounceId) clearTimeout(debounceId);
     };
-  }, [tiptapEditor, mode, editorEditable, writingAssistancePrefs.enableMechanicsChecks]);
+  }, [tiptapEditor, mode, editorEditable]);
   /** TipTap Placeholder extension only renders when the doc is empty; no real document text. */
   const editorPlaceholder = editorEditable ? "Start writing..." : undefined;
   const editorInstanceKey = activeTabId ?? (openTabIds.length === 0 ? "scratch" : "browse");
@@ -1650,16 +1656,15 @@ export function AppShell() {
       onNotesChange={updateActiveDocumentNotes}
       proofreadIssues={proofreadIssues}
       workspaceSection={activeWorkspaceSection}
-      proseChecksEnabled={writingAssistancePrefs.enableProseChecks}
-      mechanicsChecksEnabled={writingAssistancePrefs.enableMechanicsChecks}
     />
   );
 
   const tabBarRow = (
     <div
-      className={`h-8 overflow-hidden transition-[background-color,border-color,box-shadow] duration-500 ease-in-out ${
+      className={`harvy-title-bar-drag h-8 overflow-hidden transition-[background-color,border-color,box-shadow] duration-500 ease-in-out ${
         hideTopBarWhileTyping ? "border-transparent bg-stage shadow-none" : "bg-mist"
       }`}
+      data-tauri-drag-region
     >
       <div
         className={`transition-[opacity,transform] duration-500 ease-in-out ${
@@ -1675,7 +1680,7 @@ export function AppShell() {
           chromeHidden={hideTopBarWhileTyping}
           workspaceSidebarOpen={isWorkspaceSidebarOpen}
           overlayWorkspaceRail={sidebarOverlayLayout}
-          reserveWorkspaceToggleSlot={!isWorkspaceSidebarOpen}
+          isWindowFullscreen={isWindowFullscreen}
         />
       </div>
     </div>
@@ -1742,8 +1747,10 @@ export function AppShell() {
               placeholder={editorPlaceholder}
               isEditable={editorEditable}
               spellcheckEnabled={showEditModeSpellcheck}
-              grammarChecksEnabled={showProseHighlights}
-              showReadabilityHighlights={showProseHighlights}
+              grammarChecksEnabled={
+                writingAssistancePrefs.grammarChecks && readabilityPanelOpen && mode === "edit"
+              }
+              showReadabilityHighlights={showReadabilityHighlights}
               showMechanicsUnderlines={showMechanicsUnderlines}
               workspaceRootPath={workspaceRootPath}
               pickLocalImage={pickLocalImage}
@@ -1889,13 +1896,14 @@ export function AppShell() {
         </div>
       )}
 
-      {/* Same vertical band as OpenWindowsBar (h-8); flex centers the h-8 control like the tab row */}
+      {/* Fixed far-left sidebar toggle — independent of tab navigation shift. */}
       <div
-        className={`pointer-events-none absolute left-2 top-0 z-30 flex h-8 items-center rounded-md px-0.5 transition-[opacity,background-color] duration-500 ease-in-out ${
+        className={`pointer-events-none absolute top-0 z-30 flex h-8 items-center rounded-md px-0.5 transition-[opacity,background-color,left] duration-500 ease-in-out ${
           hideTopBarWhileTyping
             ? "pointer-events-none bg-stage opacity-0"
             : "pointer-events-auto bg-mist/55 opacity-100"
         }`}
+        style={{ left: workspaceSidebarToggleLeft }}
       >
         <ChromeSidebarToggleButton
           icon={PanelLeft}
@@ -1911,10 +1919,12 @@ export function AppShell() {
         onClose={() => setIsSettingsOpen(false)}
         themeMode={themeMode}
         onThemeModeChange={setThemeMode}
-        enableProseChecks={writingAssistancePrefs.enableProseChecks}
-        enableMechanicsChecks={writingAssistancePrefs.enableMechanicsChecks}
-        onEnableProseChecksChange={handleEnableProseChecksChange}
-        onEnableMechanicsChecksChange={handleEnableMechanicsChecksChange}
+        readabilityPanelOpen={readabilityPanelOpen}
+        onReadabilityPanelChange={setReadabilityPanelOpen}
+        spellcheckEnabled={writingAssistancePrefs.spellcheck}
+        grammarChecksEnabled={writingAssistancePrefs.grammarChecks}
+        onSpellcheckChange={handleSpellcheckPref}
+        onGrammarChecksChange={handleGrammarChecksPref}
         focusVisibilityPrefs={focusVisibilityPrefs}
         onFocusVisibilityPrefChange={handleFocusVisibilityPrefChange}
         enableCollect={enableCollect}

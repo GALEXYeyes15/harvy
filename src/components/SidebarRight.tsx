@@ -37,8 +37,6 @@ export type SidebarRightProps = {
   onNotesChange: (value: string) => void;
   proofreadIssues?: ProofreadIssue[];
   workspaceSection?: WorkspaceSection;
-  proseChecksEnabled?: boolean;
-  mechanicsChecksEnabled?: boolean;
 };
 
 function SidebarToolsTab({
@@ -131,25 +129,14 @@ function SectionLabel({ text }: { text: string }) {
   return <p className="mb-[10px] text-[11px] font-medium uppercase tracking-[0.1em] text-muted/70">{text}</p>;
 }
 
-function StatValue({ enabled, value }: { enabled: boolean; value: ReactNode }) {
-  if (!enabled) {
-    return <span className="text-muted/45">—</span>;
-  }
-  return value;
-}
-
 function EditSidebarView({
   stats,
   selectedWordCount,
   proofreadIssues = [],
-  proseChecksEnabled = true,
-  mechanicsChecksEnabled = true,
 }: {
   stats: EditorStats;
   selectedWordCount: number | null;
   proofreadIssues?: ProofreadIssue[];
-  proseChecksEnabled?: boolean;
-  mechanicsChecksEnabled?: boolean;
 }) {
   const spellings = proofreadIssues.filter((i) => i.type === "spelling").length;
   const grammar = proofreadIssues.filter((i) => i.type === "grammar").length;
@@ -192,15 +179,15 @@ function EditSidebarView({
         <div className={COMPACT_ROWS_GAP}>
           <StatRow
             label={<LabelAccent text="Adverbs / Hedging" colorHex="#8b5cf6" />}
-            value={<StatValue enabled={proseChecksEnabled} value={stats.adverbs} />}
+            value={stats.adverbs}
           />
           <StatRow
             label={<LabelAccent text="Passive Voice" colorHex="#2fbf71" />}
-            value={<StatValue enabled={proseChecksEnabled} value={stats.passiveVoiceSentences} />}
+            value={stats.passiveVoiceSentences}
           />
           <StatRow
             label={<LabelAccent text="Complex Sentences" colorHex="#f08c2e" />}
-            value={<StatValue enabled={proseChecksEnabled} value={stats.complexSentences} />}
+            value={stats.complexSentences}
           />
         </div>
 
@@ -209,17 +196,11 @@ function EditSidebarView({
         <SectionLabel text="Mechanics" />
 
         <div className={COMPACT_ROWS_GAP}>
-          <StatRow
-            label={<ProofreadLabelAccent text="Spellings" type="spelling" />}
-            value={<StatValue enabled={mechanicsChecksEnabled} value={spellings} />}
-          />
-          <StatRow
-            label={<ProofreadLabelAccent text="Grammar" type="grammar" />}
-            value={<StatValue enabled={mechanicsChecksEnabled} value={grammar} />}
-          />
+          <StatRow label={<ProofreadLabelAccent text="Spellings" type="spelling" />} value={spellings} />
+          <StatRow label={<ProofreadLabelAccent text="Grammar" type="grammar" />} value={grammar} />
           <StatRow
             label={<ProofreadLabelAccent text="Suggestions" type="suggestion" />}
-            value={<StatValue enabled={mechanicsChecksEnabled} value={suggestions} />}
+            value={suggestions}
           />
         </div>
       </div>
@@ -236,8 +217,6 @@ export function SidebarRight({
   onNotesChange,
   proofreadIssues = [],
   workspaceSection = "write",
-  proseChecksEnabled = true,
-  mechanicsChecksEnabled = true,
 }: SidebarRightProps) {
   if (workspaceSection === "collect") {
     return (
@@ -278,8 +257,6 @@ export function SidebarRight({
             stats={stats}
             selectedWordCount={selectedWordCount}
             proofreadIssues={proofreadIssues}
-            proseChecksEnabled={proseChecksEnabled}
-            mechanicsChecksEnabled={mechanicsChecksEnabled}
           />
         )}
       </div>

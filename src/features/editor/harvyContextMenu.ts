@@ -249,6 +249,7 @@ export function openHarvyContextMenu(opts: {
   sections: HarvyContextMenuSection[];
   placement?: HarvyContextMenuPlacement;
   onAction?: () => void;
+  className?: string;
 }): void {
   closeHarvyContextMenu();
 
@@ -258,6 +259,9 @@ export function openHarvyContextMenu(opts: {
   ensureHarvyContextMenuMount(mount);
 
   const menuEl = createHarvyContextMenuElement();
+  if (opts.className) {
+    menuEl.classList.add(opts.className);
+  }
   const runAction = (onClick: () => void) => {
     closeHarvyContextMenu();
     onClick();
@@ -266,6 +270,53 @@ export function openHarvyContextMenu(opts: {
   };
 
   appendHarvyContextMenuSections(menuEl, opts.sections, runAction);
+
+  const placement = opts.placement ?? "below-start";
+  placeHarvyContextMenu(menuEl, opts.view, mount, opts.anchor, placement);
+
+  mount.appendChild(menuEl);
+
+  const session: HarvyContextMenuSession = {
+    menuEl,
+    mount,
+    view: opts.view,
+    anchor: opts.anchor,
+    placement,
+    cleanups: [],
+  };
+
+  activeSession = session;
+  attachHarvyContextMenuListeners(session, closeHarvyContextMenu);
+}
+
+export function openHarvyContextMenuPanel(opts: {
+  view: EditorView;
+  anchor: HarvyContextMenuAnchorRange;
+  placement?: HarvyContextMenuPlacement;
+  className?: string;
+  onAction?: () => void;
+  populate: (menuEl: HTMLDivElement, runAction: (onClick: () => void) => void) => void;
+}): void {
+  closeHarvyContextMenu();
+
+  const mount = getHarvyContextMenuMount(opts.view);
+  if (!mount) return;
+
+  ensureHarvyContextMenuMount(mount);
+
+  const menuEl = createHarvyContextMenuElement();
+  if (opts.className) {
+    menuEl.classList.add(opts.className);
+  }
+
+  const runAction = (onClick: () => void) => {
+    closeHarvyContextMenu();
+    onClick();
+    opts.onAction?.();
+    opts.view.focus();
+  };
+
+  opts.populate(menuEl, runAction);
 
   const placement = opts.placement ?? "below-start";
   placeHarvyContextMenu(menuEl, opts.view, mount, opts.anchor, placement);

@@ -61,13 +61,13 @@ function handlePlaceholderTextInput(
   }
 
   const scaffoldHint = (found.node.attrs.writingScaffold as string | null) ?? "";
-  const marks = state.storedMarks || sel.$from.marks();
-  const textNode = state.schema.text(text, marks);
+  const textNode = state.schema.text(text, []);
   const paragraph = paragraphType.create({ harvyRestorableScaffold: scaffoldHint }, Fragment.from(textNode));
 
   const tr = state.tr.replaceWith(found.pos, found.pos + found.node.nodeSize, paragraph);
   const endPos = found.pos + 1 + text.length;
   tr.setSelection(TextSelection.create(tr.doc, endPos));
+  tr.setStoredMarks(null);
   view.dispatch(tr.scrollIntoView());
   return true;
 }
@@ -99,7 +99,6 @@ function handlePlaceholderPaste(
   }
 
   const scaffoldHint = (found.node.attrs.writingScaffold as string | null) ?? "";
-  const marks = state.storedMarks || sel.$from.marks();
 
   let pasted = slice.content.textBetween(0, slice.content.size, "\n", "\n");
   if (!pasted) {
@@ -110,12 +109,13 @@ function handlePlaceholderPaste(
     return false;
   }
 
-  const textNode = state.schema.text(pasted, marks);
+  const textNode = state.schema.text(pasted, []);
   const paragraph = paragraphType.create({ harvyRestorableScaffold: scaffoldHint }, Fragment.from(textNode));
 
   const tr = state.tr.replaceWith(found.pos, found.pos + found.node.nodeSize, paragraph);
   const endPos = found.pos + 1 + pasted.length;
   tr.setSelection(TextSelection.create(tr.doc, endPos));
+  tr.setStoredMarks(null);
   view.dispatch(tr.scrollIntoView().setMeta("paste", true).setMeta("uiEvent", "paste"));
   return true;
 }

@@ -1,11 +1,13 @@
 import type { EditorView } from "@tiptap/pm/view";
 import { focusEditorAtClientCoords } from "./editorCanvasFocus";
 import {
-  addWordToCustomDictionary,
-  ignoreSpellingWordForDocument,
-} from "../proofread/mechanics/spellingDictionary";
-import { getSpellingIssueAtClick, type SpellingPopoverAnchor } from "../proofread/spellingIssueAtClick";
+  getSpellingIssueAtClick,
+  getSpellingIssueAtPointer,
+} from "../proofread/spellingIssueAtClick";
 import { spellingContextMenuRef } from "../proofread/spellingContextMenuRef";
+import { openSpellingSuggestionPopover } from "../proofread/spellingSuggestionPopover";
+import { getMechanicsSuggestionAtPointer } from "../proofread/mechanicsIssueAtClick";
+import { openMechanicsSuggestionPopover } from "../proofread/mechanicsSuggestionPopover";
 import {
   closeHarvyContextMenu,
   openHarvyContextMenu,
@@ -15,27 +17,6 @@ import {
 
 export function removeEditorContextMenu(): void {
   closeHarvyContextMenu();
-}
-
-function resolveMenuAnchor(
-  view: EditorView,
-  event: MouseEvent,
-  spellingAnchor: SpellingPopoverAnchor | null,
-): HarvyContextMenuAnchorRange {
-  const { from, to, empty } = view.state.selection;
-  if (!empty && to > from) {
-    return { from, to };
-  }
-  if (spellingAnchor) {
-    return { from: spellingAnchor.pmFrom, to: spellingAnchor.pmTo };
-  }
-
-  const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
-  if (hit) {
-    return { from: hit.pos, to: hit.pos };
-  }
-
-  return { from, to: from };
 }
 
 function focusViewAtCoords(view: EditorView, clientX: number, clientY: number): void {
@@ -61,14 +42,17 @@ export function openEditorContextMenu(opts: {
   view: EditorView;
   canInsertImage: boolean;
   onInsertImage: () => void | Promise<void>;
-  spellingWord?: string | null;
-  spellingAnchor?: SpellingPopoverAnchor | null;
 }): void {
-  const { event, view, canInsertImage, onInsertImage, spellingWord, spellingAnchor } = opts;
+  const { event, view, canInsertImage, onInsertImage } = opts;
   const { from, to, empty } = view.state.selection;
   const hasSelection = !empty && from !== to;
 
-  const anchor = resolveMenuAnchor(view, event, spellingAnchor ?? null);
+  const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
+  const anchor: HarvyContextMenuAnchorRange = hasSelection
+    ? { from, to }
+    : hit
+      ? { from: hit.pos, to: hit.pos }
+      : { from, to: from };
 
   const sections: HarvyContextMenuSection[] = [
     [
@@ -90,31 +74,51 @@ export function openEditorContextMenu(opts: {
     sections.push([{ label: "Insert image", onClick: () => void onInsertImage() }]);
   }
 
-  if (spellingWord) {
-    sections.push([
-      {
-        label: "Ignore",
-        onClick: () => {
-          ignoreSpellingWordForDocument(spellingWord, spellingContextMenuRef.documentKey);
-          spellingContextMenuRef.onRefresh();
-        },
-      },
-      {
-        label: "Add to Dictionary",
-        onClick: () => {
-          addWordToCustomDictionary(spellingWord);
-          spellingContextMenuRef.onRefresh();
-        },
-      },
-    ]);
-  }
-
   openHarvyContextMenu({
     view,
     anchor,
     sections,
     placement: "below-start",
   });
+}
+
+function openSpellingPopoverAtEvent(
+  view: EditorView,
+  event: MouseEvent,
+  preferSelection: boolean,
+): boolean {
+  if (!spellingContextMenuRef.enabled) return false;
+  const anchor = preferSelection
+    ? getSpellingIssueAtClick(view, event, spellingContextMenuRef.issues)
+    : getSpellingIssueAtPointer(view, event.clientX, event.clientY, spellingContextMenuRef.issues);
+  if (!anchor) return false;
+  openSpellingSuggestionPopover({ view, anchor });
+  return true;
+}
+
+/** Open the spelling suggestion popover when the pointer hits a misspelled word. */
+export function tryOpenSpellingSuggestionPopover(view: EditorView, event: MouseEvent): boolean {
+  if (!shouldOpenEditorContextMenu(event.target, view)) return false;
+  return openSpellingPopoverAtEvent(view, event, false);
+}
+
+function openMechanicsSuggestionAtEvent(view: EditorView, event: MouseEvent): boolean {
+  if (!spellingContextMenuRef.enabled) return false;
+  const anchor = getMechanicsSuggestionAtPointer(
+    view,
+    event.clientX,
+    event.clientY,
+    spellingContextMenuRef.issues,
+  );
+  if (!anchor) return false;
+  openMechanicsSuggestionPopover({ view, anchor });
+  return true;
+}
+
+/** Open the mechanics suggestion popover when the pointer hits a green underline. */
+export function tryOpenMechanicsSuggestionPopover(view: EditorView, event: MouseEvent): boolean {
+  if (!shouldOpenEditorContextMenu(event.target, view)) return false;
+  return openMechanicsSuggestionAtEvent(view, event);
 }
 
 export function handleEditorContextMenuEvent(
@@ -133,11 +137,12 @@ export function handleEditorContextMenuEvent(
     focusViewAtCoords(view, event.clientX, event.clientY);
   }
 
-  let spellingWord: string | null = null;
-  let spellingAnchor: SpellingPopoverAnchor | null = null;
-  if (spellingContextMenuRef.enabled) {
-    spellingAnchor = getSpellingIssueAtClick(view, event, spellingContextMenuRef.issues);
-    spellingWord = spellingAnchor?.word ?? null;
+  if (openSpellingPopoverAtEvent(view, event, opts.placeCaret === false)) {
+    return true;
+  }
+
+  if (openMechanicsSuggestionAtEvent(view, event)) {
+    return true;
   }
 
   openEditorContextMenu({
@@ -145,8 +150,6 @@ export function handleEditorContextMenuEvent(
     view,
     canInsertImage: opts.canInsertImage,
     onInsertImage: opts.onInsertImage,
-    spellingWord,
-    spellingAnchor,
   });
   return true;
 }

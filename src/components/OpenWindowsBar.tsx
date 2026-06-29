@@ -23,8 +23,8 @@ type OpenWindowsBarProps = {
   workspaceSidebarOpen: boolean;
   /** When false (narrow “push” layout), the rail sits in document flow — no left margin on the tab strip. */
   overlayWorkspaceRail?: boolean;
-  /** When the workspace rail is closed, leave room for the floating sidebar toggle (top-left). */
-  reserveWorkspaceToggleSlot?: boolean;
+  /** Fullscreen vs windowed — affects tab nav inset when sidebar is collapsed (toggle is fixed separately). */
+  isWindowFullscreen?: boolean;
 };
 
 export function OpenWindowsBar({
@@ -36,10 +36,15 @@ export function OpenWindowsBar({
   chromeHidden,
   workspaceSidebarOpen,
   overlayWorkspaceRail = true,
-  reserveWorkspaceToggleSlot,
+  isWindowFullscreen = false,
 }: OpenWindowsBarProps) {
-  const chromeLeftPadding =
-    workspaceSidebarOpen ? "pl-2.5" : reserveWorkspaceToggleSlot ? "pl-10" : "pl-2.5";
+  const collapsedNavPadding = isWindowFullscreen
+    ? "2.5rem"
+    : "calc(var(--harvy-traffic-light-inset, 0px) + 2.5rem)";
+
+  const leadingNavPadding = workspaceSidebarOpen
+    ? "var(--harvy-workspace-chrome-gutter)"
+    : collapsedNavPadding;
 
   const goPrevTab = useCallback(() => {
     if (tabs.length === 0) return;
@@ -72,11 +77,15 @@ export function OpenWindowsBar({
       }`}
     >
       <header
-        className={`relative flex h-8 w-full min-w-0 shrink-0 flex-row items-stretch ${RAIL_AND_CHROME_BG} ${
+        className={`harvy-title-bar-drag relative flex h-8 w-full min-w-0 shrink-0 flex-row items-stretch ${RAIL_AND_CHROME_BG} ${
           chromeHidden ? "bg-stage" : "bg-mist"
         } ${overlayWorkspaceRail && workspaceSidebarOpen ? "ml-[260px]" : "ml-0"}`}
+        data-tauri-drag-region
       >
-        <div className={`flex h-full shrink-0 items-stretch gap-px ${LEADING_PAD_SYNC} ${chromeLeftPadding}`}>
+        <div
+          className={`flex h-full shrink-0 items-stretch gap-px ${LEADING_PAD_SYNC}`}
+          style={{ paddingLeft: leadingNavPadding }}
+        >
           <button
             type="button"
             className={TAB_NAV_BTN}

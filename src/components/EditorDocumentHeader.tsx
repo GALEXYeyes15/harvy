@@ -61,8 +61,11 @@ export function EditorDocumentHeader({
   const pendingCaretIndexRef = useRef<number | null>(null);
   const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const chromeLeftPadding =
-    workspaceSidebarOpen ? "pl-2.5" : reserveWorkspaceToggleSlot ? "pl-10" : "pl-2.5";
+  const chromeLeftPadding = workspaceSidebarOpen
+    ? "pl-[calc(var(--harvy-traffic-light-inset,0px)+0.625rem)]"
+    : reserveWorkspaceToggleSlot
+      ? "pl-[calc(var(--harvy-traffic-light-inset,0px)+2.5rem)]"
+      : "pl-[calc(var(--harvy-traffic-light-inset,0px)+0.625rem)]";
 
   const railShift = `transition-[margin-left] duration-500 ease-in-out ${
     overlayWorkspaceRail && workspaceSidebarOpen ? "ml-[260px]" : "ml-0"

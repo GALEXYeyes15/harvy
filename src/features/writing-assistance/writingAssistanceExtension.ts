@@ -72,7 +72,7 @@ function buildDecorationSet(doc: ProseMirrorNode): DecorationSet {
   let debugSentence = false;
   let debugDocPassiveHitCount = 0;
 
-  if (writingPrefsRef.enableProseChecks) {
+  if (writingPrefsRef.grammarChecks) {
     const docPlain = doc.textContent ?? "";
     debugSentence =
       import.meta.env.DEV &&
@@ -126,22 +126,20 @@ function buildDecorationSet(doc: ProseMirrorNode): DecorationSet {
     });
   }
 
-  if (writingPrefsRef.enableProseChecks) {
-    const sentenceMetrics = collectSentenceComplexityDecorationsForDoc(doc);
-    for (const deco of sentenceMetrics.decorations) {
-      const pieces = subtractRanges({ from: deco.from, to: deco.to }, proseHighlightRanges);
-      for (const piece of pieces) {
-        if (piece.from >= piece.to) continue;
-        decos.push(cloneInlineDecoration(deco, piece.from, piece.to));
-      }
+  const sentenceMetrics = collectSentenceComplexityDecorationsForDoc(doc);
+  for (const deco of sentenceMetrics.decorations) {
+    const pieces = subtractRanges({ from: deco.from, to: deco.to }, proseHighlightRanges);
+    for (const piece of pieces) {
+      if (piece.from >= piece.to) continue;
+      decos.push(cloneInlineDecoration(deco, piece.from, piece.to));
     }
-    if (import.meta.env.DEV && showEdit) {
-      // eslint-disable-next-line no-console
-      console.log("[HarvySentenceComplexity]", {
-        complexSentences: sentenceMetrics.complexCount,
-        totalSentenceDecorations: sentenceMetrics.decorations.length,
-      });
-    }
+  }
+  if (import.meta.env.DEV && showEdit) {
+    // eslint-disable-next-line no-console
+    console.log("[HarvySentenceComplexity]", {
+      complexSentences: sentenceMetrics.complexCount,
+      totalSentenceDecorations: sentenceMetrics.decorations.length,
+    });
   }
 
   if (debugSentence) {
@@ -190,7 +188,7 @@ export const WritingAssistance = Extension.create({
                 "[data-harvy-grammar]",
               ) as HTMLElement | null;
               if (!el || !view.dom.contains(el)) return false;
-              if (!writingPrefsRef.enableProseChecks || !writingAssistanceViewRef.showReadabilityHighlights) {
+              if (!writingPrefsRef.grammarChecks || !writingAssistanceViewRef.showReadabilityHighlights) {
                 return false;
               }
 

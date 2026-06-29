@@ -54,7 +54,8 @@ export function mechanicsHitToProofreadIssue(text: string, hit: MechanicsRuleHit
   return {
     type: hit.category,
     text: slice,
-    suggestion: replacement && replacement.length > 0 ? replacement : hit.message,
+    message: hit.message,
+    ...(replacement && replacement.length > 0 ? { suggestion: replacement } : {}),
     start: hit.start,
     end: hit.end,
   };
