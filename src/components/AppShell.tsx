@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import type { Editor } from "@tiptap/core";
-import { PanelLeft } from "lucide-react";
+import { PanelLeft, PanelRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   readStoredThemeMode,
@@ -45,6 +45,7 @@ import type { EditorCommand } from "../features/editor/commands";
 import { documentTextForStats, ingestTextFileContent } from "../features/editor/documentMarkdown";
 import { setFileMenuHandlers } from "../features/menu/fileMenuBridge";
 import { setupNativeAppMenu } from "../features/menu/setupNativeAppMenu";
+import { setupWindowDragRegions } from "../features/window/setupWindowDragRegions";
 import { visuallyDeactivateEditor } from "../features/editor/editorCanvasFocus";
 import { runEditorFormat, type LinkFormatOptions } from "../features/editor/editorFormatActions";
 import { calculateEditorStats } from "../features/editor/stats";
@@ -643,6 +644,8 @@ export function AppShell() {
     scratchDraftContent,
     scratchLastSavedContent,
   ]);
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
 
   const editorEditable = Boolean(activeDocument) || openTabIds.length === 0;
 
@@ -1112,23 +1115,37 @@ export function AppShell() {
     void setupNativeAppMenu().catch((err) => console.error("Native app menu:", err));
   }, []);
 
+  useEffect(() => setupWindowDragRegions(), []);
+
   useEffect(() => {
     if (!isTauriRuntime()) return;
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
     void (async () => {
-      unlisten = await getCurrentWindow().onCloseRequested(async (event) => {
-        if (!isDirty) return;
-        const ok = await confirm("Discard unsaved changes and close the window?", {
-          title: "Harvy",
-          kind: "warning",
+      try {
+        unlisten = await getCurrentWindow().onCloseRequested(async (event) => {
+          if (!isDirtyRef.current) return;
+          try {
+            const ok = await confirm("Discard unsaved changes and close the window?", {
+              title: "Harvy",
+              kind: "warning",
+            });
+            if (!ok) event.preventDefault();
+          } catch (err) {
+            // Keep the window open if the confirm dialog fails.
+            console.error("Close confirmation failed:", err);
+            event.preventDefault();
+          }
         });
-        if (!ok) event.preventDefault();
-      });
+      } catch (err) {
+        if (!cancelled) console.error("Failed to listen for window close:", err);
+      }
     })();
     return () => {
+      cancelled = true;
       unlisten?.();
     };
-  }, [isDirty]);
+  }, []);
 
   useEffect(() => {
     if (isTauriRuntime()) return;
@@ -1664,7 +1681,7 @@ export function AppShell() {
       className={`harvy-title-bar-drag h-8 overflow-hidden transition-[background-color,border-color,box-shadow] duration-500 ease-in-out ${
         hideTopBarWhileTyping ? "border-transparent bg-stage shadow-none" : "bg-mist"
       }`}
-      data-tauri-drag-region
+      data-harvy-window-drag
     >
       <div
         className={`transition-[opacity,transform] duration-500 ease-in-out ${
@@ -1702,8 +1719,6 @@ export function AppShell() {
         isWindowFullscreen={isWindowFullscreen}
         readabilityPanelOpen={readabilityPanelOpen}
         titleHidden={hideDocumentTitleWhileTyping}
-        chromeButtonsHidden={hideTopBarWhileTyping}
-        onToggleReadabilityPanel={() => setReadabilityPanelOpen((v) => !v)}
         titleRenameEnabled={titleRenameEnabled}
         onCommitDocumentTitle={commitActiveDocumentTitleRename}
       />
@@ -1896,12 +1911,9 @@ export function AppShell() {
         </div>
       )}
 
-      {/* Fixed far-left sidebar toggle — independent of tab navigation shift. */}
       <div
         className={`pointer-events-none absolute top-0 z-30 flex h-8 items-center rounded-md px-0.5 transition-[opacity,background-color,left] duration-500 ease-in-out ${
-          hideTopBarWhileTyping
-            ? "pointer-events-none bg-stage opacity-0"
-            : "pointer-events-auto bg-mist/55 opacity-100"
+          hideTopBarWhileTyping ? "bg-stage opacity-0" : "bg-mist/55 opacity-100"
         }`}
         style={{ left: workspaceSidebarToggleLeft }}
       >
@@ -1912,6 +1924,23 @@ export function AppShell() {
           ariaLabelOpen="Hide sidebar"
           ariaLabelClosed="Show sidebar"
         />
+      </div>
+
+      {/* Right tools-panel toggle — window-shell anchored so Notes / layout changes never shift it. */}
+      <div
+        className={`pointer-events-none absolute top-8 right-2 z-30 flex h-[2.125rem] items-center transition-opacity duration-500 ease-in-out ${
+          hideTopBarWhileTyping ? "opacity-0" : "opacity-100"
+        }`}
+      >
+        <div className="pointer-events-auto shrink-0">
+          <ChromeSidebarToggleButton
+            icon={PanelRight}
+            open={readabilityPanelOpen}
+            onClick={() => setReadabilityPanelOpen((v) => !v)}
+            ariaLabelOpen="Hide tools panel"
+            ariaLabelClosed="Show tools panel"
+          />
+        </div>
       </div>
 
       <SettingsModal

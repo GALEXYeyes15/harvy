@@ -1,7 +1,5 @@
-import { PanelRight } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { documentTitlePaddingLeft } from "../features/chrome/tabNavChromeInsets";
-import { ChromeSidebarToggleButton } from "./ChromeSidebarToggleButton";
 
 type EditorDocumentHeaderProps = {
   /** Basename only (no extension) for display and rename. */
@@ -14,9 +12,6 @@ type EditorDocumentHeaderProps = {
   readabilityPanelOpen: boolean;
   /** Hide document title row during distraction-free typing mode. */
   titleHidden?: boolean;
-  /** Hide sidebar toggle chrome during distraction-free typing mode. */
-  chromeButtonsHidden?: boolean;
-  onToggleReadabilityPanel: () => void;
   /** When true, title is clickable for inline rename (commit may update disk or in-memory title only). */
   titleRenameEnabled: boolean;
   /** Persist new basename; return true on success. */
@@ -50,8 +45,6 @@ export function EditorDocumentHeader({
   isWindowFullscreen = false,
   readabilityPanelOpen,
   titleHidden = false,
-  chromeButtonsHidden,
-  onToggleReadabilityPanel,
   titleRenameEnabled,
   onCommitDocumentTitle,
 }: EditorDocumentHeaderProps) {
@@ -263,22 +256,6 @@ export function EditorDocumentHeader({
               {documentDirty ? <span className="shrink-0 italic text-muted/52">(Unsaved)</span> : null}
             </div>
           </div>
-        </div>
-      </div>
-
-      <div
-        className={`pointer-events-none absolute inset-y-0 right-0 z-30 flex items-center pr-2 transition-opacity duration-500 ease-in-out ${
-          chromeButtonsHidden ? "opacity-0" : "opacity-100"
-        }`}
-      >
-        <div className="pointer-events-auto shrink-0">
-          <ChromeSidebarToggleButton
-            icon={PanelRight}
-            open={readabilityPanelOpen}
-            onClick={onToggleReadabilityPanel}
-            ariaLabelOpen="Hide tools panel"
-            ariaLabelClosed="Show tools panel"
-          />
         </div>
       </div>
     </div>

@@ -145,7 +145,7 @@ export function SidebarLeft({
   return (
     <aside className="flex h-full min-h-0 w-full flex-col self-stretch bg-stage">
       {/* Same vertical band as the global sidebar toggle (h-8); keeps header copy below the control */}
-      <div className="pointer-events-none h-8 w-full shrink-0" aria-hidden />
+      <div className="h-8 w-full shrink-0" data-harvy-window-drag aria-hidden />
 
       <div className="flex shrink-0 flex-col items-stretch pb-3 pl-[var(--harvy-sidebar-content-inset)] pr-2.5 pt-1">
         <p className={OVERLINE}>Workspace</p>

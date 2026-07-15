@@ -80,18 +80,13 @@
     --harvy-traffic-light-inset: 78px;
   }
 
-  .harvy-title-bar-drag,
-  [data-tauri-drag-region] {
-    -webkit-app-region: drag;
-  }
-
-  .harvy-title-bar-drag button,
-  .harvy-title-bar-drag a,
-  .harvy-title-bar-drag input,
-  [data-tauri-drag-region] button,
-  [data-tauri-drag-region] a,
-  [data-tauri-drag-region] input {
-    -webkit-app-region: no-drag;
+  /*
+   * Do not use -webkit-app-region with Tauri Overlay titlebars.
+   * WebKit’s CSS drag region conflicts with Overlay + Tauri’s JS
+   * data-tauri-drag-region → start_dragging path on macOS.
+   */
+  .harvy-title-bar-drag {
+    user-select: none;
   }
 
   /* Main writing surface — Baskerville / Libre Baskerville stack */

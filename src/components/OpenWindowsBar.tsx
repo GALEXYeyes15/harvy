@@ -70,16 +70,19 @@ export function OpenWindowsBar({
       className={`flex min-w-0 shrink-0 flex-col transition-colors duration-500 ease-in-out ${
         chromeHidden ? "bg-stage" : "bg-mist"
       }`}
+      data-harvy-window-drag
     >
       <header
         className={`harvy-title-bar-drag relative flex h-8 w-full min-w-0 shrink-0 flex-row items-stretch ${RAIL_AND_CHROME_BG} ${
           chromeHidden ? "bg-stage" : "bg-mist"
         } ${overlayWorkspaceRail && workspaceSidebarOpen ? "ml-[260px]" : "ml-0"}`}
-        data-tauri-drag-region
+        data-harvy-window-drag
       >
+        {/* Padding box is itself the drag target for the gap left of the arrows. */}
         <div
           className={`flex h-full shrink-0 items-stretch gap-px ${LEADING_PAD_SYNC}`}
           style={{ paddingLeft: leadingNavPadding }}
+          data-harvy-window-drag
         >
           <button
             type="button"
@@ -100,70 +103,74 @@ export function OpenWindowsBar({
             <ChevronRight size={15} strokeWidth={1.5} aria-hidden />
           </button>
         </div>
-        <div className="flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-visible overscroll-x-contain whitespace-nowrap [mask-image:linear-gradient(90deg,#000_0%,#000_calc(100%-1rem),transparent)] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-          <div
-            className="relative flex h-full min-h-0 min-w-0 flex-nowrap items-stretch gap-px pb-0 pl-1 pr-2 pt-0"
-            role="tablist"
-            aria-label="Open pages"
-          >
-            {tabs.map((item) => {
-              const active = item.id === activeTabId;
-              return (
-                <div
-                  key={item.id}
-                  className={
-                    active
-                      ? "group relative z-10 box-border flex w-[160px] shrink-0 items-stretch rounded-t-none rounded-b-none bg-stage px-0"
-                      : "group relative z-0 flex w-[160px] shrink-0 items-stretch rounded-none bg-transparent text-muted/40 transition-colors hover:bg-ink/[0.03] hover:text-muted/65"
-                  }
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    id={`harvy-tab-${item.id}`}
-                    onClick={() => onSelectTab(item.id)}
+
+        {/* Trailing empty flex space is the drag target for the right side of the bar. */}
+        <div className="flex min-h-0 min-w-0 flex-1 items-stretch" data-harvy-window-drag>
+          <div className="h-full max-w-full min-w-0 overflow-x-auto overflow-y-visible overscroll-x-contain whitespace-nowrap [mask-image:linear-gradient(90deg,#000_0%,#000_calc(100%-1rem),transparent)] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <div
+              className="relative flex h-full w-max min-h-0 min-w-0 flex-nowrap items-stretch gap-px pb-0 pl-1 pr-2 pt-0"
+              role="tablist"
+              aria-label="Open pages"
+            >
+              {tabs.map((item) => {
+                const active = item.id === activeTabId;
+                return (
+                  <div
+                    key={item.id}
                     className={
                       active
-                        ? "min-w-0 flex-1 overflow-hidden px-2 py-0.5 text-left text-[11px] font-medium leading-tight text-ink/92"
-                        : "min-w-0 flex-1 overflow-hidden px-2 py-0.5 text-left text-[11px] font-normal leading-tight"
+                        ? "group relative z-10 box-border flex w-[160px] shrink-0 items-stretch rounded-t-none rounded-b-none bg-stage px-0"
+                        : "group relative z-0 flex w-[160px] shrink-0 items-stretch rounded-none bg-transparent text-muted/40 transition-colors hover:bg-ink/[0.03] hover:text-muted/65"
                     }
                   >
-                    <span className="inline-flex min-w-0 items-center gap-1">
-                      <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                      {item.isDirty ? (
-                        <span className="shrink-0 text-muted/70" aria-label="Unsaved changes">
-                          •
-                        </span>
-                      ) : null}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Close ${item.title}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onCloseTab(item.id);
-                    }}
-                    className={`-ml-0.5 shrink-0 rounded px-1 py-0.5 text-[12px] leading-none transition hover:bg-ink/[0.06] ${
-                      active
-                        ? "text-muted/55 opacity-90 hover:text-ink/80 group-hover:opacity-100"
-                        : "text-muted/40 opacity-0 hover:text-muted/65 group-hover:opacity-100"
-                    }`}
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })}
-            <button
-              type="button"
-              aria-label="Create new page"
-              onClick={onCreateTab}
-              className="flex w-8 shrink-0 items-center justify-center text-[15px] leading-none text-muted/55 transition-colors hover:bg-ink/[0.04] hover:text-ink/80"
-            >
-              +
-            </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      id={`harvy-tab-${item.id}`}
+                      onClick={() => onSelectTab(item.id)}
+                      className={
+                        active
+                          ? "min-w-0 flex-1 overflow-hidden px-2 py-0.5 text-left text-[11px] font-medium leading-tight text-ink/92"
+                          : "min-w-0 flex-1 overflow-hidden px-2 py-0.5 text-left text-[11px] font-normal leading-tight"
+                      }
+                    >
+                      <span className="inline-flex min-w-0 items-center gap-1">
+                        <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                        {item.isDirty ? (
+                          <span className="shrink-0 text-muted/70" aria-label="Unsaved changes">
+                            •
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Close ${item.title}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCloseTab(item.id);
+                      }}
+                      className={`-ml-0.5 shrink-0 rounded px-1 py-0.5 text-[12px] leading-none transition hover:bg-ink/[0.06] ${
+                        active
+                          ? "text-muted/55 opacity-90 hover:text-ink/80 group-hover:opacity-100"
+                          : "text-muted/40 opacity-0 hover:text-muted/65 group-hover:opacity-100"
+                      }`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+              <button
+                type="button"
+                aria-label="Create new page"
+                onClick={onCreateTab}
+                className="flex w-8 shrink-0 items-center justify-center text-[15px] leading-none text-muted/55 transition-colors hover:bg-ink/[0.04] hover:text-ink/80"
+              >
+                +
+              </button>
+            </div>
           </div>
         </div>
       </header>
