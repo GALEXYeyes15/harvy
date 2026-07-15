@@ -46,6 +46,12 @@ import { documentTextForStats, ingestTextFileContent } from "../features/editor/
 import { setFileMenuHandlers } from "../features/menu/fileMenuBridge";
 import { setupNativeAppMenu } from "../features/menu/setupNativeAppMenu";
 import { setupWindowDragRegions } from "../features/window/setupWindowDragRegions";
+import {
+  emitNotesPopoutState,
+  listenNotesPopoutRequest,
+  listenNotesPopoutUpdate,
+  toggleNotesPopoutWindow,
+} from "../features/notes/notesPopout";
 import { visuallyDeactivateEditor } from "../features/editor/editorCanvasFocus";
 import { runEditorFormat, type LinkFormatOptions } from "../features/editor/editorFormatActions";
 import { calculateEditorStats } from "../features/editor/stats";
@@ -1404,6 +1410,63 @@ export function AppShell() {
     ? documentTitleBaseFromSaveAsFileName(saveAsLiveFileName)
     : splitFileBaseAndExtension(editorTitle).base || "Untitled";
 
+  /** Inline rename draft so Notes pop-out can follow typing before commit. */
+  const [titleRenameDraft, setTitleRenameDraft] = useState<string | null>(null);
+  const notesDocumentTitle =
+    titleRenameDraft !== null
+      ? titleRenameDraft.trim() || "Untitled"
+      : editorTitleBase.trim() || "Untitled";
+
+  useEffect(() => {
+    setTitleRenameDraft(null);
+  }, [activeTabId]);
+
+  const activeNotes = activeDocument?.notes ?? "";
+  const notesPopoutSyncRef = useRef({
+    notes: "",
+    documentTitle: "Untitled",
+    applyNotes: (_value: string) => {},
+  });
+  notesPopoutSyncRef.current = {
+    notes: activeNotes,
+    documentTitle: notesDocumentTitle,
+    applyNotes: updateActiveDocumentNotes,
+  };
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void emitNotesPopoutState({
+      notes: activeNotes,
+      documentTitle: notesDocumentTitle,
+    });
+  }, [activeNotes, notesDocumentTitle, activeTabId]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let unlistenUpdate: (() => void) | undefined;
+    let unlistenRequest: (() => void) | undefined;
+    void (async () => {
+      try {
+        unlistenUpdate = await listenNotesPopoutUpdate((payload) => {
+          notesPopoutSyncRef.current.applyNotes(payload.notes);
+        });
+        unlistenRequest = await listenNotesPopoutRequest(() => {
+          const snap = notesPopoutSyncRef.current;
+          void emitNotesPopoutState({
+            notes: snap.notes,
+            documentTitle: snap.documentTitle,
+          });
+        });
+      } catch (err) {
+        console.error("Notes pop-out listeners failed:", err);
+      }
+    })();
+    return () => {
+      unlistenUpdate?.();
+      unlistenRequest?.();
+    };
+  }, []);
+
   useEffect(() => {
     savePersistedCollectItems(collectItems);
   }, [collectItems]);
@@ -1669,8 +1732,14 @@ export function AppShell() {
       mode={mode}
       onModeChange={setMode}
       selectedWordCount={selectedWordCount}
-      notes={activeDocument?.notes ?? ""}
+      notes={activeNotes}
       onNotesChange={updateActiveDocumentNotes}
+      onToggleNotesPopout={() => {
+        void toggleNotesPopoutWindow().catch((err) => {
+          console.error("Notes pop-out failed:", err);
+          window.alert(err instanceof Error ? err.message : String(err));
+        });
+      }}
       proofreadIssues={proofreadIssues}
       workspaceSection={activeWorkspaceSection}
     />
@@ -1721,6 +1790,7 @@ export function AppShell() {
         titleHidden={hideDocumentTitleWhileTyping}
         titleRenameEnabled={titleRenameEnabled}
         onCommitDocumentTitle={commitActiveDocumentTitleRename}
+        onTitleDraftChange={setTitleRenameDraft}
       />
     </div>
   );

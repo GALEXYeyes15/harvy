@@ -16,6 +16,8 @@ type EditorDocumentHeaderProps = {
   titleRenameEnabled: boolean;
   /** Persist new basename; return true on success. */
   onCommitDocumentTitle: (base: string) => Promise<boolean>;
+  /** Live draft while renaming (`null` when not editing) — keeps Notes pop-out title in sync. */
+  onTitleDraftChange?: (draftBase: string | null) => void;
 };
 
 const TITLE_EMPHASIS = "text-ink/88";
@@ -47,6 +49,7 @@ export function EditorDocumentHeader({
   titleHidden = false,
   titleRenameEnabled,
   onCommitDocumentTitle,
+  onTitleDraftChange,
 }: EditorDocumentHeaderProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [draftTitle, setDraftTitle] = useState(documentTitleBase);
@@ -67,6 +70,10 @@ export function EditorDocumentHeader({
   useEffect(() => {
     setDraftTitle(documentTitleBase);
   }, [documentTitleBase]);
+
+  useEffect(() => {
+    onTitleDraftChange?.(isEditingTitle ? draftTitle : null);
+  }, [isEditingTitle, draftTitle, onTitleDraftChange]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;

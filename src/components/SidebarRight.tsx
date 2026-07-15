@@ -35,6 +35,8 @@ export type SidebarRightProps = {
   selectedWordCount: number | null;
   notes: string;
   onNotesChange: (value: string) => void;
+  /** Toggle the separate Notes pop-out window. */
+  onToggleNotesPopout?: () => void;
   proofreadIssues?: ProofreadIssue[];
   workspaceSection?: WorkspaceSection;
 };
@@ -215,6 +217,7 @@ export function SidebarRight({
   selectedWordCount,
   notes,
   onNotesChange,
+  onToggleNotesPopout,
   proofreadIssues = [],
   workspaceSection = "write",
 }: SidebarRightProps) {
@@ -225,7 +228,11 @@ export function SidebarRight({
           id="harvy-tools-panel"
           className="flex min-h-0 flex-1 flex-col overflow-hidden px-7 pb-8 pt-3"
         >
-          <NotesSidebarPanel notes={notes} onNotesChange={onNotesChange} />
+          <NotesSidebarPanel
+            notes={notes}
+            onNotesChange={onNotesChange}
+            onTogglePopout={onToggleNotesPopout}
+          />
         </div>
       </div>
     );
@@ -251,7 +258,11 @@ export function SidebarRight({
         aria-labelledby={`harvy-sidebar-tab-${mode}`}
       >
         {mode === "notes" ? (
-          <NotesSidebarPanel notes={notes} onNotesChange={onNotesChange} />
+          <NotesSidebarPanel
+            notes={notes}
+            onNotesChange={onNotesChange}
+            onTogglePopout={onToggleNotesPopout}
+          />
         ) : (
           <EditSidebarView
             stats={stats}

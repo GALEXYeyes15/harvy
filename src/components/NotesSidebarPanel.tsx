@@ -1,13 +1,32 @@
+import { SquareArrowOutUpRight } from "lucide-react";
+
 type NotesSidebarPanelProps = {
   notes: string;
   onNotesChange: (value: string) => void;
+  /** Open / close the centered majority-screen Notes window. */
+  onTogglePopout?: () => void;
 };
 
-export function NotesSidebarPanel({ notes, onNotesChange }: NotesSidebarPanelProps) {
+export function NotesSidebarPanel({
+  notes,
+  onNotesChange,
+  onTogglePopout,
+}: NotesSidebarPanelProps) {
   return (
     <div className="flex flex-col">
-      <header className="flex items-baseline justify-between gap-4">
+      <header className="flex items-center gap-2">
         <h2 className="text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-ink">Notes</h2>
+        {onTogglePopout ? (
+          <button
+            type="button"
+            onClick={onTogglePopout}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted/55 transition-colors hover:bg-ink/[0.06] hover:text-ink/85"
+            aria-label="Open notes in a separate window"
+            title="Open notes in a separate window"
+          >
+            <SquareArrowOutUpRight size={15} strokeWidth={1.5} aria-hidden />
+          </button>
+        ) : null}
       </header>
 
       <label htmlFor="harvy-document-notes" className="sr-only">
