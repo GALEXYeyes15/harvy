@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Harvy</title>
+    <script>
+      (function () {
+        try {
+          var mode = localStorage.getItem("harvy-theme");
+          var systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var resolved =
+            mode === "light" || mode === "dark" || mode === "cyber"
+              ? mode
+              : systemDark
+                ? "dark"
+                : "light";
+          var root = document.documentElement;
+          root.dataset.theme = resolved;
+          root.classList.toggle("dark", resolved === "dark" || resolved === "cyber");
+          root.classList.toggle("cyber", resolved === "cyber");
+        } catch (_) {}
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

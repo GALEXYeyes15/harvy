@@ -29,6 +29,11 @@ export type CenteredOverlayModalProps = {
   /** Optional line shown under the title in the header. */
   subtitle?: ReactNode;
   zIndexClass?: string;
+  /**
+   * When true, Escape closes this modal in the capture phase and stops other
+   * listeners — use for overlays stacked above another modal (e.g. Settings).
+   */
+  escapeCapture?: boolean;
   children: ReactNode;
 };
 
@@ -48,6 +53,7 @@ export function CenteredOverlayModal({
   showHeaderClose = true,
   subtitle,
   zIndexClass = "z-[200]",
+  escapeCapture = false,
   children,
 }: CenteredOverlayModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -64,11 +70,15 @@ export function CenteredOverlayModal({
     if (previouslyFocusedRef.current === null) {
       previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
     }
-    document.body.style.overflow = "hidden";
+    const shouldLockScroll = !escapeCapture;
+    if (shouldLockScroll) {
+      document.body.style.overflow = "hidden";
+    }
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
+        if (escapeCapture) e.stopImmediatePropagation();
         handleClose();
         return;
       }
@@ -95,7 +105,7 @@ export function CenteredOverlayModal({
       }
     };
 
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, escapeCapture);
     if (autoFocusCloseButton && showHeaderClose) {
       requestAnimationFrame(() => {
         closeButtonRef.current?.focus();
@@ -103,10 +113,12 @@ export function CenteredOverlayModal({
     }
 
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = "";
+      document.removeEventListener("keydown", onKeyDown, escapeCapture);
+      if (shouldLockScroll) {
+        document.body.style.overflow = "";
+      }
     };
-  }, [open, handleClose, autoFocusCloseButton, showHeaderClose]);
+  }, [open, handleClose, autoFocusCloseButton, showHeaderClose, escapeCapture]);
 
   useEffect(() => {
     if (open) return;

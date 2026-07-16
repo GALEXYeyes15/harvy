@@ -13,6 +13,7 @@ import {
 } from "../theme/themeMode";
 import { AboutModal } from "./settings/AboutModal";
 import { SettingsModal } from "./settings/SettingsModal";
+import { EncouragementToast } from "./EncouragementToast";
 import { SidebarLeft } from "./SidebarLeft";
 import { ChromeSidebarToggleButton } from "./ChromeSidebarToggleButton";
 import { SidebarRight } from "./SidebarRight";
@@ -114,6 +115,11 @@ import {
   readFocusVisibilityPrefs,
   writeFocusVisibilityPrefs,
 } from "../features/editor/focusVisibilitySettings";
+import {
+  readEncouragementPrefs,
+  writeEncouragementPrefs,
+} from "../features/encouragement/encouragementSettings";
+import { useEncouragementScheduler } from "../features/encouragement/useEncouragementScheduler";
 import {
   readWritingAssistancePrefs,
   writeWritingAssistancePrefs,
@@ -259,6 +265,9 @@ export function AppShell() {
 
   const [writingAssistancePrefs, setWritingAssistancePrefs] = useState(readWritingAssistancePrefs);
   const [focusVisibilityPrefs, setFocusVisibilityPrefs] = useState(readFocusVisibilityPrefs);
+  const [encouragementPrefs, setEncouragementPrefs] = useState(readEncouragementPrefs);
+  const { activePhrase: encouragementPhrase, dismiss: dismissEncouragement, showTest: testEncouragement } =
+    useEncouragementScheduler(encouragementPrefs);
 
   const [tiptapEditor, setTiptapEditor] = useState<Editor | null>(null);
   const [selectedWordCount, setSelectedWordCount] = useState<number | null>(null);
@@ -366,6 +375,13 @@ export function AppShell() {
   const handleFocusVisibilityPrefChange = useCallback(
     (partial: Parameters<typeof writeFocusVisibilityPrefs>[0]) => {
       setFocusVisibilityPrefs(writeFocusVisibilityPrefs(partial));
+    },
+    [],
+  );
+
+  const handleEncouragementPrefsChange = useCallback(
+    (partial: Parameters<typeof writeEncouragementPrefs>[0]) => {
+      setEncouragementPrefs(writeEncouragementPrefs(partial));
     },
     [],
   );
@@ -2027,9 +2043,13 @@ export function AppShell() {
         onFocusVisibilityPrefChange={handleFocusVisibilityPrefChange}
         enableCollect={enableCollect}
         onEnableCollectChange={handleEnableCollectChange}
+        encouragementPrefs={encouragementPrefs}
+        onEncouragementPrefsChange={handleEncouragementPrefsChange}
+        onTestEncouragement={testEncouragement}
         workspaceRootPath={workspaceRootPath}
         onChooseWorkspaceFolder={chooseWorkspaceFolder}
       />
+      <EncouragementToast phrase={encouragementPhrase} onDismiss={dismissEncouragement} />
       <SaveAsModal
         open={saveAsModalOpen}
         onClose={closeSaveAsModal}

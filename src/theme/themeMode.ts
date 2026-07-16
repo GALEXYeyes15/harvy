@@ -12,6 +12,7 @@ export function readStoredThemeMode(): ThemeMode {
 }
 
 export function writeStoredThemeMode(mode: ThemeMode) {
+  if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, mode);
 }
 
@@ -29,4 +30,11 @@ export function applyResolvedTheme(resolved: ResolvedTheme) {
   root.dataset.theme = resolved;
   root.classList.toggle("dark", resolved === "dark" || resolved === "cyber");
   root.classList.toggle("cyber", resolved === "cyber");
+}
+
+/** Restore the last-used theme before React paints (avoids a light/dark flash). */
+export function bootStoredTheme() {
+  if (typeof window === "undefined") return;
+  const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  applyResolvedTheme(resolveTheme(readStoredThemeMode(), systemDark));
 }
