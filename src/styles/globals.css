@@ -53,6 +53,42 @@
     color-scheme: dark;
   }
 
+  /* Cyber Mode — void teal surface, neon cyan accents; Inter UI + mono typing. */
+  html.cyber {
+    --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-content: "IBM Plex Mono", ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
+    --color-canvas: #000707;
+    --color-panel: #000707;
+    --color-stage: #000707;
+    --color-mist: #000c0c;
+    --color-page: #001010;
+    --color-ink: #e8ffff;
+    --color-muted: #7dfdfe;
+    --color-line: #7dfdfe33;
+    --color-focus-ring: #7dfdfe;
+    color-scheme: dark;
+  }
+
+  html.cyber ::selection {
+    background: rgb(125 253 254 / 0.28);
+    color: #000707;
+  }
+
+  /* Typing surfaces use the code font; chrome/UI stays Inter. */
+  html.cyber #harvy-document-notes,
+  html.cyber #harvy-notes-popout,
+  html.cyber .editor-content,
+  html.cyber .ProseMirror {
+    font-family: var(--font-content);
+  }
+
+  /* Solid wells for Notes + Search (override translucent canvas utilities). */
+  html.cyber #harvy-document-notes,
+  html.cyber #harvy-notes-popout,
+  html.cyber #harvy-workspace-search {
+    background-color: #001010;
+  }
+
   html {
     font-family: var(--font-ui);
     transition: background-color 0.15s ease-out, color 0.15s ease-out;

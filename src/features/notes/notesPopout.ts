@@ -9,8 +9,10 @@ function stageBackgroundColor(): [number, number, number] {
   const systemDark =
     typeof window !== "undefined" &&
     window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const dark = resolveTheme(readStoredThemeMode(), systemDark) === "dark";
-  return dark ? [26, 26, 26] : [250, 247, 242];
+  const resolved = resolveTheme(readStoredThemeMode(), systemDark);
+  if (resolved === "cyber") return [0, 7, 7]; // #000707
+  if (resolved === "dark") return [26, 26, 26];
+  return [250, 247, 242];
 }
 
 export const NOTES_WINDOW_LABEL = "notes";
@@ -90,7 +92,7 @@ export async function openNotesPopoutWindow(): Promise<void> {
     focus: true,
     resizable: true,
     decorations: true,
-    titleBarStyle: "Overlay",
+    titleBarStyle: "overlay",
     hiddenTitle: true,
     backgroundColor: stageBackgroundColor(),
   });

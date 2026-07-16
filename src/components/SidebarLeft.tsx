@@ -151,6 +151,7 @@ export function SidebarLeft({
         <p className={OVERLINE}>Workspace</p>
         <p className="mt-1.5 truncate text-[15px] font-semibold tracking-tight text-ink">{APP_NAME}</p>
         <input
+          id="harvy-workspace-search"
           type="search"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}

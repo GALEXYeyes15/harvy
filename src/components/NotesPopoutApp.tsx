@@ -7,16 +7,14 @@ import {
 import { isMacOSPlatform, isTauriRuntime } from "../features/save/saveRuntime";
 import { setupWindowDragRegions } from "../features/window/setupWindowDragRegions";
 import {
+  applyResolvedTheme,
   readStoredThemeMode,
   resolveTheme,
   type ThemeMode,
 } from "../theme/themeMode";
 
 function applyTheme(mode: ThemeMode, systemPrefersDark: boolean) {
-  const resolved = resolveTheme(mode, systemPrefersDark);
-  const root = document.documentElement;
-  root.dataset.theme = resolved;
-  root.classList.toggle("dark", resolved === "dark");
+  applyResolvedTheme(resolveTheme(mode, systemPrefersDark));
 }
 
 /**

@@ -168,6 +168,7 @@ function AppearancePanel({
     { id: "light", label: "Light" },
     { id: "dark", label: "Dark" },
     { id: "system", label: "System" },
+    { id: "cyber", label: "Cyber" },
   ];
 
   return (
@@ -179,7 +180,7 @@ function AppearancePanel({
       <div>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">Theme</p>
         <div
-          className="inline-flex rounded-lg bg-mist/90 p-1 dark:bg-ink/[0.04]"
+          className="inline-flex flex-wrap rounded-lg bg-mist/90 p-1 dark:bg-ink/[0.04]"
           role="radiogroup"
           aria-label="Color theme"
         >
@@ -204,7 +205,9 @@ function AppearancePanel({
           })}
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-muted/70">
-          Theme preference is saved in local storage and restored when you reopen Harvy.
+          {themeMode === "cyber"
+            ? "Cyber Mode: #000707 surfaces, cyan accents, Inter chrome, and mono typing. Saved locally."
+            : "Theme preference is saved in local storage and restored when you reopen Harvy."}
         </p>
       </div>
     </div>

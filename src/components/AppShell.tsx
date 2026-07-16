@@ -5,6 +5,7 @@ import type { Editor } from "@tiptap/core";
 import { PanelLeft, PanelRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  applyResolvedTheme,
   readStoredThemeMode,
   resolveTheme,
   writeStoredThemeMode,
@@ -430,9 +431,7 @@ export function AppShell() {
   );
 
   useEffect(() => {
-    const root = document.documentElement;
-    root.dataset.theme = resolvedTheme;
-    root.classList.toggle("dark", resolvedTheme === "dark");
+    applyResolvedTheme(resolvedTheme);
   }, [resolvedTheme]);
 
   useEffect(() => {
