@@ -48,6 +48,7 @@ import { documentTextForStats, ingestTextFileContent } from "../features/editor/
 import { setFileMenuHandlers } from "../features/menu/fileMenuBridge";
 import { setupNativeAppMenu } from "../features/menu/setupNativeAppMenu";
 import { setupWindowDragRegions } from "../features/window/setupWindowDragRegions";
+import { isEditableKeyboardTarget } from "../lib/isEditableKeyboardTarget";
 import {
   emitNotesPopoutState,
   listenNotesPopoutRequest,
@@ -378,6 +379,8 @@ export function AppShell() {
     },
     [],
   );
+
+  const closeSettings = useCallback(() => setIsSettingsOpen(false), []);
 
   const handleEncouragementPrefsChange = useCallback(
     (partial: Parameters<typeof writeEncouragementPrefs>[0]) => {
@@ -1173,10 +1176,10 @@ export function AppShell() {
     const onKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
+      if (isEditableKeyboardTarget(e.target)) return;
       const el = e.target as HTMLElement | null;
       if (el?.closest('[role="dialog"]')) return;
       if (el?.closest("[data-floating-text-menu]")) return;
-      if (el?.closest("input, textarea") && !el.closest("#harvy-editor")) return;
       const k = e.key.toLowerCase();
       if (k === "s") {
         e.preventDefault();
@@ -2030,7 +2033,7 @@ export function AppShell() {
 
       <SettingsModal
         open={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={closeSettings}
         themeMode={themeMode}
         onThemeModeChange={setThemeMode}
         readabilityPanelOpen={readabilityPanelOpen}

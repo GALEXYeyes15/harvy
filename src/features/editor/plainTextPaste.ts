@@ -38,11 +38,17 @@ function plainTextToSlice(schema: Schema, text: string): Slice {
     return new Slice(Fragment.from(schema.text(normalized)), 0, 0);
   }
 
-  const blocks = normalized.split(/\n\n+/);
+  // Do not use /\n\n+/ — that collapses intentional blank lines.
+  const parts = normalized.split("\n\n");
   const nodes: PMNode[] = [];
 
-  for (const block of blocks) {
-    const inline = inlineNodesForLine(schema, block);
+  for (const part of parts) {
+    let rest = part;
+    while (rest.startsWith("\n")) {
+      nodes.push(paragraph.create());
+      rest = rest.slice(1);
+    }
+    const inline = inlineNodesForLine(schema, rest);
     nodes.push(paragraph.create(null, inline.length ? Fragment.from(inline) : undefined));
   }
 

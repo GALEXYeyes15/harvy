@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import type { IncomingMessage } from "node:http";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin } from "vite";
@@ -66,6 +67,11 @@ export default defineConfig(({ mode }) => {
       watch: {
         ignored: ["**/src-tauri/**"],
       },
+    },
+    test: {
+      environment: "jsdom",
+      globals: false,
+      setupFiles: ["./src/test/setup.ts"],
     },
   };
 });

@@ -15,11 +15,44 @@ const markdownIt = new MarkdownIt({
   breaks: true,
 });
 
+/**
+ * Empty TipTap paragraphs serialize as `<p></p>` (sometimes `<p><br></p>`).
+ * Turndown's default blankReplacement collapses those to `\n\n`, and CommonMark
+ * cannot recreate empty paragraphs from extra blank lines alone — so intentional
+ * blank lines vanished on save/reopen. Emit HTML islands instead (same approach
+ * as outline / image blocks).
+ */
+function isEmptyParagraphElement(node: {
+  nodeName: string;
+  textContent?: string | null;
+  querySelector?: (selectors: string) => Element | null;
+}): boolean {
+  if (node.nodeName !== "P") return false;
+  const text = (node.textContent || "").replace(/\u00a0/g, " ").trim();
+  if (text) return false;
+  if (node.querySelector?.("img, figure, video, iframe, object, embed, table")) return false;
+  return true;
+}
+
+function emptyParagraphMarkdownIsland(node: HTMLElement): string {
+  if (node.attributes.length > 0) {
+    return `\n\n${node.outerHTML}\n\n`;
+  }
+  return "\n\n<p></p>\n\n";
+}
+
 const turndown = new TurndownService({
   headingStyle: "atx",
   bulletListMarker: "-",
   codeBlockStyle: "fenced",
   emDelimiter: "*",
+  blankReplacement(_content, node) {
+    if (isEmptyParagraphElement(node)) {
+      return emptyParagraphMarkdownIsland(node as HTMLElement);
+    }
+    const block = node as HTMLElement & { isBlock?: boolean };
+    return block.isBlock ? "\n\n" : "";
+  },
 });
 turndown.use(gfm);
 
@@ -39,7 +72,6 @@ turndown.addRule("harvyOutlineParagraph", {
   },
 });
 
-/** Round-trip promoted-then-empty placeholder metadata on normal `<p>` nodes. */
 /** Preserve Harvy image blocks as inline HTML in Markdown (src + caption + width). */
 turndown.addRule("harvyImageBlock", {
   filter(node) {
@@ -65,10 +97,23 @@ turndown.addRule("harvyRestorableParagraph", {
   },
 });
 
+/**
+ * `<p><br></p>` is not Turndown-`isBlank`, so it would become a hard-break and
+ * still collapse on reload — catch those here.
+ */
+turndown.addRule("harvyEmptyParagraph", {
+  filter(node) {
+    return isEmptyParagraphElement(node);
+  },
+  replacement(_content, node) {
+    return emptyParagraphMarkdownIsland(node as HTMLElement);
+  },
+});
+
 export function editorHtmlToMarkdown(html: string): string {
   const raw = (html ?? "").trim();
   if (!raw || raw === "<p></p>") return "";
-  const out = turndown.turndown(raw).trimEnd();
+  const out = turndown.turndown(raw).replace(/[ \t]+$/gm, "").replace(/\n+$/, "");
   return out ? `${out}\n` : "";
 }
 
@@ -84,14 +129,16 @@ export function markdownToEditorHtml(markdown: string): string {
 export function toEditorHtml(raw: string, opts?: { sourcePath?: string | null }): string {
   const t = raw ?? "";
   if (!t.trim()) return "<p></p>";
-  if (looksLikeEditorHtml(t)) return t;
   const path = opts?.sourcePath ?? "";
   if (/\.(md|markdown|mkd)$/i.test(path)) return markdownToEditorHtml(t);
   if (/\.(html?|htm)$/i.test(path)) {
-    if (looksLikeEditorHtml(t)) return t;
-    return markdownToEditorHtml(t);
+    return looksLikeEditorHtml(t) ? t : markdownToEditorHtml(t);
   }
-  return plainTextToHtml(t);
+  if (/\.txt$/i.test(path)) return plainTextToHtml(t);
+  // In-memory buffers are Markdown (may include `<p></p>` islands). Only treat as
+  // raw HTML when the string is TipTap-style markup with no Markdown text blocks.
+  if (looksLikeEditorHtml(t)) return t;
+  return markdownToEditorHtml(t);
 }
 
 /** Plain text for stats when the editor buffer is Markdown (or legacy HTML). */
@@ -152,19 +199,32 @@ export function complexitySourceBlocksFromStored(
   return out;
 }
 
+/**
+ * Split plain text on paragraph boundaries (`\n\n`) without collapsing consecutive
+ * separators, so blank lines become empty paragraphs.
+ */
+export function splitPlainTextParagraphParts(text: string): string[] {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n\n");
+}
+
 function plainTextToMarkdown(text: string): string {
-  const blocks = text.replace(/\r\n/g, "\n").trimEnd().split(/\n\s*\n/);
-  if (blocks.length === 0) return "";
-  return (
-    blocks
-      .map((b) =>
-        b
-          .trimEnd()
-          .split("\n")
-          .join("  \n"),
-      )
-      .join("\n\n") + "\n"
-  );
+  const parts = splitPlainTextParagraphParts(text);
+  if (parts.length === 0) return "";
+  const blocks: string[] = [];
+  for (const part of parts) {
+    let rest = part;
+    while (rest.startsWith("\n")) {
+      blocks.push("<p></p>");
+      rest = rest.slice(1);
+    }
+    if (rest === "") {
+      blocks.push("<p></p>");
+      continue;
+    }
+    blocks.push(rest.split("\n").join("  \n"));
+  }
+  const joined = blocks.join("\n\n");
+  return joined ? `${joined}\n` : "";
 }
 
 /** Normalize file bytes to the Markdown string we keep in workspace state. */

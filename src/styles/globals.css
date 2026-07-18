@@ -138,6 +138,18 @@
     margin-bottom: 0.35em;
   }
 
+  .ProseMirror-harvy hr {
+    border: 0;
+    border-top: 1px solid color-mix(in oklab, var(--color-line) 85%, var(--color-ink));
+    margin: 1.1em 0;
+  }
+
+  .ProseMirror-harvy hr.ProseMirror-selectednode {
+    outline: 2px solid color-mix(in oklab, var(--color-focus-ring) 70%, transparent);
+    outline-offset: 4px;
+    border-top-color: color-mix(in oklab, var(--color-focus-ring) 75%, var(--color-ink));
+  }
+
   .ProseMirror-harvy h1,
   .ProseMirror-harvy h2,
   .ProseMirror-harvy h3 {

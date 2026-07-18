@@ -1,6 +1,7 @@
 import {
   Extension,
   InputRule,
+  nodeInputRule,
   textblockTypeInputRule,
   wrappingInputRule,
 } from "@tiptap/core";
@@ -32,15 +33,15 @@ function guardInputRule(rule: InputRule, guard: (state: EditorState) => boolean)
 }
 
 /**
- * Notion-style markdown shortcuts at block start (`- `, `* `, `1. `, `# `, etc.).
- * Uses real BulletList / OrderedList / Heading nodes (StarterKit).
+ * Notion-style markdown shortcuts at block start (`- `, `* `, `1. `, `# `, `---`, etc.).
+ * Uses real BulletList / OrderedList / Heading / HorizontalRule nodes (StarterKit).
  */
 export const HarvyMarkdownShortcuts = Extension.create({
   name: "harvyMarkdownShortcuts",
   priority: 1000,
 
   addInputRules() {
-    const { bulletList, orderedList, heading } = this.editor.schema.nodes;
+    const { bulletList, orderedList, heading, horizontalRule } = this.editor.schema.nodes;
     if (!bulletList || !orderedList || !heading) return [];
 
     const rules: InputRule[] = [
@@ -81,6 +82,19 @@ export const HarvyMarkdownShortcuts = Extension.create({
             find: new RegExp(`^(#{${level}})\\s$`),
             type: heading,
             getAttributes: { level },
+          }),
+          isTopLevelParagraph,
+        ),
+      );
+    }
+
+    if (horizontalRule) {
+      // Third dash inserts a divider (TipTap default); ___ / *** need a trailing space.
+      rules.push(
+        guardInputRule(
+          nodeInputRule({
+            find: /^(?:---|—-|___\s|\*\*\*\s)$/,
+            type: horizontalRule,
           }),
           isTopLevelParagraph,
         ),

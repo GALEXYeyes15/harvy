@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 function focusableSelector() {
@@ -59,10 +59,8 @@ export function CenteredOverlayModal({
   const panelRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-
-  const handleClose = useCallback(() => {
-    onClose();
-  }, [onClose]);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -79,7 +77,7 @@ export function CenteredOverlayModal({
       if (e.key === "Escape") {
         e.preventDefault();
         if (escapeCapture) e.stopImmediatePropagation();
-        handleClose();
+        onCloseRef.current();
         return;
       }
 
@@ -106,19 +104,22 @@ export function CenteredOverlayModal({
     };
 
     document.addEventListener("keydown", onKeyDown, escapeCapture);
+    // Only when the modal opens — not when parent re-renders with a new onClose.
+    let focusFrame = 0;
     if (autoFocusCloseButton && showHeaderClose) {
-      requestAnimationFrame(() => {
+      focusFrame = requestAnimationFrame(() => {
         closeButtonRef.current?.focus();
       });
     }
 
     return () => {
+      cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", onKeyDown, escapeCapture);
       if (shouldLockScroll) {
         document.body.style.overflow = "";
       }
     };
-  }, [open, handleClose, autoFocusCloseButton, showHeaderClose, escapeCapture]);
+  }, [open, autoFocusCloseButton, showHeaderClose, escapeCapture]);
 
   useEffect(() => {
     if (open) return;
@@ -142,7 +143,7 @@ export function CenteredOverlayModal({
         tabIndex={-1}
         className="absolute inset-0 bg-ink/[0.22] backdrop-blur-[1px]"
         aria-label={backdropLabel}
-        onClick={handleClose}
+        onClick={() => onCloseRef.current()}
       />
       <div
         ref={panelRef}
@@ -175,7 +176,7 @@ export function CenteredOverlayModal({
                 closeButtonClassName ??
                 "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-ink/[0.06] hover:text-ink"
               }
-              onClick={handleClose}
+              onClick={() => onCloseRef.current()}
             >
               <X size={18} strokeWidth={1.5} aria-hidden />
             </button>

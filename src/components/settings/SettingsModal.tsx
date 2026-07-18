@@ -6,23 +6,22 @@ import {
   type EncouragementPhrase,
   type EncouragementPrefs,
 } from "../../features/encouragement/encouragementSettings";
+import { formatHotkeyKeys, HOTKEY_GROUPS } from "../../features/settings/hotkeys";
 import type { ThemeMode } from "../../theme/themeMode";
 import { CenteredOverlayModal } from "../overlay/CenteredOverlayModal";
+import { PhrasesCsvTable } from "./PhrasesCsvTable";
 import { SETTINGS_NAV, type SettingsSectionId } from "./sectionIds";
 
 
 /** macOS System Settings–like window: ~1150×800, capped at 90vw / 90vh. */
 const SETTINGS_PANEL_SIZE =
-  "h-[min(400px,90vh)] w-[min(900px,90vw)] max-h-[90vh] max-w-[90vw]";
+  "h-[min(600px,90vh)] w-[min(600px,90vw)] max-h-[90vh] max-w-[90vw]";
 
 const PHRASES_EXPAND_PANEL_SIZE =
   "h-[min(720px,88vh)] w-[min(960px,92vw)] max-h-[88vh] max-w-[92vw]";
 
 const SETTINGS_DIVIDE_X = "divide-x divide-line/[0.12] dark:divide-[#6f6f6f]";
 const SETTINGS_DIVIDE_Y = "divide-y divide-line/[0.1] dark:divide-[#6f6f6f]";
-
-const PHRASE_CELL_CLASS =
-  "w-full min-w-0 border-0 bg-transparent px-2.5 py-2 text-[12px] leading-snug text-ink outline-none placeholder:text-muted/55 focus:bg-canvas/35";
 
 type SettingsModalProps = {
   open: boolean;
@@ -130,6 +129,7 @@ export function SettingsModal({
                 onTypewriterChange={setTypewriterScroll}
               />
             ) : null}
+            {activeSection === "shortcuts" ? <HotkeysPanel /> : null}
             {activeSection === "encouragement" ? (
               <EncouragementPanel
                 prefs={encouragementPrefs}
@@ -417,89 +417,6 @@ function EncouragementPanel({
   );
 }
 
-function PhrasesCsvTable({
-  phrases,
-  onUpdate,
-  onRemove,
-  maxHeightClass,
-  fillHeight = false,
-}: {
-  phrases: EncouragementPhrase[];
-  onUpdate: (id: string, partial: Partial<Pick<EncouragementPhrase, "text" | "author">>) => void;
-  onRemove: (id: string) => void;
-  maxHeightClass?: string;
-  fillHeight?: boolean;
-}) {
-  return (
-    <div
-      className={`overflow-auto rounded-lg bg-mist/90 ring-1 ring-line/15 dark:bg-ink/[0.04] dark:ring-white/8 ${maxHeightClass ?? ""} ${fillHeight ? "flex flex-col" : ""}`}
-    >
-      <table className={`w-full table-fixed border-collapse text-left ${fillHeight ? "min-h-full" : ""}`}>
-        <thead>
-          <tr>
-            <th className="w-[58%] px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted/55">
-              Quote
-            </th>
-            <th className="w-[32%] px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted/55">
-              Said by
-            </th>
-            <th className="w-[10%] px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted/55">
-              <span className="sr-only">Remove</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {phrases.length === 0 ? (
-            <tr>
-              <td colSpan={3} className="px-2.5 py-4 text-[12px] text-muted/70">
-                No phrases yet. Click Add row to start a table.
-              </td>
-            </tr>
-          ) : (
-            phrases.map((phrase) => (
-              <tr
-                key={phrase.id}
-                className="border-b border-line/12 last:border-b-0 dark:border-white/[0.06]"
-              >
-                <td className="align-top">
-                  <input
-                    type="text"
-                    value={phrase.text}
-                    onChange={(e) => onUpdate(phrase.id, { text: e.target.value })}
-                    placeholder="You can do hard things."
-                    className={PHRASE_CELL_CLASS}
-                    aria-label="Quote"
-                  />
-                </td>
-                <td className="align-top border-l border-line/12 dark:border-white/[0.06]">
-                  <input
-                    type="text"
-                    value={phrase.author}
-                    onChange={(e) => onUpdate(phrase.id, { author: e.target.value })}
-                    placeholder="Someone kind"
-                    className={PHRASE_CELL_CLASS}
-                    aria-label="Said by"
-                  />
-                </td>
-                <td className="align-middle border-l border-line/12 text-center dark:border-white/[0.06]">
-                  <button
-                    type="button"
-                    onClick={() => onRemove(phrase.id)}
-                    className="rounded-md px-1.5 py-1 text-[11px] text-muted/60 transition-colors hover:bg-ink/[0.06] hover:text-ink"
-                    aria-label="Remove phrase"
-                  >
-                    ×
-                  </button>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function EditorPanel({
   showReadabilityPanel,
   onReadabilityChange,
@@ -598,6 +515,54 @@ function EditorPanel({
           />
         </ul>
       </div>
+    </div>
+  );
+}
+
+function HotkeysPanel() {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-[13px] font-semibold tracking-tight text-ink">Shortcuts</h2>
+        <p className="mt-1 text-[12px] leading-relaxed text-muted/90">
+          Keyboard shortcuts available in Harvy. Keys adapt to your platform.
+        </p>
+      </div>
+
+      {HOTKEY_GROUPS.map((group) => (
+        <div key={group.id}>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+            {group.title}
+          </p>
+          <ul
+            className={`${SETTINGS_DIVIDE_Y} overflow-hidden rounded-lg bg-mist/80 dark:bg-ink/[0.035]`}
+          >
+            {group.items.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-start justify-between gap-4 px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium text-ink">{item.action}</p>
+                  {item.note ? (
+                    <p className="mt-0.5 text-[11px] leading-snug text-muted/75">{item.note}</p>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 pt-0.5">
+                  {formatHotkeyKeys(item.keys).map((label, index) => (
+                    <kbd
+                      key={`${item.id}-${index}-${label}`}
+                      className="inline-flex items-center justify-center font-mono text-[12px] font-medium leading-none text-muted/85"
+                    >
+                      {label}
+                    </kbd>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }

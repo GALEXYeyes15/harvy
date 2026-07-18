@@ -76,6 +76,32 @@ function docHasTextBlock(doc: PMNode): boolean {
   return false;
 }
 
+/** Position of the top-level `horizontalRule` directly before the block containing `$from`, if any. */
+function getHorizontalRulePosDirectlyAbove($from: ResolvedPos): number | null {
+  if ($from.depth < 1) return null;
+
+  const blockIndex = $from.index(1);
+  if (blockIndex <= 0) return null;
+
+  const doc = $from.node(0);
+  const previous = doc.child(blockIndex - 1);
+  if (previous.type.name !== "horizontalRule") return null;
+
+  let hrPos = 0;
+  for (let i = 0; i < blockIndex - 1; i++) {
+    hrPos += doc.child(i).nodeSize;
+  }
+
+  return hrPos;
+}
+
+function getHorizontalRulePosDirectlyBeforeBlockStart(doc: PMNode, blockStart: number): number | null {
+  if (blockStart <= 0) return null;
+  const previous = doc.resolve(blockStart).nodeBefore;
+  if (!previous || previous.type.name !== "horizontalRule") return null;
+  return blockStart - previous.nodeSize;
+}
+
 /** Position of the top-level `harvyImage` directly before the block containing `$from`, if any. */
 function getHarvyImagePosDirectlyAbove($from: ResolvedPos): number | null {
   if ($from.depth < 1) return null;
@@ -100,6 +126,53 @@ function getHarvyImagePosDirectlyBeforeBlockStart(doc: PMNode, blockStart: numbe
   const previous = doc.resolve(blockStart).nodeBefore;
   if (!previous || previous.type.name !== "harvyImage") return null;
   return blockStart - previous.nodeSize;
+}
+
+/**
+ * Backspace on a selected horizontal rule deletes it. Backspace at the start of
+ * the following block first selects/highlights the rule (same two-step flow as images).
+ */
+function handleBackspaceOnHorizontalRule(view: EditorView, event: KeyboardEvent): boolean {
+  const { state } = view;
+  const { selection } = state;
+
+  if (selection instanceof NodeSelection && selection.node.type.name === "horizontalRule") {
+    event.preventDefault();
+    const deletePos = selection.from;
+    let tr = state.tr.deleteSelection();
+    if (!docHasTextBlock(tr.doc)) {
+      const paragraph = state.schema.nodes.paragraph;
+      if (paragraph) {
+        const insertPos = Math.min(deletePos, tr.doc.content.size);
+        tr = tr.insert(insertPos, paragraph.create());
+        tr = tr.setSelection(TextSelection.near(tr.doc.resolve(insertPos + 1), 1));
+      }
+    } else {
+      tr = tr.setSelection(
+        TextSelection.near(tr.doc.resolve(Math.min(deletePos, tr.doc.content.size)), -1),
+      );
+    }
+    view.dispatch(tr.scrollIntoView());
+    view.focus();
+    return true;
+  }
+
+  if (!(selection instanceof TextSelection) || !selection.empty) return false;
+  if (selection.$from.parentOffset !== 0) return false;
+  if (selection.$from.depth < 1) return false;
+
+  const hrPos =
+    getHorizontalRulePosDirectlyAbove(selection.$from) ??
+    getHorizontalRulePosDirectlyBeforeBlockStart(state.doc, selection.$from.before(1));
+  if (hrPos == null) return false;
+
+  const hrNode = state.doc.nodeAt(hrPos);
+  if (!hrNode || hrNode.type.name !== "horizontalRule") return false;
+
+  event.preventDefault();
+  view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, hrPos)).scrollIntoView());
+  view.focus();
+  return true;
 }
 
 /** Where to place the caret after removing a top-level text block at `deletePos`. */
@@ -199,6 +272,11 @@ export function handleBackspaceOnEmptyTextBlockKeyDown(view: EditorView, event: 
     event.preventDefault();
     view.dispatch(state.tr.deleteSelection().scrollIntoView());
     view.focus();
+    return true;
+  }
+
+  if (handleBackspaceOnHorizontalRule(view, event)) {
+    logSubstackBackspace("handled horizontal rule backspace");
     return true;
   }
 

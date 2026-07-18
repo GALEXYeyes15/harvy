@@ -28,7 +28,8 @@ export function useEncouragementScheduler(prefs: EncouragementPrefs): {
   }, []);
 
   useEffect(() => {
-    if (!prefs.enabled || prefs.phrases.length === 0) return;
+    const hasUsablePhrase = prefs.phrases.some((p) => p.text.trim());
+    if (!prefs.enabled || !hasUsablePhrase) return;
 
     let cancelled = false;
     let timeoutId = 0;
@@ -39,7 +40,7 @@ export function useEncouragementScheduler(prefs: EncouragementPrefs): {
       timeoutId = window.setTimeout(() => {
         if (cancelled) return;
         const latest = prefsRef.current;
-        if (!latest.enabled || latest.phrases.length === 0) return;
+        if (!latest.enabled || !latest.phrases.some((p) => p.text.trim())) return;
         const phrase = pickRandomPhrase(latest.phrases);
         if (phrase) setActivePhrase(phrase);
         tick();
@@ -51,7 +52,7 @@ export function useEncouragementScheduler(prefs: EncouragementPrefs): {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [prefs.enabled, prefs.minMinutes, prefs.maxMinutes, prefs.phrases]);
+  }, [prefs.enabled, prefs.minMinutes, prefs.maxMinutes, prefs.phrases.length]);
 
   return { activePhrase, dismiss, showTest };
 }
