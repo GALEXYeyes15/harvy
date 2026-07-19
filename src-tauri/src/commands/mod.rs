@@ -765,7 +765,8 @@ pub fn export_markdown_pdf(app: AppHandle, path: String, markdown: String) -> Re
         .parent()
         .ok_or_else(|| "Target path has no parent directory.".to_string())?;
     ensure_within_workspace_root(&app, parent)?;
-    pdf_export::write_markdown_pdf(&path, &markdown)
+    let workspace_root = canonical(&workspace_root_dir(&app)?)?;
+    pdf_export::write_markdown_pdf(&path, &markdown, &workspace_root)
 }
 
 #[tauri::command]
