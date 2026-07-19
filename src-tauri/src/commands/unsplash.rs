@@ -2,6 +2,7 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
 const UNSPLASH_SEARCH_URL: &str = "https://api.unsplash.com/search/photos";
+const UNSPLASH_PHOTOS_URL: &str = "https://api.unsplash.com/photos";
 const UNSPLASH_MISSING_KEY_MSG: &str =
     "Missing Unsplash API key. Add UNSPLASH_ACCESS_KEY to .env.local and restart Harvy.";
 
@@ -115,11 +116,18 @@ fn map_photo(photo: UnsplashPhoto) -> Option<UnsplashImageResult> {
     })
 }
 
-fn search_unsplash_photos_impl(query: &str) -> Result<Vec<UnsplashImageResult>, String> {
+fn search_unsplash_photos_impl(
+    query: &str,
+    page: u32,
+    per_page: u32,
+) -> Result<Vec<UnsplashImageResult>, String> {
     let query = query.trim();
     if query.is_empty() {
         return Err("Enter a search term.".to_string());
     }
+
+    let page = page.max(1);
+    let per_page = per_page.clamp(1, 30);
 
     let api_key = unsplash_access_key()?;
     let client = Client::builder()
@@ -128,7 +136,11 @@ fn search_unsplash_photos_impl(query: &str) -> Result<Vec<UnsplashImageResult>, 
 
     let response = client
         .get(UNSPLASH_SEARCH_URL)
-        .query(&[("query", query), ("per_page", "12")])
+        .query(&[
+            ("query", query),
+            ("page", &page.to_string()),
+            ("per_page", &per_page.to_string()),
+        ])
         .header("Authorization", format!("Client-ID {api_key}"))
         .header("Accept-Version", "v1")
         .send()
@@ -156,6 +168,57 @@ fn search_unsplash_photos_impl(query: &str) -> Result<Vec<UnsplashImageResult>, 
 }
 
 #[tauri::command]
-pub fn search_unsplash_photos(query: String) -> Result<Vec<UnsplashImageResult>, String> {
-    search_unsplash_photos_impl(&query)
+pub fn search_unsplash_photos(
+    query: String,
+    page: Option<u32>,
+    per_page: Option<u32>,
+) -> Result<Vec<UnsplashImageResult>, String> {
+    search_unsplash_photos_impl(&query, page.unwrap_or(1), per_page.unwrap_or(12))
+}
+
+fn list_popular_unsplash_photos_impl(page: u32, per_page: u32) -> Result<Vec<UnsplashImageResult>, String> {
+    let page = page.max(1);
+    let per_page = per_page.clamp(1, 30);
+
+    let api_key = unsplash_access_key()?;
+    let client = Client::builder()
+        .build()
+        .map_err(|e| format!("Unsplash client error: {e}"))?;
+
+    let response = client
+        .get(UNSPLASH_PHOTOS_URL)
+        .query(&[
+            ("order_by", "popular"),
+            ("page", &page.to_string()),
+            ("per_page", &per_page.to_string()),
+        ])
+        .header("Authorization", format!("Client-ID {api_key}"))
+        .header("Accept-Version", "v1")
+        .send()
+        .map_err(|e| format!("Unsplash request failed: {e}"))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().unwrap_or_default();
+        let detail = body.trim();
+        if detail.is_empty() {
+            return Err(format!("Unsplash request failed ({status})"));
+        }
+        return Err(format!("Unsplash request failed ({status}): {detail}"));
+    }
+
+    let photos: Vec<UnsplashPhoto> = response
+        .json()
+        .map_err(|e| format!("Unsplash response error: {e}"))?;
+
+    Ok(photos.into_iter().filter_map(map_photo).collect())
+}
+
+/// Popular Unsplash photos (closest built-in feed to “trending”).
+#[tauri::command]
+pub fn list_popular_unsplash_photos(
+    page: Option<u32>,
+    per_page: Option<u32>,
+) -> Result<Vec<UnsplashImageResult>, String> {
+    list_popular_unsplash_photos_impl(page.unwrap_or(1), per_page.unwrap_or(12))
 }

@@ -64,7 +64,7 @@ mod tests {
             eprintln!("Skipping unsplash_pool_search_returns_results_when_key_configured: no key");
             return;
         }
-        let results = search_unsplash_photos("pool".to_string()).expect("pool search");
+        let results = search_unsplash_photos("pool".to_string(), None, None).expect("pool search");
         assert!(!results.is_empty(), "expected pool search results");
     }
 }
@@ -83,6 +83,9 @@ pub fn run() {
             commands::read_workspace_text_file,
             commands::import_workspace_image,
             commands::write_text_file,
+            commands::copy_file_into_directory,
+            commands::write_bytes_into_directory,
+            commands::download_url_into_directory,
             commands::create_unique_directory,
             commands::ensure_directory,
             commands::path_exists,
@@ -93,6 +96,7 @@ pub fn run() {
             commands::ensure_user_editor_rules,
             commands::write_user_editor_rules,
             commands::unsplash::search_unsplash_photos,
+            commands::unsplash::list_popular_unsplash_photos,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

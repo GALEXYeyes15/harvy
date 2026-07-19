@@ -559,6 +559,180 @@ pub fn write_text_file(app: AppHandle, path: String, contents: String) -> Result
     fs::write(&p, contents).map_err(|e| format!("Could not write file '{}': {}", p.display(), e))
 }
 
+fn unique_path_in_dir(dir: &Path, preferred_name: &str) -> Result<PathBuf, String> {
+    let preferred = preferred_name.trim();
+    if preferred.is_empty() {
+        return Err("File name is empty.".to_string());
+    }
+    let stem = Path::new(preferred)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("img");
+    let ext = Path::new(preferred)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{}", e))
+        .unwrap_or_default();
+
+    for suffix in 0u32..10_000 {
+        let name = if suffix == 0 {
+            preferred.to_string()
+        } else {
+            format!("{}{}{}", stem, suffix + 1, ext)
+        };
+        let dest = dir.join(&name);
+        if !dest.exists() {
+            return Ok(dest);
+        }
+    }
+    Err("Could not find an available image file name.".to_string())
+}
+
+fn ensure_dest_dir(app: &AppHandle, dest_dir: &str) -> Result<PathBuf, String> {
+    let dir = ensure_within_workspace_root(app, Path::new(dest_dir))?;
+    if !dir.is_dir() {
+        return Err(format!("Destination is not a directory: {}", dir.display()));
+    }
+    Ok(dir)
+}
+
+/// Copy a local image file into `dest_dir`, returning the absolute destination path.
+#[tauri::command]
+pub fn copy_file_into_directory(
+    app: AppHandle,
+    source_path: String,
+    dest_dir: String,
+    file_name: Option<String>,
+) -> Result<String, String> {
+    let source = PathBuf::from(source_path.trim());
+    if !source.is_file() {
+        return Err(format!("Source is not a readable file: {}", source.display()));
+    }
+    // Allow reading from workspace assets (and other workspace paths).
+    ensure_within_workspace_root(&app, &source)?;
+
+    let dir = ensure_dest_dir(&app, &dest_dir)?;
+    let preferred = file_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .or_else(|| {
+            source
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+        })
+        .unwrap_or_else(|| "img.png".to_string());
+
+    let dest = unique_path_in_dir(&dir, &preferred)?;
+    fs::copy(&source, &dest).map_err(|e| {
+        format!(
+            "Could not copy image to '{}': {}",
+            dest.display(),
+            e
+        )
+    })?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
+/// Write raw bytes into `dest_dir` as `file_name` (unique if needed). Returns absolute path.
+#[tauri::command]
+pub fn write_bytes_into_directory(
+    app: AppHandle,
+    dest_dir: String,
+    file_name: String,
+    contents: Vec<u8>,
+) -> Result<String, String> {
+    let dir = ensure_dest_dir(&app, &dest_dir)?;
+    let dest = unique_path_in_dir(&dir, &file_name)?;
+    fs::write(&dest, contents).map_err(|e| {
+        format!(
+            "Could not write image to '{}': {}",
+            dest.display(),
+            e
+        )
+    })?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
+/// Download a remote image URL into `dest_dir`. Returns absolute destination path.
+#[tauri::command]
+pub fn download_url_into_directory(
+    app: AppHandle,
+    url: String,
+    dest_dir: String,
+    file_name: Option<String>,
+) -> Result<String, String> {
+    let trimmed = url.trim();
+    if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
+        return Err("Only http(s) image URLs can be downloaded.".to_string());
+    }
+
+    let dir = ensure_dest_dir(&app, &dest_dir)?;
+    let response = reqwest::blocking::get(trimmed)
+        .map_err(|e| format!("Could not download image: {}", e))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Image download failed with status {}.",
+            response.status()
+        ));
+    }
+
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let bytes = response
+        .bytes()
+        .map_err(|e| format!("Could not read downloaded image: {}", e))?;
+
+    let preferred = file_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| {
+            let ext = if content_type.contains("png") {
+                "png".to_string()
+            } else if content_type.contains("webp") {
+                "webp".to_string()
+            } else if content_type.contains("gif") {
+                "gif".to_string()
+            } else if content_type.contains("jpeg") || content_type.contains("jpg") {
+                "jpg".to_string()
+            } else {
+                Path::new(trimmed)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.to_ascii_lowercase())
+                    .filter(|e| {
+                        matches!(
+                            e.as_str(),
+                            "png" | "jpg" | "jpeg" | "gif" | "webp" | "heic" | "heif" | "bmp" | "tif" | "tiff"
+                        )
+                    })
+                    .unwrap_or_else(|| "jpg".to_string())
+            };
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
+            format!("img_{}.{}", stamp, ext)
+        });
+
+    let dest = unique_path_in_dir(&dir, &preferred)?;
+    fs::write(&dest, &bytes).map_err(|e| {
+        format!(
+            "Could not write downloaded image to '{}': {}",
+            dest.display(),
+            e
+        )
+    })?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 pub fn read_workspace_text_file(app: AppHandle, path: String) -> Result<String, String> {
     let requested = PathBuf::from(path);

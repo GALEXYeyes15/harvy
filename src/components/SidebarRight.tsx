@@ -110,7 +110,7 @@ function StatRow({ label, value }: { label: ReactNode; value: ReactNode }) {
   );
 }
 
-function ReadingTimeInfoTooltip() {
+function ReadingTimeInfoTooltip({ wordsPerMinute }: { wordsPerMinute: number }) {
   return (
     <span className="relative inline-flex items-center">
       <span className="peer inline-flex items-center">
@@ -121,7 +121,7 @@ function ReadingTimeInfoTooltip() {
         />
       </span>
       <span className="pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-20 -translate-x-1/2 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[12px] font-normal text-canvas opacity-0 shadow-md transition-opacity duration-150 peer-hover:opacity-100">
-        300 words/min
+        {wordsPerMinute} words/min
       </span>
     </span>
   );
@@ -162,11 +162,11 @@ function EditSidebarView({
               <span className="inline-flex items-center">
                 <span className="inline-flex items-center">
                   Reading time
-                  <ReadingTimeInfoTooltip />
+                  <ReadingTimeInfoTooltip wordsPerMinute={stats.readingWordsPerMinute} />
                 </span>
               </span>
             }
-            value={stats.readingTimeAt300Wpm}
+            value={stats.readingTimeFormatted}
           />
           <StatRow
             label="Word Count"

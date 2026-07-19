@@ -3,6 +3,7 @@ import { Decoration } from "@tiptap/pm/view";
 import { complexitySourceBlocksFromStored } from "../editor/documentMarkdown";
 import type { SentenceComplexityCounts } from "../editor/stats";
 import { scoreSentenceComplexity, splitTextIntoSentences, type SentenceComplexityLevel } from "../readability";
+import { parametersPrefsRef } from "../settings/parametersSettings";
 import {
   hasListItemAncestor,
   isProseSentenceEligible,
@@ -10,7 +11,7 @@ import {
 } from "./sentenceComplexityEligibility";
 
 function sentenceComplexityLevel(sentence: string): SentenceComplexityLevel {
-  return scoreSentenceComplexity(sentence).level;
+  return scoreSentenceComplexity(sentence, parametersPrefsRef.fkComplexityThreshold).level;
 }
 
 /**

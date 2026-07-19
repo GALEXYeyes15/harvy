@@ -53,7 +53,10 @@ function mapPhoto(photo: UnsplashApiPhoto): UnsplashImageResult | null {
   };
 }
 
-export async function searchUnsplashPhotos(query: string): Promise<UnsplashImageResult[]> {
+export async function searchUnsplashPhotos(
+  query: string,
+  opts?: { page?: number; perPage?: number },
+): Promise<UnsplashImageResult[]> {
   const trimmed = query.trim();
   if (!trimmed) {
     throw new Error("Enter a search term.");
@@ -66,9 +69,13 @@ export async function searchUnsplashPhotos(query: string): Promise<UnsplashImage
     );
   }
 
+  const page = Math.max(1, opts?.page ?? 1);
+  const perPage = Math.min(30, Math.max(1, opts?.perPage ?? 12));
+
   const url = new URL("https://api.unsplash.com/search/photos");
   url.searchParams.set("query", trimmed);
-  url.searchParams.set("per_page", "12");
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("per_page", String(perPage));
 
   const response = await fetch(url, {
     headers: {
@@ -89,4 +96,46 @@ export async function searchUnsplashPhotos(query: string): Promise<UnsplashImage
   const payload = (await response.json()) as { results?: UnsplashApiPhoto[] };
   const results = Array.isArray(payload.results) ? payload.results : [];
   return results.map(mapPhoto).filter((item): item is UnsplashImageResult => item != null);
+}
+
+/** Popular Unsplash photos — closest built-in feed to “trending”. */
+export async function listPopularUnsplashPhotos(opts?: {
+  page?: number;
+  perPage?: number;
+}): Promise<UnsplashImageResult[]> {
+  const apiKey = process.env.UNSPLASH_ACCESS_KEY?.trim() ?? "";
+  if (!apiKey) {
+    throw new Error(
+      "Missing Unsplash API key. Add UNSPLASH_ACCESS_KEY to .env.local and restart Harvy.",
+    );
+  }
+
+  const page = Math.max(1, opts?.page ?? 1);
+  const perPage = Math.min(30, Math.max(1, opts?.perPage ?? 12));
+
+  const url = new URL("https://api.unsplash.com/photos");
+  url.searchParams.set("order_by", "popular");
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("per_page", String(perPage));
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Client-ID ${apiKey}`,
+      "Accept-Version": "v1",
+    },
+  });
+
+  if (!response.ok) {
+    const detail = (await response.text()).trim();
+    throw new Error(
+      detail
+        ? `Unsplash request failed (${response.status}): ${detail}`
+        : `Unsplash request failed (${response.status})`,
+    );
+  }
+
+  const photos = (await response.json()) as UnsplashApiPhoto[];
+  return (Array.isArray(photos) ? photos : [])
+    .map(mapPhoto)
+    .filter((item): item is UnsplashImageResult => item != null);
 }

@@ -6,6 +6,7 @@ import {
 export type SentenceComplexityLevel = "normal" | "complex";
 
 /** Sentence-level FK threshold for complexity classification. */
+/** Default cutoff; Settings → Parameters can override via `parametersPrefs`. */
 export const FK_SENTENCE_COMPLEXITY_THRESHOLD = 9;
 
 export type SentenceComplexityScore = {
@@ -98,7 +99,10 @@ export function calculateSentenceFleschKincaidDensity(wordCount: number, syllabl
   return 0.39 * wordCount + 11.8 * (syllableCount / wordCount) - 15.59;
 }
 
-export function scoreSentenceComplexity(sentence: string): SentenceComplexityScore {
+export function scoreSentenceComplexity(
+  sentence: string,
+  threshold: number = FK_SENTENCE_COMPLEXITY_THRESHOLD,
+): SentenceComplexityScore {
   // Collapse tabs, double spaces, etc. so formatting never inflates FK (same tokens as word count).
   const normalized = normalizeSentenceForAnalysis(sentence);
   const wordCount = countWords(normalized);
@@ -108,8 +112,8 @@ export function scoreSentenceComplexity(sentence: string): SentenceComplexitySco
   const syllableCount = estimateSyllables(normalized);
   const fkSentence = calculateSentenceFleschKincaidDensity(wordCount, syllableCount);
   const score = fkSentence;
-  const level: SentenceComplexityLevel =
-    fkSentence >= FK_SENTENCE_COMPLEXITY_THRESHOLD ? "complex" : "normal";
+  const cutoff = Number.isFinite(threshold) ? threshold : FK_SENTENCE_COMPLEXITY_THRESHOLD;
+  const level: SentenceComplexityLevel = fkSentence >= cutoff ? "complex" : "normal";
 
   return {
     score,

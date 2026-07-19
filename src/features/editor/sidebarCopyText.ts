@@ -11,7 +11,7 @@ export function buildToolsSidebarPlainText(stats: EditorStats): string {
     `Flesch Reading Ease: ${stats.fleschReadingEase.toFixed(1)}`,
     `Flesch-Kincaid Grade: ${stats.fleschKincaidGradeLevel.toFixed(1)}`,
     "",
-    `Reading time (300 words/min): ${stats.readingTimeAt300Wpm}`,
+    `Reading time (${stats.readingWordsPerMinute} words/min): ${stats.readingTimeFormatted}`,
     `Word count: ${stats.words}`,
     "",
     `Adverbs / hedging: ${stats.adverbs}`,

@@ -20,7 +20,11 @@ export type EditorStats = {
   readabilitySummary: string;
   sentenceFeedback: string;
   passiveVoiceFeedback: string;
-  /** Display value for “Reading time (300 words/min)” row, e.g. `0:00`, `0:17`, or `2:05` (m:ss). */
+  /** Reading duration at the configured WPM, formatted as m:ss (e.g. `0:17`, `2:05`). */
+  readingTimeFormatted: string;
+  /** WPM used to compute `readingTimeFormatted`. */
+  readingWordsPerMinute: number;
+  /** @deprecated Prefer `readingTimeFormatted`. */
   readingTimeAt300Wpm: string;
   /** Matches from the combined adverb + hedging detector (`collectAdverbHits`). */
   adverbs: number;
@@ -49,12 +53,13 @@ export function wordsInSentence(sentence: string): number {
 }
 
 /**
- * Reading duration at 300 wpm: `readingTimeSeconds = round((words / 300) * 60)`, formatted as m:ss
+ * Reading duration at `wpm`: `readingTimeSeconds = round((words / wpm) * 60)`, formatted as m:ss
  * (minutes unpadded, seconds zero-padded). Empty document → `0:00`.
  */
-function formatReadingTime300Wpm(words: number): string {
+export function formatReadingTimeAtWpm(words: number, wpm: number): string {
   if (words === 0) return "0:00";
-  const totalSeconds = Math.round((words / 300) * 60);
+  const rate = Math.max(1, wpm);
+  const totalSeconds = Math.round((words / rate) * 60);
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
@@ -69,7 +74,11 @@ const PASSIVE_DEBUG_SENTENCE_RE =
 
 export type SentenceComplexityCounts = Pick<EditorStats, "complexSentences">;
 
-export function calculateEditorStats(text: string, sentenceComplexity: SentenceComplexityCounts): EditorStats {
+export function calculateEditorStats(
+  text: string,
+  sentenceComplexity: SentenceComplexityCounts,
+  readingWordsPerMinute = 300,
+): EditorStats {
   const words = countWords(text);
   const isEmpty = words === 0;
   const letters = (text.match(/[A-Za-z]/g) || []).length;
@@ -80,7 +89,8 @@ export function calculateEditorStats(text: string, sentenceComplexity: SentenceC
     .split(/\n\s*\n/)
     .map((p) => p.trim())
     .filter(Boolean).length;
-  const readingMinutes = Math.max(1, Math.ceil(words / 200));
+  const wpm = Math.max(1, Math.round(readingWordsPerMinute));
+  const readingMinutes = Math.max(1, Math.ceil(words / wpm));
   const avgWordsPerSentence = sentences ? words / sentences : words;
   const totalSyllables = estimateSyllables(text);
   const fleschReadingEase = isEmpty ? 0 : calculateFleschReadingEase(words, Math.max(sentences, 1), totalSyllables);
@@ -100,8 +110,10 @@ export function calculateEditorStats(text: string, sentenceComplexity: SentenceC
     });
   }
 
+  const readingTimeFormatted = formatReadingTimeAtWpm(words, wpm);
+
   return {
-    readingTime: `~${readingMinutes} min`,
+    readingTime: isEmpty ? "~0 min" : `~${readingMinutes} min`,
     letters,
     characters,
     words,
@@ -120,7 +132,9 @@ export function calculateEditorStats(text: string, sentenceComplexity: SentenceC
       passiveSignals > 3
         ? "Passive voice appears frequently. Prefer active verbs where clarity matters."
         : "Passive voice is limited in this sample.",
-    readingTimeAt300Wpm: formatReadingTime300Wpm(words),
+    readingTimeFormatted,
+    readingWordsPerMinute: wpm,
+    readingTimeAt300Wpm: readingTimeFormatted,
     adverbs: countAdverbs(text),
     passiveVoiceSentences,
     complexSentences: sentenceComplexity.complexSentences,

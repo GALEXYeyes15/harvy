@@ -2,7 +2,7 @@
 import type { IncomingMessage } from "node:http";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin } from "vite";
-import { searchUnsplashPhotos } from "./src/server/unsplashSearch";
+import { searchUnsplashPhotos, listPopularUnsplashPhotos } from "./src/server/unsplashSearch";
 import { UNSPLASH_MISSING_KEY_MESSAGE } from "./src/features/editor/unsplashErrors";
 
 function harvyApiPlugin(env: Record<string, string>): Plugin {
@@ -11,7 +11,7 @@ function harvyApiPlugin(env: Record<string, string>): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = req.url?.split("?")[0] ?? "";
-        if (req.method !== "GET" || url !== "/api/unsplash/search") {
+        if (req.method !== "GET" || !url.startsWith("/api/unsplash/")) {
           next();
           return;
         }
@@ -27,15 +27,38 @@ function harvyApiPlugin(env: Record<string, string>): Plugin {
           process.env.UNSPLASH_ACCESS_KEY = unsplashKey;
 
           const parsed = new URL(req.url ?? "", "http://localhost");
-          const query = parsed.searchParams.get("q")?.trim() ?? "";
-          if (!query) {
-            res.statusCode = 400;
-            res.end("Missing search query");
+          const page = Number(parsed.searchParams.get("page") ?? "1");
+          const perPage = Number(parsed.searchParams.get("per_page") ?? "12");
+          const pageOpt = Number.isFinite(page) ? page : 1;
+          const perPageOpt = Number.isFinite(perPage) ? perPage : 12;
+
+          if (url === "/api/unsplash/popular") {
+            const results = await listPopularUnsplashPhotos({
+              page: pageOpt,
+              perPage: perPageOpt,
+            });
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ results }));
             return;
           }
-          const results = await searchUnsplashPhotos(query);
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ results }));
+
+          if (url === "/api/unsplash/search") {
+            const query = parsed.searchParams.get("q")?.trim() ?? "";
+            if (!query) {
+              res.statusCode = 400;
+              res.end("Missing search query");
+              return;
+            }
+            const results = await searchUnsplashPhotos(query, {
+              page: pageOpt,
+              perPage: perPageOpt,
+            });
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ results }));
+            return;
+          }
+
+          next();
         } catch (e) {
           const msg = e instanceof Error ? e.message : "Request failed";
           res.statusCode = 500;

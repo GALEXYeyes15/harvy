@@ -1168,10 +1168,33 @@
 
   .harvy-image-source-popover__grid {
     display: grid;
-    max-height: 220px;
+    /* Tall enough for ~2 thumbnail rows; third row + "Show more" sit below the fold. */
+    max-height: 200px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.55rem;
     overflow-y: auto;
+  }
+
+  .harvy-image-source-popover__show-more {
+    grid-column: 1 / -1;
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.1rem;
+    border: 0;
+    border-radius: 0.45rem;
+    background: color-mix(in oklab, var(--color-ink) 6%, transparent);
+    padding: 0.55rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 550;
+    color: var(--color-ink);
+    cursor: pointer;
+    transition: background-color 0.12s ease-out;
+  }
+
+  .harvy-image-source-popover__show-more:hover {
+    background: color-mix(in oklab, var(--color-ink) 10%, transparent);
   }
 
   .harvy-image-source-popover__thumb {

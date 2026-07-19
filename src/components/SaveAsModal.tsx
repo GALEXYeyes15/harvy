@@ -78,13 +78,13 @@ export function SaveAsModal({
   useEffect(() => {
     if (!open) return;
     setFileName(initialFileName);
-    setOrganize("file");
+    setOrganize(folderPreviewContext.hasImages ? "folder" : "file");
     onFileNameChange?.(initialFileName);
     requestAnimationFrame(() => {
       fileNameInputRef.current?.focus();
       fileNameInputRef.current?.select();
     });
-  }, [open, initialFileName, onFileNameChange]);
+  }, [open, initialFileName, onFileNameChange, folderPreviewContext.hasImages]);
 
   const filePreview = useMemo(() => {
     if (!destinationPath) {
@@ -121,7 +121,8 @@ export function SaveAsModal({
 
   const handleSave = () => {
     if (isSubmitting) return;
-    void onSave({ fileName: fileName.trim(), organize });
+    const nextOrganize = folderPreviewContext.hasImages ? "folder" : organize;
+    void onSave({ fileName: fileName.trim(), organize: nextOrganize });
   };
 
   return (
@@ -193,9 +194,9 @@ export function SaveAsModal({
               type="button"
               role="radio"
               aria-checked={organize === "file"}
-              disabled={isSubmitting}
+              disabled={isSubmitting || folderPreviewContext.hasImages}
               onClick={() => setOrganize("file")}
-              className={`${RADIO_CARD_BASE} ${RADIO_CARD_ROW} ${organize === "file" ? RADIO_CARD_SELECTED : RADIO_CARD_UNSELECTED}`}
+              className={`${RADIO_CARD_BASE} ${RADIO_CARD_ROW} ${organize === "file" ? RADIO_CARD_SELECTED : RADIO_CARD_UNSELECTED} ${folderPreviewContext.hasImages ? "opacity-45" : ""}`}
             >
               <SaveAsRadioIndicator selected={organize === "file"} />
               <span className="min-w-0 flex-1 text-[13px] leading-snug text-ink/88">
@@ -203,6 +204,7 @@ export function SaveAsModal({
                 <span className="text-muted/62">
                   {" "}
                   – /{destLabel} / {filePreview.leaf}
+                  {folderPreviewContext.hasImages ? " (unavailable with images)" : ""}
                 </span>
               </span>
             </button>

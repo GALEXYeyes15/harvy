@@ -1,5 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import { projectNotesFileName } from "../workspace/documentNotes";
+import { collectEmbeddedImageSrcs, packagedImageFileName } from "./documentImages";
 
 export type ProjectExportFolder = {
   folderName: string;
@@ -9,6 +10,8 @@ export type ProjectExportFolder = {
 export type ProjectStructure = {
   hasNotes: boolean;
   hasImages: boolean;
+  /** Suggested image filenames for folder preview (best-effort). */
+  imageFileNames: string[];
   exportFolders: ProjectExportFolder[];
 };
 
@@ -34,31 +37,16 @@ export function documentHasEmbeddedImages(
   editor: Editor | null,
   fallbackMarkdown: string,
 ): boolean {
-  if (editor) {
-    let found = false;
-    editor.state.doc.descendants((node) => {
-      if (node.type.name !== "harvyImage") return;
-      const status = node.attrs.status;
-      const src = node.attrs.src;
-      if (status === "loaded" && typeof src === "string" && src.trim()) {
-        found = true;
-        return false;
-      }
-    });
-    if (found) return true;
-  }
-
-  return (
-    /data-harvy-image-status=["']loaded["']/i.test(fallbackMarkdown) ||
-    /\.harvy\/assets\//i.test(fallbackMarkdown)
-  );
+  return collectEmbeddedImageSrcs(editor, fallbackMarkdown).length > 0;
 }
 
 /** Shared source of truth for Save As folder preview and folder creation. */
 export function getProjectStructure(input: ProjectStructureInput): ProjectStructure {
+  const imageSrcs = collectEmbeddedImageSrcs(input.editor, input.documentMarkdown);
   return {
     hasNotes: hasSaveAsNotesContent(input.notes),
-    hasImages: documentHasEmbeddedImages(input.editor, input.documentMarkdown),
+    hasImages: imageSrcs.length > 0,
+    imageFileNames: imageSrcs.map((ref, i) => packagedImageFileName(ref, i + 1)),
     exportFolders: [],
   };
 }
@@ -90,7 +78,10 @@ export function buildSaveAsFolderPreviewRoot(
   }
 
   if (structure.hasImages) {
-    children.push({ name: "Images" });
+    children.push({
+      name: "Images",
+      children: structure.imageFileNames.map((name) => ({ name })),
+    });
   }
 
   return {

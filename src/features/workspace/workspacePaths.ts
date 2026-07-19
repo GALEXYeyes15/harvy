@@ -3,6 +3,19 @@ export function normalizeFsPath(value: string): string {
   return value.replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
+/**
+ * Workspace-relative path using `/` separators (for storing image `src` in Markdown).
+ * Returns null when `absPath` is outside the workspace root.
+ */
+export function toWorkspaceRelativePath(workspaceRoot: string, absPath: string): string | null {
+  const R = normalizeFsPath(workspaceRoot);
+  const P = normalizeFsPath(absPath);
+  if (P === R) return "";
+  const prefix = `${R}/`;
+  if (!P.startsWith(prefix)) return null;
+  return P.slice(prefix.length);
+}
+
 /** True when `targetPath` is the workspace root or a path inside it. */
 export function isPathUnderWorkspaceRoot(workspaceRoot: string, targetPath: string): boolean {
   const R = normalizeFsPath(workspaceRoot);

@@ -7,6 +7,17 @@ import {
   type EncouragementPrefs,
 } from "../../features/encouragement/encouragementSettings";
 import { formatHotkeyKeys, HOTKEY_GROUPS } from "../../features/settings/hotkeys";
+import {
+  FK_COMPLEXITY_THRESHOLD_MAX,
+  FK_COMPLEXITY_THRESHOLD_MIN,
+  READING_WPM_MAX,
+  READING_WPM_MIN,
+  SUGGESTED_FK_COMPLEXITY_THRESHOLD_MAX,
+  SUGGESTED_FK_COMPLEXITY_THRESHOLD_MIN,
+  SUGGESTED_READING_WPM_MAX,
+  SUGGESTED_READING_WPM_MIN,
+  type ParametersPrefs,
+} from "../../features/settings/parametersSettings";
 import type { ThemeMode } from "../../theme/themeMode";
 import { CenteredOverlayModal } from "../overlay/CenteredOverlayModal";
 import { PhrasesCsvTable } from "./PhrasesCsvTable";
@@ -41,6 +52,8 @@ type SettingsModalProps = {
   encouragementPrefs: EncouragementPrefs;
   onEncouragementPrefsChange: (partial: Partial<EncouragementPrefs>) => void;
   onTestEncouragement?: () => void;
+  parametersPrefs: ParametersPrefs;
+  onParametersPrefsChange: (partial: Partial<ParametersPrefs>) => void;
   workspaceRootPath: string | null;
   onChooseWorkspaceFolder?: () => void | Promise<void>;
 };
@@ -63,6 +76,8 @@ export function SettingsModal({
   encouragementPrefs,
   onEncouragementPrefsChange,
   onTestEncouragement,
+  parametersPrefs,
+  onParametersPrefsChange,
   workspaceRootPath,
   onChooseWorkspaceFolder,
 }: SettingsModalProps) {
@@ -128,6 +143,9 @@ export function SettingsModal({
                 typewriterScroll={typewriterScroll}
                 onTypewriterChange={setTypewriterScroll}
               />
+            ) : null}
+            {activeSection === "parameters" ? (
+              <ParametersPanel prefs={parametersPrefs} onChange={onParametersPrefsChange} />
             ) : null}
             {activeSection === "shortcuts" ? <HotkeysPanel /> : null}
             {activeSection === "encouragement" ? (
@@ -514,6 +532,84 @@ function EditorPanel({
             onChange={(v) => onFocusVisibilityPrefChange({ keepBottomToolsVisibleWhileTyping: v })}
           />
         </ul>
+      </div>
+    </div>
+  );
+}
+
+function ParametersPanel({
+  prefs,
+  onChange,
+}: {
+  prefs: ParametersPrefs;
+  onChange: (partial: Partial<ParametersPrefs>) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-[13px] font-semibold tracking-tight text-ink">Parameters</h2>
+        <p className="mt-1 text-[12px] leading-relaxed text-muted/90">
+          Analysis settings for the tools sidebar and Edit highlights.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <div>
+          <p className="text-[13px] font-medium text-ink">Reading grade</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+            Flesch–Kincaid estimate of U.S. school grade level.
+          </p>
+        </div>
+        <div className="font-mono text-[11px] leading-relaxed text-muted/80">
+          <p>0.39 × (words ÷ sentences) + 11.8 × (syllables ÷ words) − 15.59</p>
+          <p className="mt-0.5">= Reading Grade Level</p>
+        </div>
+      </div>
+
+      <label className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium text-ink">Words per minute</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+            For Reading time. Suggested {SUGGESTED_READING_WPM_MIN}–{SUGGESTED_READING_WPM_MAX}.
+          </p>
+        </div>
+        <input
+          type="number"
+          min={READING_WPM_MIN}
+          max={READING_WPM_MAX}
+          step={10}
+          value={prefs.readingWordsPerMinute}
+          onChange={(e) => onChange({ readingWordsPerMinute: Number(e.target.value) })}
+          className="w-[4.5rem] shrink-0 rounded-md border-0 bg-canvas/45 px-2 py-1.5 text-right text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
+        />
+      </label>
+
+      <div className="space-y-2">
+        <label className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-ink">Sentence complexity</p>
+            <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+              Marks a sentence complex when its Flesch–Kincaid density meets the threshold.
+              Suggested {SUGGESTED_FK_COMPLEXITY_THRESHOLD_MIN}–{SUGGESTED_FK_COMPLEXITY_THRESHOLD_MAX}.
+            </p>
+          </div>
+          <input
+            type="number"
+            min={FK_COMPLEXITY_THRESHOLD_MIN}
+            max={FK_COMPLEXITY_THRESHOLD_MAX}
+            step={1}
+            value={prefs.fkComplexityThreshold}
+            onChange={(e) => onChange({ fkComplexityThreshold: Number(e.target.value) })}
+            aria-label="Sentence complexity threshold"
+            className="w-[4.5rem] shrink-0 rounded-md border-0 bg-canvas/45 px-2 py-1.5 text-right text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
+          />
+        </label>
+        <div className="font-mono text-[11px] leading-relaxed text-muted/80">
+          <p>0.39 × words + 11.8 × (syllables ÷ words) − 15.59</p>
+          <p className="mt-0.5">
+            ≥ {prefs.fkComplexityThreshold}
+          </p>
+        </div>
       </div>
     </div>
   );

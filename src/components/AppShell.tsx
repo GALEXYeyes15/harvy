@@ -85,10 +85,11 @@ import {
   findNodeByPath,
   isTextPreviewable,
 } from "../features/workspace/tree";
-import { isPathUnderWorkspaceRoot } from "../features/workspace/workspacePaths";
+import { isPathUnderWorkspaceRoot, normalizeFsPath } from "../features/workspace/workspacePaths";
 import {
   loadDocumentNotes,
   renameDocumentNotesSidecar,
+  resolveProjectDirectory,
   saveDocumentNotes,
 } from "../features/workspace/documentNotes";
 import { countSpellingWords } from "../features/proofread/mechanics/spellingNormalize";
@@ -109,6 +110,11 @@ import {
   validateSaveAsOutputPath,
 } from "../features/save/saveRuntime";
 import {
+  applyImageSrcRewrites,
+  collectEmbeddedImageSrcs,
+  packageDocumentImages,
+} from "../features/save/documentImages";
+import {
   getProjectStructure,
   projectSubfolderPathsToCreate,
 } from "../features/save/saveAsFolderPreview";
@@ -121,6 +127,10 @@ import {
   writeEncouragementPrefs,
 } from "../features/encouragement/encouragementSettings";
 import { useEncouragementScheduler } from "../features/encouragement/useEncouragementScheduler";
+import {
+  readParametersPrefs,
+  writeParametersPrefs,
+} from "../features/settings/parametersSettings";
 import {
   readWritingAssistancePrefs,
   writeWritingAssistancePrefs,
@@ -267,6 +277,7 @@ export function AppShell() {
   const [writingAssistancePrefs, setWritingAssistancePrefs] = useState(readWritingAssistancePrefs);
   const [focusVisibilityPrefs, setFocusVisibilityPrefs] = useState(readFocusVisibilityPrefs);
   const [encouragementPrefs, setEncouragementPrefs] = useState(readEncouragementPrefs);
+  const [parametersPrefs, setParametersPrefs] = useState(readParametersPrefs);
   const { activePhrase: encouragementPhrase, dismiss: dismissEncouragement, showTest: testEncouragement } =
     useEncouragementScheduler(encouragementPrefs);
 
@@ -385,6 +396,13 @@ export function AppShell() {
   const handleEncouragementPrefsChange = useCallback(
     (partial: Parameters<typeof writeEncouragementPrefs>[0]) => {
       setEncouragementPrefs(writeEncouragementPrefs(partial));
+    },
+    [],
+  );
+
+  const handleParametersPrefsChange = useCallback(
+    (partial: Parameters<typeof writeParametersPrefs>[0]) => {
+      setParametersPrefs(writeParametersPrefs(partial));
     },
     [],
   );
@@ -678,8 +696,14 @@ export function AppShell() {
     const sentenceComplexity = tiptapEditor
       ? countSentenceComplexityInDoc(tiptapEditor.state.doc)
       : countSentenceComplexityFromStoredDocument(scratchEditorBody, activeDocument?.sourcePath ?? null);
-    return calculateEditorStats(text, sentenceComplexity);
-  }, [scratchEditorBody, tiptapEditor, activeDocument?.sourcePath]);
+    return calculateEditorStats(text, sentenceComplexity, parametersPrefs.readingWordsPerMinute);
+  }, [
+    scratchEditorBody,
+    tiptapEditor,
+    activeDocument?.sourcePath,
+    parametersPrefs.readingWordsPerMinute,
+    parametersPrefs.fkComplexityThreshold,
+  ]);
 
   useEffect(() => {
     // Initialize persisted rules file early so future edits always target user-owned rules.
@@ -916,22 +940,24 @@ export function AppShell() {
         return;
       }
 
-      const resolved = resolveSaveAsOutputPath(saveAsDestinationPath!, fileName, organize);
+      let markdown = getDocumentMarkdown(tiptapEditor, activeDocument?.content ?? scratchDraftContent);
+      const folderContext = getProjectStructure({
+        notes: activeDocument?.notes ?? "",
+        editor: tiptapEditor,
+        documentMarkdown: markdown,
+      });
+      const organizeMode: SaveAsOrganizeMode = folderContext.hasImages ? "folder" : organize;
+
+      const resolved = resolveSaveAsOutputPath(saveAsDestinationPath!, fileName, organizeMode);
       if (!resolved) {
         window.alert("Enter a valid file name.");
         return;
       }
 
       const { path: outPath, leaf, folderBase } = resolved;
-      const markdown = getDocumentMarkdown(tiptapEditor, activeDocument?.content ?? scratchDraftContent);
-      const folderContext = getProjectStructure({
-        notes: activeDocument?.notes ?? "",
-        editor: tiptapEditor,
-        documentMarkdown: markdown,
-      });
       setSaveAsSubmitting(true);
       try {
-        if (organize === "folder") {
+        if (organizeMode === "folder") {
           const pkgDir = await invoke<string>("ensure_directory", {
             parentPath: saveAsDestinationPath,
             folderName: folderBase,
@@ -945,6 +971,15 @@ export function AppShell() {
                 folderName: segment,
               });
             }
+          }
+
+          if (folderContext.hasImages && workspaceRootPath) {
+            const { replacements } = await packageDocumentImages({
+              workspaceRoot: workspaceRootPath,
+              projectDir: pkgDir,
+              sources: collectEmbeddedImageSrcs(tiptapEditor, markdown),
+            });
+            markdown = applyImageSrcRewrites(tiptapEditor, markdown, replacements);
           }
         }
 
@@ -1071,24 +1106,103 @@ export function AppShell() {
           openSaveAsModal();
           return;
         }
-        const markdown = getDocumentMarkdown(tiptapEditor, activeDocument.content);
-        await invoke("write_text_file", { path, contents: markdown });
-        await saveDocumentNotes(path, activeDocument.notes);
-        setOpenDocuments((prev) => ({
-          ...prev,
-          [activeTabId]: {
-            ...prev[activeTabId]!,
-            content: markdown,
-            lastSavedContent: markdown,
-            lastSavedNotes: activeDocument.notes,
-          },
-        }));
+        let markdown = getDocumentMarkdown(tiptapEditor, activeDocument.content);
+        const folderContext = getProjectStructure({
+          notes: activeDocument.notes,
+          editor: tiptapEditor,
+          documentMarkdown: markdown,
+        });
+
+        let outPath = path;
+        if (folderContext.hasImages && workspaceRootPath) {
+          let projectDir = resolveProjectDirectory(path);
+          if (!projectDir) {
+            const parent = parentDirectory(path);
+            const leaf = fileNameFromPath(path);
+            const { base } = splitFileBaseAndExtension(leaf);
+            if (!base) {
+              window.alert("Could not create a project folder for this document.");
+              return;
+            }
+            projectDir = await invoke<string>("ensure_directory", {
+              parentPath: parent,
+              folderName: base,
+            });
+            for (const relativePath of projectSubfolderPathsToCreate(folderContext)) {
+              let dirParent = projectDir;
+              for (const segment of relativePath.split("/")) {
+                dirParent = await invoke<string>("ensure_directory", {
+                  parentPath: dirParent,
+                  folderName: segment,
+                });
+              }
+            }
+            const packagedPath = joinPath(projectDir, leaf);
+            if (normalizeFsPath(path) !== normalizeFsPath(packagedPath)) {
+              const exists = await invoke<boolean>("path_exists", { path: packagedPath });
+              if (exists) {
+                const ok = await confirm(
+                  `"${leaf}" already exists inside the project folder. Replace it?`,
+                  { title: "Save", kind: "warning" },
+                );
+                if (!ok) return;
+              } else {
+                await invoke("rename_fs_path", { fromPath: path, toPath: packagedPath });
+              }
+            }
+            outPath = packagedPath;
+          }
+
+          const { replacements } = await packageDocumentImages({
+            workspaceRoot: workspaceRootPath,
+            projectDir,
+            sources: collectEmbeddedImageSrcs(tiptapEditor, markdown),
+          });
+          markdown = applyImageSrcRewrites(tiptapEditor, markdown, replacements);
+        }
+
+        await invoke("write_text_file", { path: outPath, contents: markdown });
+        await saveDocumentNotes(outPath, activeDocument.notes);
+        if (outPath !== path) {
+          finalizeSavedPath(outPath, markdown);
+          await reloadWorkspaceTree();
+        } else {
+          setOpenDocuments((prev) => ({
+            ...prev,
+            [activeTabId]: {
+              ...prev[activeTabId]!,
+              content: markdown,
+              lastSavedContent: markdown,
+              lastSavedNotes: activeDocument.notes,
+            },
+          }));
+        }
         return;
       }
       if (openTabIds.length === 0) {
         if (scratchDiskPath) {
-          const markdown = getDocumentMarkdown(tiptapEditor, scratchDraftContent);
-          await invoke("write_text_file", { path: scratchDiskPath, contents: markdown });
+          let markdown = getDocumentMarkdown(tiptapEditor, scratchDraftContent);
+          const folderContext = getProjectStructure({
+            notes: "",
+            editor: tiptapEditor,
+            documentMarkdown: markdown,
+          });
+          let outPath = scratchDiskPath;
+          if (folderContext.hasImages && workspaceRootPath) {
+            let projectDir = resolveProjectDirectory(scratchDiskPath);
+            if (!projectDir) {
+              openSaveAsModal();
+              return;
+            }
+            const { replacements } = await packageDocumentImages({
+              workspaceRoot: workspaceRootPath,
+              projectDir,
+              sources: collectEmbeddedImageSrcs(tiptapEditor, markdown),
+            });
+            markdown = applyImageSrcRewrites(tiptapEditor, markdown, replacements);
+            outPath = scratchDiskPath;
+          }
+          await invoke("write_text_file", { path: outPath, contents: markdown });
           setScratchLastSavedContent(markdown);
           setScratchDraftContent(markdown);
         } else {
@@ -1104,11 +1218,14 @@ export function AppShell() {
     isDirty,
     openTabIds.length,
     openSaveAsModal,
-    scratchDiskPath,
-    scratchDraftContent,
-    tiptapEditor,
     editorEditable,
     hasWorkspaceFolder,
+    tiptapEditor,
+    scratchDiskPath,
+    scratchDraftContent,
+    workspaceRootPath,
+    finalizeSavedPath,
+    reloadWorkspaceTree,
   ]);
 
   /** Keep sidebar selection aligned with the open tab’s file; virtual tabs use browse/root, not the synthetic id. */
@@ -1521,7 +1638,7 @@ export function AppShell() {
     if (!tiptapEditor) return;
     const tr = tiptapEditor.state.tr.setMeta(grammarDecorationsKey, true);
     tiptapEditor.view.dispatch(tr);
-  }, [showReadabilityHighlights, tiptapEditor]);
+  }, [showReadabilityHighlights, tiptapEditor, parametersPrefs.fkComplexityThreshold]);
 
   useEffect(() => {
     if (!tiptapEditor) return;
@@ -2049,6 +2166,8 @@ export function AppShell() {
         encouragementPrefs={encouragementPrefs}
         onEncouragementPrefsChange={handleEncouragementPrefsChange}
         onTestEncouragement={testEncouragement}
+        parametersPrefs={parametersPrefs}
+        onParametersPrefsChange={handleParametersPrefsChange}
         workspaceRootPath={workspaceRootPath}
         onChooseWorkspaceFolder={chooseWorkspaceFolder}
       />
