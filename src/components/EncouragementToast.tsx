@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { EncouragementPhrase } from "../features/encouragement/encouragementSettings";
@@ -42,26 +43,21 @@ export function EncouragementToast({
     >
       <div
         role="status"
-        className={`pointer-events-auto origin-top-right rounded-[1.15rem] bg-page px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.28)] ring-1 ring-line/40 transition-[opacity,transform] duration-300 ease-out dark:bg-page dark:ring-white/10 ${
+        className={`group relative pointer-events-auto origin-top-right rounded-[1.15rem] bg-page px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.28)] ring-1 ring-line/40 transition-[opacity,transform] duration-300 ease-out dark:bg-page dark:ring-white/10 ${
           visible ? "translate-y-0 scale-100 opacity-100" : "translate-y-1 scale-95 opacity-0"
         }`}
       >
-        <div className="mb-1.5 flex items-center justify-between gap-3">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted/70">
-            Encouragement
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setVisible(false);
-              window.setTimeout(onDismiss, 200);
-            }}
-            className="rounded-md px-1.5 py-0.5 text-[11px] text-muted/60 transition-colors hover:bg-ink/[0.06] hover:text-ink"
-            aria-label="Dismiss encouragement"
-          >
-            Close
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setVisible(false);
+            window.setTimeout(onDismiss, 200);
+          }}
+          className="absolute right-0 top-0 flex size-[22px] -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full bg-page text-ink opacity-0 shadow-[0_4px_12px_rgba(0,0,0,0.25)] ring-1 ring-line/55 transition-opacity duration-150 hover:bg-ink/[0.04] group-hover:opacity-100 focus-visible:opacity-100 dark:bg-page dark:ring-white/25 dark:hover:bg-white/[0.06]"
+          aria-label="Dismiss encouragement"
+        >
+          <X size={12} strokeWidth={1.75} aria-hidden />
+        </button>
         <p className="text-[14px] font-medium leading-snug tracking-tight text-ink">
           “{phrase.text}”
         </p>
