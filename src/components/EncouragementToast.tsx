@@ -58,10 +58,10 @@ export function EncouragementToast({
         >
           <X size={12} strokeWidth={1.75} aria-hidden />
         </button>
-        <p className="text-[14px] font-medium leading-snug tracking-tight text-ink">
-          “{phrase.text}”
+        <p className="pr-2 text-[13px] font-semibold leading-snug tracking-tight text-ink">
+          {phrase.author}
         </p>
-        <p className="mt-2 text-right text-[12px] font-normal text-muted/80">— {phrase.author}</p>
+        <p className="mt-0.5 text-[13px] font-normal leading-snug text-ink/90">{phrase.text}</p>
       </div>
     </div>,
     document.body,
