@@ -1,4 +1,8 @@
 import { useLayoutEffect, useRef } from "react";
+import { isTauriRuntime } from "../features/save/saveRuntime";
+import { setWorkspaceImageDragData } from "../features/editor/imageDrop";
+import { armSidebarImagePointerDrag } from "../features/editor/sidebarImageDrag";
+import { isImagePreviewable } from "../features/workspace/tree";
 import { WorkspaceNodeIcon } from "../features/workspace/nodeIcon";
 import type { FileNode } from "../features/workspace/types";
 
@@ -50,6 +54,7 @@ export function WorkspaceTree({
   const isExpanded = isDirectory ? expandedPaths.has(node.path) : false;
   const isSelected = selectedPath === node.path;
   const isRenaming = Boolean(isDirectory && renamingPath === node.path);
+  const isDraggableImage = !isDirectory && isImagePreviewable(node.path);
 
   const rowShell = isSelected
     ? "relative flex w-full min-w-0 items-center overflow-hidden rounded-md bg-ink/[0.045] px-2 py-[5px] text-[12px] text-ink"
@@ -113,11 +118,23 @@ export function WorkspaceTree({
         >
           <button
             type="button"
+            // HTML5 drag works in the browser; desktop uses pointer drag (Tauri blocks HTML5 drops).
+            draggable={isDraggableImage && !isTauriRuntime()}
+            onDragStart={(event) => {
+              if (!isDraggableImage || !event.dataTransfer || isTauriRuntime()) return;
+              setWorkspaceImageDragData(event.dataTransfer, node.path);
+            }}
+            onPointerDown={(event) => {
+              if (!isDraggableImage || !isTauriRuntime()) return;
+              armSidebarImagePointerDrag(event.nativeEvent, node.path, node.name);
+            }}
             onClick={() => {
               if (isDirectory) onToggleFolder(node.path);
               onSelectNode(node);
             }}
-            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left font-inherit text-inherit"
+            className={`flex min-w-0 flex-1 items-center gap-2 border-0 bg-transparent p-0 text-left font-inherit text-inherit ${
+              isDraggableImage ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+            }`}
             style={{ paddingLeft }}
           >
             {isDirectory ? (

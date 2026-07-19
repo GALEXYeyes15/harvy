@@ -1,9 +1,17 @@
-import { useEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type DragEvent as ReactDragEvent,
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+} from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { handleBackspaceOnEmptyTextBlockKeyDown } from "../features/editor/emptyTextBlockDeletion";
 import { EmptyTextBlockBackspace } from "../features/editor/emptyTextBlockBackspace";
 import { HarvyParagraph } from "../features/editor/harvyParagraph";
@@ -37,6 +45,16 @@ import { handleImageCaptionLinkPointerDown } from "../features/editor/editorImag
 import { HarvyImage } from "../features/editor/harvyImage";
 import type { HarvyImageLoadAttrs } from "../features/editor/harvyImageAttribution";
 import { resolveWorkspaceImageSrc } from "../features/editor/imageAssets";
+import {
+  HARVY_SIDEBAR_IMAGE_DROP_EVENT,
+  insertImageSrcsAtClientCoords,
+  resolveFilesystemImageSrc,
+  resolveImageSrcsFromDataTransfer,
+  resolveImageSrcsFromPaths,
+  shouldHandleHtmlImageDrop,
+  type SidebarImageDropDetail,
+} from "../features/editor/imageDrop";
+import { isTauriRuntime } from "../features/save/saveRuntime";
 import { HarvyListItem } from "../features/editor/harvyListItem";
 import { HarvyOrderedList } from "../features/editor/harvyOrderedList";
 import { HarvyListKeyboard } from "../features/editor/harvyListKeyboard";
@@ -117,6 +135,8 @@ export function EditorCanvas({
   onTypingActivityRef.current = onTypingActivity;
   const onEditorUserActivatedRef = useRef(onEditorUserActivated);
   onEditorUserActivatedRef.current = onEditorUserActivated;
+  const writingSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const dropInFlightRef = useRef(false);
 
   const editorFocusControl = useMemo<EditorCanvasFocusControl>(
     () => ({
@@ -191,6 +211,25 @@ export function EditorCanvas({
     return () => onEditorReady(null);
   }, [editor, onEditorReady]);
 
+  /**
+   * Re-hydrate when the buffer has Markdown images but the live doc has no image
+   * nodes (e.g. tab left open across a hydration fix, or legacy spaced-path `![]()`).
+   */
+  useEffect(() => {
+    if (!editor) return;
+    if (!contentSourcePath) return;
+    if (!/!(\[|\\\[).{0,200}(\]|\\\])\([^)\n]+\)/.test(text)) return;
+    let hasImageNode = false;
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === "harvyImage") {
+        hasImageNode = true;
+        return false;
+      }
+    });
+    if (hasImageNode) return;
+    editor.commands.setContent(toEditorHtml(text, { sourcePath: contentSourcePath }), false);
+  }, [editor, text, contentSourcePath]);
+
   useEffect(() => {
     if (!editor) return;
     editor.setEditable(isEditable);
@@ -244,8 +283,36 @@ export function EditorCanvas({
     editor.setOptions({
       editorProps: {
         ...editor.options.editorProps,
+        handleDrop: (_view, event, _slice, moved) => {
+          if (moved) return false;
+          if (!isEditableRef.current) return false;
+          const dt = event.dataTransfer;
+          if (!shouldHandleHtmlImageDrop(dt)) return false;
+          event.preventDefault();
+          if (dropInFlightRef.current) return true;
+          dropInFlightRef.current = true;
+          const { clientX, clientY } = event;
+          void (async () => {
+            try {
+              const srcs = await resolveImageSrcsFromDataTransfer(dt!, workspaceRootPathRef.current);
+              if (srcs.length === 0) return;
+              onEditorUserActivatedRef.current?.();
+              insertImageSrcsAtClientCoords(editor, srcs, clientX, clientY);
+            } finally {
+              dropInFlightRef.current = false;
+            }
+          })();
+          return true;
+        },
         handleDOMEvents: {
           ...prior,
+          dragover: (_view, event) => {
+            if (!isEditableRef.current) return false;
+            if (!shouldHandleHtmlImageDrop(event.dataTransfer)) return false;
+            event.preventDefault();
+            if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+            return true;
+          },
           mousedown: (view, event) => {
             if (isEditableRef.current) {
               handleEditorWritingSurfacePointerDown(event as MouseEvent, editorFocusControl);
@@ -304,6 +371,87 @@ export function EditorCanvas({
     });
   }, [editor, editorFocusControl, editorFocusSuppressedRef, onInsertImage, isEditable]);
 
+  // OS file drops (Finder) — Tauri provides absolute paths here, not via HTML5 FileList.
+  useEffect(() => {
+    if (!editor || !isTauriRuntime()) return;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void getCurrentWindow()
+      .onDragDropEvent((event) => {
+        if (cancelled || !isEditableRef.current) return;
+        if (event.payload.type !== "drop") return;
+
+        const { paths, position } = event.payload;
+        if (paths.length === 0) return;
+
+        void (async () => {
+          const scale = await getCurrentWindow().scaleFactor();
+          if (cancelled) return;
+          const clientX = position.x / scale;
+          const clientY = position.y / scale;
+
+          const surface = writingSurfaceRef.current;
+          if (!surface) return;
+          const topEl = document.elementFromPoint(clientX, clientY);
+          if (!topEl || (!surface.contains(topEl) && topEl !== surface)) return;
+
+          if (dropInFlightRef.current) return;
+          dropInFlightRef.current = true;
+          try {
+            const srcs = await resolveImageSrcsFromPaths(paths, workspaceRootPathRef.current);
+            if (cancelled || srcs.length === 0) return;
+            onEditorUserActivatedRef.current?.();
+            insertImageSrcsAtClientCoords(editor, srcs, clientX, clientY);
+          } finally {
+            dropInFlightRef.current = false;
+          }
+        })();
+      })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [editor]);
+
+  // Sidebar image drops (pointer drag) — HTML5 DnD is blocked by Tauri dragDropEnabled.
+  useEffect(() => {
+    if (!editor) return;
+
+    const onSidebarImageDrop = (event: Event) => {
+      if (!isEditableRef.current) return;
+      const detail = (event as CustomEvent<SidebarImageDropDetail>).detail;
+      if (!detail?.path) return;
+
+      const { path, clientX, clientY } = detail;
+      const surface = writingSurfaceRef.current;
+      if (!surface) return;
+      const topEl = document.elementFromPoint(clientX, clientY);
+      if (!topEl || (!surface.contains(topEl) && topEl !== surface)) return;
+
+      if (dropInFlightRef.current) return;
+      dropInFlightRef.current = true;
+      void (async () => {
+        try {
+          const src = await resolveFilesystemImageSrc(path, workspaceRootPathRef.current);
+          if (!src) return;
+          onEditorUserActivatedRef.current?.();
+          insertImageSrcsAtClientCoords(editor, [src], clientX, clientY);
+        } finally {
+          dropInFlightRef.current = false;
+        }
+      })();
+    };
+
+    window.addEventListener(HARVY_SIDEBAR_IMAGE_DROP_EVENT, onSidebarImageDrop);
+    return () => window.removeEventListener(HARVY_SIDEBAR_IMAGE_DROP_EVENT, onSidebarImageDrop);
+  }, [editor]);
+
   const handleCanvasMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (!editor || !isEditable || event.button !== 0) return;
     if (editor.view.dom.contains(event.target as Node)) return;
@@ -313,13 +461,46 @@ export function EditorCanvas({
     }
   };
 
+  const handleSurfaceDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!isEditable) return;
+    if (!shouldHandleHtmlImageDrop(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleSurfaceDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!editor || !isEditable) return;
+    if (!shouldHandleHtmlImageDrop(event.dataTransfer)) return;
+    // Let ProseMirror handle drops that land on the editor DOM itself.
+    if (editor.view.dom.contains(event.target as Node)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (dropInFlightRef.current) return;
+    dropInFlightRef.current = true;
+    const { clientX, clientY } = event;
+    const dt = event.dataTransfer;
+    void (async () => {
+      try {
+        const srcs = await resolveImageSrcsFromDataTransfer(dt, workspaceRootPathRef.current);
+        if (srcs.length === 0) return;
+        onEditorUserActivatedRef.current?.();
+        insertImageSrcsAtClientCoords(editor, srcs, clientX, clientY);
+      } finally {
+        dropInFlightRef.current = false;
+      }
+    })();
+  };
+
   return (
     <div
       className={`box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent border border-solid border-transparent ${editorVisuallyInactive ? "editor-is-inactive" : ""}`}
     >
       <div
+        ref={writingSurfaceRef}
         className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain ${isEditable ? "cursor-text" : ""}`}
         onMouseDown={handleCanvasMouseDown}
+        onDragOver={handleSurfaceDragOver}
+        onDrop={handleSurfaceDrop}
       >
         <div className="flex min-h-full w-full flex-col px-10 pb-52 pt-2 sm:px-14 sm:pb-9 sm:pt-2.5">
           <label htmlFor="harvy-editor" className="sr-only">

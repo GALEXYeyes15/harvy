@@ -125,6 +125,12 @@
     user-select: none;
   }
 
+  body.harvy-sidebar-image-dragging,
+  body.harvy-sidebar-image-dragging * {
+    cursor: copy !important;
+    user-select: none !important;
+  }
+
   /* Main writing surface — Baskerville / Libre Baskerville stack */
   .editor-content {
     font-family: var(--font-content);

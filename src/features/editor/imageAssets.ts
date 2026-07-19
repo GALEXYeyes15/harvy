@@ -2,8 +2,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { joinPath } from "../workspace/folderNaming";
 import { isTauriRuntime } from "../save/saveRuntime";
-
-const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tif", "tiff"];
+import { IMAGE_EXTENSIONS } from "../workspace/tree";
 
 export function resolveWorkspaceImageSrc(workspaceRoot: string | null, storedSrc: string): string {
   if (!storedSrc) return "";
@@ -23,7 +22,7 @@ export async function pickAndImportWorkspaceImage(): Promise<string | null> {
 
   const selected = await open({
     multiple: false,
-    filters: [{ name: "Images", extensions: IMAGE_EXTENSIONS }],
+    filters: [{ name: "Images", extensions: [...IMAGE_EXTENSIONS] }],
   });
   if (!selected || Array.isArray(selected)) return null;
 

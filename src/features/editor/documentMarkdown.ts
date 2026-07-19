@@ -83,6 +83,51 @@ turndown.addRule("harvyImageBlock", {
   },
 });
 
+/**
+ * Never let standalone `<img>` fall through to GFM `![]()` — paths with spaces
+ * then fail to reopen. Keep them as Harvy figure islands.
+ */
+turndown.addRule("harvyPlainImgToFigure", {
+  filter(node) {
+    if (node.nodeName !== "IMG") return false;
+    const el = node as HTMLElement;
+    if (el.closest?.("figure[data-harvy-image], figure.harvy-image-block")) return false;
+    return Boolean(el.getAttribute?.("src")?.trim());
+  },
+  replacement(_content, node) {
+    const el = node as HTMLElement;
+    const src = el.getAttribute("src")?.trim() ?? "";
+    const alt = el.getAttribute("alt") ?? "";
+    const photoBy = /^Photo by (.+) on Unsplash$/i.exec(alt.trim());
+    const attrs = [
+      'data-harvy-image=""',
+      'data-harvy-image-status="loaded"',
+      'class="harvy-image-block"',
+      'data-width="full"',
+    ];
+    if (photoBy?.[1]) {
+      attrs.push('data-image-source="unsplash"');
+      attrs.push(`data-photographer-name="${escapeAttr(photoBy[1].trim())}"`);
+      attrs.push('data-unsplash-url="https://unsplash.com"');
+      attrs.push(`data-caption="${escapeAttr(alt.trim())}"`);
+    } else if (alt.trim()) {
+      attrs.push(`data-caption="${escapeAttr(alt.trim())}"`);
+    }
+    return `\n\n<figure ${attrs.join(" ")}><img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" draggable="false"></figure>\n\n`;
+  },
+});
+
+function escapeText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeAttr(value: string): string {
+  return escapeText(value).replace(/"/g, "&quot;");
+}
+
 turndown.addRule("harvyRestorableParagraph", {
   filter(node) {
     return (
@@ -117,8 +162,72 @@ export function editorHtmlToMarkdown(html: string): string {
   return out ? `${out}\n` : "";
 }
 
+function escapeHtmlText(value: string): string {
+  return escapeText(value);
+}
+
+function escapeHtmlAttr(value: string): string {
+  return escapeAttr(value);
+}
+
+/**
+ * Some saves left literal/escaped image syntax on disk, e.g.
+ * `!\[Photo by …\](Designing habits/Images/img\_1.png)`.
+ * Normalize those back to real `![]()` before further conversion.
+ */
+export function unescapeEscapedMarkdownImages(markdown: string): string {
+  const unescapeMd = (value: string) => value.replace(/\\([\\`*_{}\[\]()#+\-.!])/g, "$1");
+  return markdown.replace(/!\\\[([\s\S]*?)\\\]\(([^)\n]+)\)/g, (_full, altRaw: string, destRaw: string) => {
+    return `![${unescapeMd(altRaw)}](${unescapeMd(destRaw)})`;
+  });
+}
+
+/**
+ * Convert CommonMark images to Harvy figure islands before markdown-it runs.
+ * Destinations with spaces (e.g. `Designing habits/Images/x.png`) are invalid
+ * unbracketed CommonMark destinations and otherwise render as broken/raw text.
+ */
+export function markdownStandardImagesToHarvyFigures(markdown: string): string {
+  const normalized = unescapeEscapedMarkdownImages(markdown);
+  return normalized.replace(/!\[([^\]]*)\]\((<[^>\n]+>|[^)\n]+)\)/g, (_full, altRaw, destRaw) => {
+    const alt = String(altRaw ?? "");
+    let dest = String(destRaw ?? "").trim();
+    if (dest.startsWith("<") && dest.endsWith(">")) {
+      dest = dest.slice(1, -1).trim();
+    }
+    // Drop optional link title: url "title" / url 'title'
+    const titled = dest.match(/^(.+?)\s+(["'])([\s\S]*)\2\s*$/);
+    const src = (titled?.[1] ?? dest).trim();
+    if (!src) return _full;
+
+    const photoBy = /^Photo by (.+) on Unsplash$/i.exec(alt.trim());
+    const attrs = [
+      'data-harvy-image=""',
+      'data-harvy-image-status="loaded"',
+      'class="harvy-image-block"',
+      'data-width="full"',
+    ];
+    if (photoBy?.[1]) {
+      attrs.push('data-image-source="unsplash"');
+      attrs.push(`data-photographer-name="${escapeHtmlAttr(photoBy[1].trim())}"`);
+      attrs.push('data-unsplash-url="https://unsplash.com"');
+      attrs.push(`data-caption="${escapeHtmlAttr(alt.trim())}"`);
+    } else if (alt.trim()) {
+      attrs.push(`data-caption="${escapeHtmlAttr(alt.trim())}"`);
+    }
+
+    const captionHtml = photoBy?.[1]
+      ? "" // Node view rebuilds Unsplash caption from metadata
+      : alt.trim()
+        ? `<figcaption>${escapeHtmlText(alt.trim())}</figcaption>`
+        : "";
+
+    return `\n\n<figure ${attrs.join(" ")}><img src="${escapeHtmlAttr(src)}" alt="${escapeHtmlAttr(alt)}" draggable="false">${captionHtml}</figure>\n\n`;
+  });
+}
+
 export function markdownToEditorHtml(markdown: string): string {
-  const md = markdown ?? "";
+  const md = markdownStandardImagesToHarvyFigures(markdown ?? "");
   if (!md.trim()) return "<p></p>";
   return markdownIt.render(md);
 }
@@ -230,7 +339,10 @@ function plainTextToMarkdown(text: string): string {
 /** Normalize file bytes to the Markdown string we keep in workspace state. */
 export function ingestTextFileContent(raw: string, sourcePath: string): string {
   const normalized = raw.replace(/\r\n/g, "\n");
-  if (/\.(md|markdown|mkd)$/i.test(sourcePath)) return normalized;
+  if (/\.(md|markdown|mkd)$/i.test(sourcePath)) {
+    // Lift `![]()` (including spaced paths) into figure islands so open/save round-trips.
+    return markdownStandardImagesToHarvyFigures(normalized);
+  }
   if (looksLikeEditorHtml(normalized)) return editorHtmlToMarkdown(normalized);
   return plainTextToMarkdown(normalized);
 }

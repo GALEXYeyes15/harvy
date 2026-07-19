@@ -20,6 +20,7 @@ import { SidebarRight } from "./SidebarRight";
 import { EditorToolbar } from "./EditorToolbar";
 import { EditorAmbientControls } from "./EditorAmbientControls";
 import { EditorCanvas } from "./EditorCanvas";
+import { ImagePreviewModal, type ImagePreviewTarget } from "./ImagePreviewModal";
 import { FloatingTextMenu } from "./FloatingTextMenu";
 import { setSpellingDocumentKey } from "../features/proofread/mechanics/spellingDictionary";
 import { syncSpellingContextMenuRef } from "../features/proofread/spellingContextMenuRef";
@@ -83,6 +84,7 @@ import {
   filterFileTree,
   filterTree,
   findNodeByPath,
+  isImagePreviewable,
   isTextPreviewable,
 } from "../features/workspace/tree";
 import { isPathUnderWorkspaceRoot, normalizeFsPath } from "../features/workspace/workspacePaths";
@@ -254,6 +256,7 @@ export function AppShell() {
   const [workspaceVolumeLabel, setWorkspaceVolumeLabel] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [imagePreview, setImagePreview] = useState<ImagePreviewTarget | null>(null);
   const [saveAsModalOpen, setSaveAsModalOpen] = useState(false);
   const [saveAsLiveFileName, setSaveAsLiveFileName] = useState("");
   const [saveAsInitialFileName, setSaveAsInitialFileName] = useState("Untitled.md");
@@ -1362,6 +1365,13 @@ export function AppShell() {
       return;
     }
 
+    // Images open in a modal — don't switch editor tabs or prompt about dirty state.
+    if (isImagePreviewable(node.path)) {
+      setSelectedPath(node.path);
+      setImagePreview({ fileName: node.name, sourcePath: node.path });
+      return;
+    }
+
     if (isDirty && node.path !== activeTabId) {
       const ok = window.confirm("Discard unsaved changes and open this file?");
       if (!ok) return;
@@ -2185,6 +2195,12 @@ export function AppShell() {
         folderPreviewContext={saveAsFolderPreviewContext}
       />
       <AboutModal open={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
+      <ImagePreviewModal
+        open={imagePreview !== null}
+        target={imagePreview}
+        workspaceRootPath={workspaceRootPath}
+        onClose={() => setImagePreview(null)}
+      />
     </div>
   );
 }

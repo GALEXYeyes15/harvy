@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
-import { File, FilePenLine, FileText, FileType, Folder, FolderOpen } from "lucide-react";
+import { File, FileImage, FilePenLine, FileText, FileType, Folder, FolderOpen } from "lucide-react";
 import type { FileNode } from "./types";
+import { IMAGE_EXTENSIONS } from "./tree";
 
 /** Last segment after "." — case-insensitive; supports names like `notes.v1.txt`. */
 function fileExtension(name: string): string | null {
@@ -19,6 +20,9 @@ export function getNodeIcon(node: FileNode, isExpanded?: boolean): LucideIcon {
   }
 
   const ext = fileExtension(node.name);
+  if (ext && IMAGE_EXTENSIONS.includes(ext as (typeof IMAGE_EXTENSIONS)[number])) {
+    return FileImage;
+  }
   switch (ext) {
     case "pdf":
       return FileType;

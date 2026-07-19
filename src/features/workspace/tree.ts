@@ -1,7 +1,29 @@
 import type { FileNode } from "./types";
 
+/** Shared with editor uploads — keep list aligned with `imageAssets.ts`. */
+export const IMAGE_EXTENSIONS = [
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "heic",
+  "heif",
+  "bmp",
+  "tif",
+  "tiff",
+] as const;
+
 /** Files shown in the workspace sidebar (directories always pass through when they have visible children). */
-export const ALLOWED_EXTENSIONS = ["pdf", "txt", "md", "markdown", "mkd", "harvy"] as const;
+export const ALLOWED_EXTENSIONS = [
+  "pdf",
+  "txt",
+  "md",
+  "markdown",
+  "mkd",
+  "harvy",
+  ...IMAGE_EXTENSIONS,
+] as const;
 
 function getExtension(name: string): string | null {
   const dotIndex = name.lastIndexOf(".");
@@ -38,6 +60,13 @@ export function isTextPreviewable(path: string): boolean {
     extension === "markdown" ||
     extension === "mkd" ||
     extension === "harvy"
+  );
+}
+
+export function isImagePreviewable(path: string): boolean {
+  const extension = getExtension(path.split(/[\\/]/).pop() ?? path);
+  return Boolean(
+    extension && IMAGE_EXTENSIONS.includes(extension as (typeof IMAGE_EXTENSIONS)[number]),
   );
 }
 
