@@ -439,11 +439,17 @@
     list-style-type: disc;
   }
 
+  /* Substack-style blockquote — thick left rule, body text color */
   .ProseMirror-harvy blockquote {
-    margin: 0.5em 0;
-    padding-left: 1rem;
-    border-left: 2px solid color-mix(in oklab, var(--color-line) 80%, transparent);
-    color: color-mix(in oklab, var(--color-ink) 88%, var(--color-muted));
+    margin: 0.85em 0;
+    padding: 0.1em 0 0.1em 1.15rem;
+    border-left: 3px solid color-mix(in oklab, var(--color-ink) 32%, transparent);
+    color: inherit;
+  }
+
+  .ProseMirror-harvy blockquote p {
+    margin-top: 0.35em;
+    margin-bottom: 0.35em;
   }
 
   /* Substack-style image blocks — block-level only; no paragraph drag chrome */

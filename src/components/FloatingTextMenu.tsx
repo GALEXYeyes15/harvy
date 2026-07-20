@@ -14,7 +14,7 @@ import {
   Heading3,
   Italic,
   Link2,
-  MessageSquare,
+  MessageSquareQuote,
   Underline,
 } from "lucide-react";
 import type { EditorCommand } from "../features/editor/commands";
@@ -56,7 +56,6 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [linkUrlError, setLinkUrlError] = useState("");
-  const [commentNote, setCommentNote] = useState(false);
   const revealTimerRef = useRef<number | null>(null);
   const fadeOutTimerRef = useRef<number | null>(null);
   const pointerSelectingRef = useRef(false);
@@ -108,7 +107,7 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
     placement: "beside-below-end",
     visible: panelAnchor !== null,
     onClose: closeMenu,
-    repositionDeps: [linkOpen, linkUrl, linkUrlError, commentNote, menuOpacityOn],
+    repositionDeps: [linkOpen, linkUrl, linkUrlError, menuOpacityOn],
   });
 
   useEffect(() => {
@@ -325,12 +324,6 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
 
   const run = (cmd: EditorCommand) => {
     if (!editor) return;
-    if (cmd === "comment") {
-      setCommentNote(true);
-      window.setTimeout(() => setCommentNote(false), 2200);
-      refreshAnchorPosition();
-      return;
-    }
     onApplyFormat(cmd);
     refreshAnchorPosition();
   };
@@ -395,11 +388,6 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
         ariaLabel={linkOpen ? "Edit link" : "Text formatting"}
         className={`harvy-context-menu--toolbar w-fit max-w-[calc(100vw-1rem)] will-change-[opacity] ${linkOpen ? "harvy-context-menu--link-editor" : ""} ${opacityTransitionClass}`}
       >
-        {commentNote ? (
-          <p className="harvy-context-menu__note">
-            Comments are not available yet — this space is reserved for a future flow.
-          </p>
-        ) : null}
         {linkOpen ? (
           <div
             className="harvy-context-menu__link-panel harvy-context-menu__link-panel--solo"
@@ -493,11 +481,12 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
               <>
                 <button
                   type="button"
-                  className={HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS}
-                  aria-label="Comment"
-                  onClick={() => run("comment")}
+                  className={`${HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS} ${act(!!ed?.isActive("blockquote"))}`}
+                  aria-label="Quote"
+                  aria-pressed={ed?.isActive("blockquote") ?? false}
+                  onClick={() => run("quote")}
                 >
-                  <MessageSquare size={13} strokeWidth={1.6} aria-hidden />
+                  <MessageSquareQuote size={13} strokeWidth={1.6} aria-hidden />
                 </button>
                 <button
                   type="button"
