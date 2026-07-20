@@ -7,7 +7,7 @@ import {
 export type HarvyImageAdjacentSide = "before-image" | "after-image";
 
 const IMAGE_INTERACTIVE_SELECTOR =
-  "button, input, textarea, a, .harvy-image-node__toolbar, .harvy-image-source-popover, .harvy-image-node__caption, figcaption";
+  "button, input, textarea, a, .harvy-image-node__toolbar, .harvy-image-source-popover, .harvy-image-node__caption, figcaption, [aria-labelledby='harvy-unsplash-browse-title']";
 
 /** True when the event target is an image control, caption, or the bitmap itself. */
 export function isHarvyImageInteractiveTarget(target: Element): boolean {

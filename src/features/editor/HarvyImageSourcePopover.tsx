@@ -216,12 +216,14 @@ export function HarvyImageSourcePopover({
 
   const openBrowse = useCallback(() => {
     const rect = panelRef.current?.getBoundingClientRect();
-    setBrowseExpandFrom(
-      rect
-        ? { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
-        : null,
-    );
-    setBrowseOpen(true);
+    const expandFrom = rect
+      ? { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
+      : null;
+    // Defer so the "Show more" click doesn't land on the browse modal backdrop.
+    window.setTimeout(() => {
+      setBrowseExpandFrom(expandFrom);
+      setBrowseOpen(true);
+    }, 0);
   }, []);
 
   const previewResults = unsplashResults.slice(0, UNSPLASH_PREVIEW_COUNT);
@@ -229,15 +231,20 @@ export function HarvyImageSourcePopover({
 
   return (
     <>
-      {!browseOpen
-        ? createPortal(
+      {createPortal(
         <div
           ref={panelRef}
           className={`harvy-image-source-popover harvy-image-source-popover--anchor-${mode}`}
-          style={{ top: position.top, left: position.left }}
+          style={{
+            top: position.top,
+            left: position.left,
+            visibility: browseOpen ? "hidden" : "visible",
+            pointerEvents: browseOpen ? "none" : undefined,
+          }}
           data-anchor-mode={mode}
           role="dialog"
           aria-label={mode === "replace" ? "Replace image" : "Add image"}
+          aria-hidden={browseOpen}
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="harvy-image-source-popover__tabs" role="tablist" aria-label="Image source">
@@ -383,8 +390,7 @@ export function HarvyImageSourcePopover({
           </div>
         </div>,
         document.body,
-      )
-        : null}
+      )}
 
       <UnsplashBrowseModal
         open={browseOpen}

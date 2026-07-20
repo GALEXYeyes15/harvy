@@ -52,6 +52,7 @@ export function UnsplashBrowseModal({
 }: UnsplashBrowseModalProps) {
   const searchId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -65,6 +66,8 @@ export function UnsplashBrowseModal({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(!expandFrom);
+  /** Ignore backdrop dismiss until the opening click finishes (and expand animates). */
+  const [dismissReady, setDismissReady] = useState(false);
 
   const runSearch = useCallback(async (rawQuery: string, nextPage: number, append: boolean) => {
     const trimmed = rawQuery.trim();
@@ -98,7 +101,10 @@ export function UnsplashBrowseModal({
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setDismissReady(false);
+      return;
+    }
     const seedQuery = initialQuery.trim();
     const seedResults = initialResults?.length ? initialResults : MOCK_UNSPLASH_IMAGES;
     setQuery(seedQuery);
@@ -107,7 +113,14 @@ export function UnsplashBrowseModal({
     setHasMore(true);
     setError("");
     setExpanded(!expandFrom);
+    setDismissReady(false);
     void runSearch(seedQuery, 1, false);
+    // Block the opening click from dismissing via the backdrop.
+    const readyTimer = window.setTimeout(
+      () => setDismissReady(true),
+      expandFrom ? EXPAND_MS + 80 : 120,
+    );
+    return () => window.clearTimeout(readyTimer);
     // Intentionally only re-seed when the modal opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open-only bootstrap
   }, [open]);
@@ -149,11 +162,19 @@ export function UnsplashBrowseModal({
     document.body.style.overflow = "hidden";
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        onCloseRef.current();
+      if (e.key !== "Escape") return;
+      // Let the search field handle Esc clear first when it has text.
+      const target = e.target;
+      if (
+        target instanceof HTMLInputElement &&
+        panelRef.current?.contains(target) &&
+        target.value.length > 0
+      ) {
+        return;
       }
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      onCloseRef.current();
     };
     document.addEventListener("keydown", onKeyDown, true);
     return () => {
@@ -161,6 +182,23 @@ export function UnsplashBrowseModal({
       document.removeEventListener("keydown", onKeyDown, true);
     };
   }, [open]);
+
+  const dismissIfReady = () => {
+    if (!dismissReady) return;
+    onCloseRef.current();
+  };
+
+  useEffect(() => {
+    if (!open || !dismissReady) return;
+    const input = searchInputRef.current;
+    if (!input) return;
+    // Focus after the opening click settles so typing goes to search, not the editor.
+    const frame = window.requestAnimationFrame(() => {
+      input.focus({ preventScroll: true });
+      if (input.value) input.select();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, dismissReady]);
 
   const handleSearch = () => {
     void runSearch(query.trim(), 1, false);
@@ -178,17 +216,21 @@ export function UnsplashBrowseModal({
       <button
         type="button"
         tabIndex={-1}
-        className="absolute inset-0 bg-ink/[0.22] backdrop-blur-[1px] transition-opacity duration-200"
+        className={`absolute inset-0 bg-ink/[0.22] backdrop-blur-[1px] transition-opacity duration-200 ${
+          dismissReady ? "pointer-events-auto" : "pointer-events-none"
+        }`}
         style={{ opacity: expanded ? 1 : 0 }}
         aria-label="Dismiss Unsplash browser"
-        onClick={() => onCloseRef.current()}
+        onClick={dismissIfReady}
       />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="harvy-unsplash-browse-title"
-        className="relative flex h-[min(760px,90vh)] w-[min(980px,94vw)] max-h-[90vh] max-w-[94vw] min-h-0 flex-col overflow-hidden rounded-xl bg-page shadow-[0_24px_64px_-20px_rgba(28,25,23,0.16)] dark:shadow-[0_28px_80px_-24px_rgba(0,0,0,0.55)]"
+        className="relative z-[1] flex h-[min(760px,90vh)] w-[min(980px,94vw)] max-h-[90vh] max-w-[94vw] min-h-0 flex-col overflow-hidden rounded-xl bg-page shadow-[0_24px_64px_-20px_rgba(28,25,23,0.16)] dark:shadow-[0_28px_80px_-24px_rgba(0,0,0,0.55)]"
+        onMouseDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
       >
         <header className="flex shrink-0 items-center justify-between gap-4 px-6 py-3.5">
           <div className="min-w-0">
@@ -218,19 +260,22 @@ export function UnsplashBrowseModal({
               Search Unsplash
             </label>
             <input
+              ref={searchInputRef}
               id={searchId}
-              type="search"
+              type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
+                e.stopPropagation();
                 if (e.key === "Enter") {
                   e.preventDefault();
                   handleSearch();
                 }
               }}
+              onKeyUp={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
               placeholder="Search for an image…"
               className="h-10 min-w-0 flex-1 rounded-lg border-0 bg-canvas/45 px-3 text-[13px] text-ink outline-none ring-1 ring-line/20 placeholder:text-muted/45 focus:ring-ink/20 dark:bg-canvas/35"
-              autoFocus
             />
             <button
               type="button"
@@ -286,20 +331,16 @@ export function UnsplashBrowseModal({
                   ))}
                 </div>
                 {hasMore ? (
-                  <>
-                    {/* Keeps Load more below the first screen of results. */}
-                    <div aria-hidden className="h-[min(30vh,11rem)]" />
-                    <div className="flex justify-center pb-2">
-                      <button
-                        type="button"
-                        disabled={loading || loadingMore}
-                        onClick={handleLoadMore}
-                        className="rounded-lg bg-ink/[0.06] px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:bg-ink/[0.1] disabled:opacity-50 dark:bg-ink/[0.1]"
-                      >
-                        {loadingMore ? "Loading…" : "Load more"}
-                      </button>
-                    </div>
-                  </>
+                  <div className="mt-4 flex justify-center pb-2">
+                    <button
+                      type="button"
+                      disabled={loading || loadingMore}
+                      onClick={handleLoadMore}
+                      className="rounded-lg bg-ink/[0.06] px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:bg-ink/[0.1] disabled:opacity-50 dark:bg-ink/[0.1]"
+                    >
+                      {loadingMore ? "Loading…" : "Load more"}
+                    </button>
+                  </div>
                 ) : null}
               </>
             )}
