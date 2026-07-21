@@ -21,6 +21,12 @@ type EditorAmbientControlsProps = {
   activityHandlerRef: MutableRefObject<(() => void) | null>;
   /** Unified workspace + readability rail visibility (bottom bar first control). */
   onToggleBothSidebars: () => void;
+  /** Opens Focus mode start / status dialog. */
+  onOpenFocusMode: () => void;
+  /** When true, Focus mode is running (clock stays visually active). */
+  focusModeActive?: boolean;
+  /** Countdown label while Focus mode runs (e.g. "24:32"). */
+  focusRemainingLabel?: string;
   /** Copy full document to clipboard (rich HTML + plain text when supported). */
   onCopyDocument: () => Promise<boolean>;
   onSaveAsPdf: () => void | Promise<void>;
@@ -37,6 +43,9 @@ type EditorAmbientControlsProps = {
 export function EditorAmbientControls({
   activityHandlerRef,
   onToggleBothSidebars,
+  onOpenFocusMode,
+  focusModeActive = false,
+  focusRemainingLabel,
   onCopyDocument,
   onSaveAsPdf,
   onPrint,
@@ -94,23 +103,50 @@ export function EditorAmbientControls({
         aria-label="Ambient editor controls"
         className={`pointer-events-auto flex items-center justify-center gap-8 transition-colors duration-500 ease-in-out sm:gap-10 ${PILL_SURFACE}`}
       >
+        {focusModeActive ? null : (
+          <button
+            type="button"
+            className={ICON_BTN}
+            aria-label="Toggle sidebars"
+            title="Toggle sidebars"
+            onClick={onToggleBothSidebars}
+          >
+            <SidebarLayoutIcon size={ICON_SIZE} strokeWidth={ICON_STROKE} />
+          </button>
+        )}
         <button
           type="button"
-          className={ICON_BTN}
-          aria-label="Toggle sidebars"
-          title="Toggle sidebars"
-          onClick={onToggleBothSidebars}
+          className={
+            focusModeActive
+              ? "pointer-events-auto flex h-9 min-w-9 shrink-0 items-center justify-center rounded-md px-1.5 font-mono text-[12px] font-medium tabular-nums tracking-tight text-ink opacity-100 transition-[opacity,background-color,color] duration-200 hover:bg-ink/[0.08] dark:hover:bg-white/[0.08]"
+              : ICON_BTN
+          }
+          aria-label={
+            focusModeActive
+              ? `Focus mode — ${focusRemainingLabel ?? "running"} remaining`
+              : "Focus mode"
+          }
+          title={
+            focusModeActive
+              ? `Focus mode — ${focusRemainingLabel ?? "…"} left`
+              : "Focus mode"
+          }
+          aria-pressed={focusModeActive}
+          onClick={onOpenFocusMode}
         >
-          <SidebarLayoutIcon size={ICON_SIZE} strokeWidth={ICON_STROKE} />
+          {focusModeActive ? (
+            <span aria-hidden>{focusRemainingLabel ?? "—"}</span>
+          ) : (
+            <Clock size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden />
+          )}
         </button>
-        <button type="button" className={ICON_BTN} aria-label="Focus timer" onClick={() => undefined}>
-          <Clock size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden />
-        </button>
-        <EditorExportMenu
-          onCopyDocument={onCopyDocument}
-          onSaveAsPdf={onSaveAsPdf}
-          onPrint={onPrint}
-        />
+        {focusModeActive ? null : (
+          <EditorExportMenu
+            onCopyDocument={onCopyDocument}
+            onSaveAsPdf={onSaveAsPdf}
+            onPrint={onPrint}
+          />
+        )}
       </div>
     </div>
   );

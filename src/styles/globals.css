@@ -1409,6 +1409,34 @@
     color: var(--color-ink);
   }
 
+  /* Focus mode: hide caret + mouse cursor. */
+  .harvy-focus-mode-shell,
+  .harvy-focus-mode-shell *,
+  .harvy-focus-mode,
+  .harvy-focus-mode * {
+    cursor: none !important;
+  }
+
+  .harvy-focus-mode .ProseMirror-harvy,
+  .ProseMirror-harvy.harvy-focus-mode-editor {
+    caret-color: transparent;
+  }
+
+  .harvy-focus-mode-hint {
+    pointer-events: none;
+    font-size: 12px;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+    color: color-mix(in oklab, var(--color-muted) 78%, transparent);
+  }
+
+  .harvy-focus-mode-hint kbd {
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: 500;
+    color: color-mix(in oklab, var(--color-muted) 92%, var(--color-ink));
+  }
+
   /* Inactive Write pane: hide caret and native selection until user clicks editor. */
   .editor-is-inactive .ProseMirror-harvy,
   .editor-is-inactive .ProseMirror-harvy *,

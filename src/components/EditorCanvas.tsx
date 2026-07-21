@@ -14,6 +14,7 @@ import Link from "@tiptap/extension-link";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { handleBackspaceOnEmptyTextBlockKeyDown } from "../features/editor/emptyTextBlockDeletion";
 import { EmptyTextBlockBackspace } from "../features/editor/emptyTextBlockBackspace";
+import { FocusModeGuards, isFocusModeBlockedKey } from "../features/editor/focusModeGuards";
 import { HarvyParagraph } from "../features/editor/harvyParagraph";
 import { HarvyPlaceholder } from "../features/editor/harvyPlaceholder";
 import { editorHtmlToMarkdown, toEditorHtml } from "../features/editor/documentMarkdown";
@@ -86,6 +87,10 @@ type EditorCanvasProps = {
   showReadabilityHighlights: boolean;
   /** Mechanics dotted underlines — visible only when the Edit sidebar is open. */
   showMechanicsUnderlines: boolean;
+  /** When true, Backspace and arrow keys are ignored (Focus mode). */
+  blockBackspace?: boolean;
+  /** Focus mode presentation: hidden caret, hidden mouse cursor. */
+  focusModeActive?: boolean;
   onChangeText: (value: string) => void;
   /** Fires when the TipTap instance is created or destroyed (null on unmount). */
   onEditorReady: (editor: Editor | null) => void;
@@ -123,6 +128,8 @@ export function EditorCanvas({
   grammarChecksEnabled,
   showReadabilityHighlights,
   showMechanicsUnderlines,
+  blockBackspace = false,
+  focusModeActive = false,
   onChangeText,
   onEditorReady,
   onTypingActivity,
@@ -148,6 +155,8 @@ export function EditorCanvas({
   onTypingActivityRef.current = onTypingActivity;
   const onEditorUserActivatedRef = useRef(onEditorUserActivated);
   onEditorUserActivatedRef.current = onEditorUserActivated;
+  const blockBackspaceRef = useRef(blockBackspace);
+  blockBackspaceRef.current = blockBackspace;
   const writingSurfaceRef = useRef<HTMLDivElement | null>(null);
   const dropInFlightRef = useRef(false);
 
@@ -173,6 +182,7 @@ export function EditorCanvas({
           gapcursor: false,
         }),
         EmptyTextBlockBackspace,
+        FocusModeGuards,
         HarvyParagraph,
         HarvyListItem,
         HarvyOrderedList,
@@ -209,7 +219,13 @@ export function EditorCanvas({
             "editor-content ProseMirror-harvy block min-h-full w-full max-w-none resize-none bg-transparent pb-10 pt-1 text-[18px] font-normal text-ink caret-muted outline-none focus:outline-none placeholder:text-muted/45 sm:pb-11 sm:pt-1.5 " +
             (isEditable ? "cursor-text" : "cursor-default select-text opacity-75"),
         },
-        handleKeyDown: (view, event) => handleBackspaceOnEmptyTextBlockKeyDown(view, event),
+        handleKeyDown: (view, event) => {
+          if (blockBackspaceRef.current && isFocusModeBlockedKey(event.key)) {
+            event.preventDefault();
+            return true;
+          }
+          return handleBackspaceOnEmptyTextBlockKeyDown(view, event);
+        },
       },
       onUpdate: ({ editor: ed }) => {
         onChangeText(editorHtmlToMarkdown(ed.getHTML()));
@@ -242,6 +258,16 @@ export function EditorCanvas({
     if (hasImageNode) return;
     editor.commands.setContent(toEditorHtml(text, { sourcePath: contentSourcePath }), false);
   }, [editor, text, contentSourcePath]);
+
+  useEffect(() => {
+    if (!editor) return;
+    editor.storage.focusModeGuards.enabled = blockBackspace;
+  }, [editor, blockBackspace]);
+
+  useEffect(() => {
+    if (!editor) return;
+    editor.view.dom.classList.toggle("harvy-focus-mode-editor", focusModeActive);
+  }, [editor, focusModeActive]);
 
   useEffect(() => {
     if (!editor) return;
@@ -508,11 +534,11 @@ export function EditorCanvas({
 
   return (
     <div
-      className={`box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent border border-solid border-transparent ${editorVisuallyInactive ? "editor-is-inactive" : ""}`}
+      className={`box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent border border-solid border-transparent ${editorVisuallyInactive ? "editor-is-inactive" : ""} ${focusModeActive ? "harvy-focus-mode" : ""}`}
     >
       <div
         ref={writingSurfaceRef}
-        className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain ${isEditable ? "cursor-text" : ""}`}
+        className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain ${focusModeActive ? "cursor-none" : isEditable ? "cursor-text" : ""}`}
         onMouseDown={handleCanvasMouseDown}
         onDragOver={handleSurfaceDragOver}
         onDrop={handleSurfaceDrop}

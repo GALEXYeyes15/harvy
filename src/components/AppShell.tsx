@@ -19,6 +19,15 @@ import { ChromeSidebarToggleButton } from "./ChromeSidebarToggleButton";
 import { SidebarRight } from "./SidebarRight";
 import { EditorToolbar } from "./EditorToolbar";
 import { EditorAmbientControls } from "./EditorAmbientControls";
+import {
+  FOCUS_MODE_DURATION_MS,
+  FocusModeModal,
+  formatFocusRemaining,
+} from "./FocusModeModal";
+import {
+  enterFocusModeWindowLock,
+  exitFocusModeWindowLock,
+} from "../features/focus/focusModeWindowLock";
 import { EditorCanvas } from "./EditorCanvas";
 import { ImagePreviewModal, type ImagePreviewTarget } from "./ImagePreviewModal";
 import { FloatingTextMenu } from "./FloatingTextMenu";
@@ -297,6 +306,9 @@ export function AppShell() {
   const [workspaceVolumeLabel, setWorkspaceVolumeLabel] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [isFocusModeOpen, setIsFocusModeOpen] = useState(false);
+  const [focusSessionEndsAt, setFocusSessionEndsAt] = useState<number | null>(null);
+  const [focusRemainingMs, setFocusRemainingMs] = useState(0);
   const [imagePreview, setImagePreview] = useState<ImagePreviewTarget | null>(null);
   const [saveAsModalOpen, setSaveAsModalOpen] = useState(false);
   const [saveAsLiveFileName, setSaveAsLiveFileName] = useState("");
@@ -492,12 +504,18 @@ export function AppShell() {
     [],
   );
 
+  const focusModeActive = focusSessionEndsAt != null;
+
   const hideTopBarWhileTyping =
-    isTopChromeHidden && !focusVisibilityPrefs.keepTopBarVisibleWhileTyping;
+    focusModeActive ||
+    (isTopChromeHidden && !focusVisibilityPrefs.keepTopBarVisibleWhileTyping);
   const hideDocumentTitleWhileTyping =
-    isTopChromeHidden && !focusVisibilityPrefs.keepDocumentTitleVisibleWhileTyping;
+    focusModeActive ||
+    (isTopChromeHidden && !focusVisibilityPrefs.keepDocumentTitleVisibleWhileTyping);
   const hideBottomToolsWhileTyping =
     isTopChromeHidden && !focusVisibilityPrefs.keepBottomToolsVisibleWhileTyping;
+  /** Collect/Write rail: always hidden in Focus mode; otherwise follows typing chrome. */
+  const hideWorkspaceSectionRail = focusModeActive || isTopChromeHidden;
   const openTabIdsRef = useRef(openTabIds);
   const activeTabIdRef = useRef(activeTabId);
   const handleCreateMarkdownFileRef = useRef<() => Promise<void>>(async () => {});
@@ -515,7 +533,9 @@ export function AppShell() {
   }, [bothSidebarsClosed]);
 
   /** Bottom bar: snap both rails to the same state — both on unless both already on, then both off. */
+
   const toggleBothSidebars = useCallback(() => {
+    if (focusModeActive) return;
     if (isWorkspaceSidebarOpen && readabilityPanelOpen) {
       setIsWorkspaceSidebarOpen(false);
       setReadabilityPanelOpen(false);
@@ -523,22 +543,97 @@ export function AppShell() {
       setIsWorkspaceSidebarOpen(true);
       setReadabilityPanelOpen(true);
     }
-  }, [isWorkspaceSidebarOpen, readabilityPanelOpen]);
+  }, [focusModeActive, isWorkspaceSidebarOpen, readabilityPanelOpen]);
+
+  const startFocusMode = useCallback(() => {
+    setIsWorkspaceSidebarOpen(false);
+    setReadabilityPanelOpen(false);
+    setIsTopChromeHidden(true);
+    setFocusSessionEndsAt(Date.now() + FOCUS_MODE_DURATION_MS);
+    void enterFocusModeWindowLock().catch((err) =>
+      console.error("Focus mode window lock:", err),
+    );
+  }, []);
+
+  const endFocusMode = useCallback(() => {
+    setFocusSessionEndsAt(null);
+    setFocusRemainingMs(0);
+    void exitFocusModeWindowLock().catch((err) =>
+      console.error("Focus mode window unlock:", err),
+    );
+  }, []);
 
   useEffect(() => {
+    if (focusSessionEndsAt == null) return;
+
+    const tick = () => {
+      const remaining = focusSessionEndsAt - Date.now();
+      if (remaining <= 0) {
+        endFocusMode();
+        return;
+      }
+      setFocusRemainingMs(remaining);
+    };
+
+    tick();
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
+  }, [focusSessionEndsAt, endFocusMode]);
+
+  /** While Focus mode runs, keep both rails closed even if something tries to reopen them. */
+  useEffect(() => {
+    if (!focusModeActive) return;
+    if (isWorkspaceSidebarOpen) setIsWorkspaceSidebarOpen(false);
+    if (readabilityPanelOpen) setReadabilityPanelOpen(false);
+    if (!isTopChromeHidden) setIsTopChromeHidden(true);
+  }, [focusModeActive, isWorkspaceSidebarOpen, readabilityPanelOpen, isTopChromeHidden]);
+
+  /** Esc ends Focus mode when no overlay dialog is open. Block common leave shortcuts. */
+  useEffect(() => {
+    if (!focusModeActive) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (isFocusModeOpen || isSettingsOpen || isAboutOpen || saveAsModalOpen) return;
+        event.preventDefault();
+        endFocusMode();
+        return;
+      }
+
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod) return;
+      const key = event.key.toLowerCase();
+      // Soft-block in-app quit/hide/close shortcuts (OS Cmd+Tab still works).
+      if (key === "w" || key === "q" || key === "h" || key === "m") {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [
+    focusModeActive,
+    isFocusModeOpen,
+    isSettingsOpen,
+    isAboutOpen,
+    saveAsModalOpen,
+    endFocusMode,
+  ]);
+
+  useEffect(() => {
+    if (focusModeActive) return;
     if (!bothSidebarsClosed) {
       setIsTopChromeHidden(false);
     }
-  }, [bothSidebarsClosed]);
+  }, [bothSidebarsClosed, focusModeActive]);
 
   useEffect(() => {
-    if (!bothSidebarsClosed) return;
+    if (focusModeActive || !bothSidebarsClosed) return;
     const onPointerMove = () => {
       setIsTopChromeHidden(false);
     };
     window.addEventListener("mousemove", onPointerMove, { passive: true });
     return () => window.removeEventListener("mousemove", onPointerMove);
-  }, [bothSidebarsClosed]);
+  }, [bothSidebarsClosed, focusModeActive]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -773,6 +868,8 @@ export function AppShell() {
   ]);
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
+  const focusModeActiveRef = useRef(focusModeActive);
+  focusModeActiveRef.current = focusModeActive;
 
   const editorEditable = Boolean(activeDocument) || openTabIds.length === 0;
 
@@ -1389,6 +1486,10 @@ export function AppShell() {
     void (async () => {
       try {
         unlisten = await getCurrentWindow().onCloseRequested(async (event) => {
+          if (focusModeActiveRef.current) {
+            event.preventDefault();
+            return;
+          }
           if (!isDirtyRef.current) return;
           try {
             const ok = await confirm("Discard unsaved changes and close the window?", {
@@ -2150,8 +2251,8 @@ export function AppShell() {
               contentSourcePath={activeDocument?.sourcePath ?? null}
               postTitle={activeDocument?.postTitle ?? ""}
               subtitle={activeDocument?.subtitle ?? ""}
-              showPostTitle={documentHeaderPrefs.showTitle}
-              showSubtitle={documentHeaderPrefs.showSubtitle}
+              showPostTitle={documentHeaderPrefs.showTitle && !focusModeActive}
+              showSubtitle={documentHeaderPrefs.showSubtitle && !focusModeActive}
               onChangePostTitle={updateActiveDocumentPostTitle}
               onChangeSubtitle={updateActiveDocumentSubtitle}
               placeholder={editorPlaceholder}
@@ -2162,6 +2263,8 @@ export function AppShell() {
               }
               showReadabilityHighlights={showReadabilityHighlights}
               showMechanicsUnderlines={showMechanicsUnderlines}
+              blockBackspace={focusModeActive}
+              focusModeActive={focusModeActive}
               workspaceRootPath={workspaceRootPath}
               pickLocalImage={pickLocalImage}
               loadImageAt={loadImageAtPos}
@@ -2181,11 +2284,16 @@ export function AppShell() {
             <EditorAmbientControls
               activityHandlerRef={editorTypingActivityHandlerRef}
               onToggleBothSidebars={toggleBothSidebars}
+              onOpenFocusMode={() => setIsFocusModeOpen(true)}
+              focusModeActive={focusModeActive}
+              focusRemainingLabel={
+                focusModeActive ? formatFocusRemaining(focusRemainingMs) : undefined
+              }
               onCopyDocument={handleCopyDocument}
               onSaveAsPdf={performExportPdf}
               onPrint={handlePrintDocument}
               syncWithChrome
-              chromeHidden={hideBottomToolsWhileTyping}
+              chromeHidden={hideBottomToolsWhileTyping && !focusModeActive}
             />
           </div>
         </div>
@@ -2194,7 +2302,11 @@ export function AppShell() {
   );
 
   return (
-    <div className="relative h-full min-h-0 w-full overflow-hidden bg-canvas">
+    <div
+      className={`relative h-full min-h-0 w-full overflow-hidden bg-canvas${
+        focusModeActive ? " harvy-focus-mode-shell" : ""
+      }`}
+    >
       {sidebarOverlayLayout ? (
         <>
           {/* Wide viewport: rails float over a fixed max-width editor (unchanged). */}
@@ -2229,7 +2341,7 @@ export function AppShell() {
               sections={workspaceSections}
               showOutliersView={showOutliersView}
               showCollectView={showCollectView}
-              chromeHidden={isTopChromeHidden}
+              chromeHidden={hideWorkspaceSectionRail}
               className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
               style={{
                 left: isWorkspaceSidebarOpen
@@ -2278,7 +2390,7 @@ export function AppShell() {
                 sections={workspaceSections}
                 showOutliersView={showOutliersView}
                 showCollectView={showCollectView}
-                chromeHidden={isTopChromeHidden}
+                chromeHidden={hideWorkspaceSectionRail}
                 className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
                 style={{
                   left: isWorkspaceSidebarOpen
@@ -2316,30 +2428,48 @@ export function AppShell() {
 
       <div
         className={`pointer-events-none absolute top-0 z-30 flex h-8 items-center rounded-md px-0.5 transition-[opacity,background-color,left] duration-500 ease-in-out ${
-          hideTopBarWhileTyping ? "bg-stage opacity-0" : "bg-mist/55 opacity-100"
+          hideTopBarWhileTyping || focusModeActive ? "bg-stage opacity-0" : "bg-mist/55 opacity-100"
         }`}
         style={{ left: workspaceSidebarToggleLeft }}
       >
         <ChromeSidebarToggleButton
           icon={PanelLeft}
           open={isWorkspaceSidebarOpen}
-          onClick={() => setIsWorkspaceSidebarOpen((v) => !v)}
+          onClick={() => {
+            if (focusModeActive) return;
+            setIsWorkspaceSidebarOpen((v) => !v);
+          }}
           ariaLabelOpen="Hide sidebar"
           ariaLabelClosed="Show sidebar"
         />
       </div>
 
+      {focusModeActive ? (
+        <p
+          className="harvy-focus-mode-hint absolute z-30"
+          style={{
+            top: isWindowFullscreen ? "0.65rem" : "0.55rem",
+            left: workspaceSidebarToggleLeft,
+          }}
+        >
+          press <kbd>[esc]</kbd> to end focus mode
+        </p>
+      ) : null}
+
       {/* Right tools-panel toggle — window-shell anchored so Notes / layout changes never shift it. */}
       <div
         className={`pointer-events-none absolute top-8 right-2 z-30 flex h-[2.125rem] items-center transition-opacity duration-500 ease-in-out ${
-          hideTopBarWhileTyping ? "opacity-0" : "opacity-100"
+          hideTopBarWhileTyping || focusModeActive ? "opacity-0" : "opacity-100"
         }`}
       >
         <div className="pointer-events-auto shrink-0">
           <ChromeSidebarToggleButton
             icon={PanelRight}
             open={readabilityPanelOpen}
-            onClick={() => setReadabilityPanelOpen((v) => !v)}
+            onClick={() => {
+              if (focusModeActive) return;
+              setReadabilityPanelOpen((v) => !v);
+            }}
             ariaLabelOpen="Hide tools panel"
             ariaLabelClosed="Show tools panel"
           />
@@ -2352,7 +2482,10 @@ export function AppShell() {
         themeMode={themeMode}
         onThemeModeChange={setThemeMode}
         readabilityPanelOpen={readabilityPanelOpen}
-        onReadabilityPanelChange={setReadabilityPanelOpen}
+        onReadabilityPanelChange={(open) => {
+          if (focusModeActive) return;
+          setReadabilityPanelOpen(open);
+        }}
         spellcheckEnabled={writingAssistancePrefs.spellcheck}
         grammarChecksEnabled={writingAssistancePrefs.grammarChecks}
         onSpellcheckChange={handleSpellcheckPref}
@@ -2389,6 +2522,16 @@ export function AppShell() {
         folderPreviewContext={saveAsFolderPreviewContext}
       />
       <AboutModal open={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
+      <FocusModeModal
+        open={isFocusModeOpen}
+        onClose={() => setIsFocusModeOpen(false)}
+        endsAt={focusSessionEndsAt}
+        onStart={startFocusMode}
+        onEnd={endFocusMode}
+        remainingLabel={
+          focusSessionEndsAt != null ? formatFocusRemaining(focusRemainingMs) : undefined
+        }
+      />
       <ImagePreviewModal
         open={imagePreview !== null}
         target={imagePreview}
