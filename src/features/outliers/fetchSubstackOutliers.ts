@@ -101,7 +101,7 @@ async function fetchSubstackPostsFromNetwork(
 }
 
 export type FetchSubstackOutlierPostsOptions = {
-  /** Skip TTL and always hit the network (e.g. Apply in settings). */
+  /** Skip serving cache and always hit the network (e.g. Apply in settings). */
   forceRefresh?: boolean;
 };
 
@@ -113,8 +113,9 @@ export type FetchSubstackOutlierPostsResult = {
 };
 
 /**
- * Returns cached Substack posts when fresh (under 5 minutes). Otherwise fetches,
- * persists to localStorage, and returns the new results.
+ * Serves the last persisted fetch whenever available (offline-friendly).
+ * Refreshes from the network when cache is missing, stale, or `forceRefresh` is set.
+ * On network failure, falls back to the last cache instead of throwing when one exists.
  */
 export async function fetchSubstackOutlierPosts(
   accountUrl: string,
@@ -126,11 +127,10 @@ export async function fetchSubstackOutlierPosts(
   }
 
   const cached = readSubstackOutliersCache(trimmed);
-  if (
-    !options.forceRefresh &&
-    cached &&
-    isSubstackOutliersCacheFresh(cached)
-  ) {
+  const canServeCache = Boolean(cached);
+  const cacheFresh = Boolean(cached && isSubstackOutliersCacheFresh(cached));
+
+  if (!options.forceRefresh && cached && cacheFresh) {
     return {
       posts: scoreSubstackPosts(cached.results),
       fromCache: true,
@@ -138,16 +138,29 @@ export async function fetchSubstackOutlierPosts(
     };
   }
 
-  const results = await fetchSubstackPostsFromNetwork(trimmed);
-  writeSubstackOutliersCache(trimmed, results);
-  return {
-    posts: scoreSubstackPosts(results),
-    fromCache: false,
-    refreshed: true,
-  };
+  // Stale-but-present cache: callers typically already painted it; still try to refresh.
+  // Missing cache or forceRefresh: must hit the network (or fall back if force fails).
+  try {
+    const results = await fetchSubstackPostsFromNetwork(trimmed);
+    writeSubstackOutliersCache(trimmed, results);
+    return {
+      posts: scoreSubstackPosts(results),
+      fromCache: false,
+      refreshed: true,
+    };
+  } catch (error) {
+    if (canServeCache && cached) {
+      return {
+        posts: scoreSubstackPosts(cached.results),
+        fromCache: true,
+        refreshed: false,
+      };
+    }
+    throw error;
+  }
 }
 
-/** Instant scored posts from localStorage, if any (may be stale). */
+/** Instant scored posts from localStorage, if any (any age — for offline-first paint). */
 export function readCachedSubstackOutlierPosts(
   accountUrl: string,
 ): OutlierPost[] | null {
@@ -159,4 +172,9 @@ export function readCachedSubstackOutlierPosts(
 export function isCachedSubstackOutliersFresh(accountUrl: string): boolean {
   const cached = readSubstackOutliersCache(accountUrl);
   return Boolean(cached && isSubstackOutliersCacheFresh(cached));
+}
+
+/** True when a previous successful fetch is stored (usable offline). */
+export function hasCachedSubstackOutliers(accountUrl: string): boolean {
+  return readSubstackOutliersCache(accountUrl) != null;
 }

@@ -6,9 +6,17 @@ import {
   Search,
   SlidersHorizontal,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import {
   fetchSubstackOutlierPosts,
+  hasCachedSubstackOutliers,
   isCachedSubstackOutliersFresh,
   readCachedSubstackOutlierPosts,
 } from "../features/outliers/fetchSubstackOutliers";
@@ -154,50 +162,23 @@ function ToggleCheckboxOption({
   );
 }
 
-type OutliersSettingsDropdownProps = {
-  accountLink: string;
-  onAccountLinkChange: (value: string) => void;
-  contentType: ContentTypeFilter;
-  onContentTypeChange: (value: ContentTypeFilter) => void;
-  outlierScore: OutlierScoreFilter;
-  onOutlierScoreChange: (value: OutlierScoreFilter) => void;
-  postedWithin: PostedWithinFilter;
-  onPostedWithinChange: (value: PostedWithinFilter) => void;
-  onApplyAccount: () => void;
-  isLoading: boolean;
-};
-
-function OutliersSettingsDropdown({
-  accountLink,
-  onAccountLinkChange,
-  contentType,
-  onContentTypeChange,
-  outlierScore,
-  onOutlierScoreChange,
-  postedWithin,
-  onPostedWithinChange,
-  onApplyAccount,
-  isLoading,
-}: OutliersSettingsDropdownProps) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  const closeMenu = useCallback(() => {
-    setOpen(false);
-  }, []);
-
+function useOutliersPopoverDismiss(
+  open: boolean,
+  onClose: () => void,
+  rootRef: RefObject<HTMLElement | null>,
+) {
   useEffect(() => {
     if (!open) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeMenu();
+      if (event.key === "Escape") onClose();
     };
 
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (rootRef.current?.contains(target)) return;
-      closeMenu();
+      onClose();
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -206,7 +187,117 @@ function OutliersSettingsDropdown({
       window.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("pointerdown", onPointerDown, true);
     };
-  }, [open, closeMenu]);
+  }, [open, onClose, rootRef]);
+}
+
+type OutliersAccountDropdownProps = {
+  accountLink: string;
+  onAccountLinkChange: (value: string) => void;
+  onApplyAccount: () => void;
+  isLoading: boolean;
+};
+
+function OutliersAccountDropdown({
+  accountLink,
+  onAccountLinkChange,
+  onApplyAccount,
+  isLoading,
+}: OutliersAccountDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const closeMenu = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  useOutliersPopoverDismiss(open, closeMenu, rootRef);
+
+  useEffect(() => {
+    if (!open) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        className={BAR_ACTION}
+        aria-label="Account link"
+        title="Account link"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <Plus size={15} strokeWidth={2} aria-hidden />
+      </button>
+      {open ? (
+        <div
+          role="dialog"
+          aria-label="Account link"
+          className="absolute right-0 top-[calc(100%+8px)] z-50 w-[17.5rem] rounded-lg bg-page px-3.5 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.28)] ring-1 ring-line/40 dark:bg-[#1e1e1e] dark:ring-white/10"
+        >
+          <p className="text-[13px] font-semibold tracking-tight text-ink">Account link</p>
+          <label htmlFor="harvy-outlier-account-link" className="mt-3 block">
+            <span className="sr-only">Substack profile URL</span>
+            <input
+              ref={inputRef}
+              id="harvy-outlier-account-link"
+              type="url"
+              value={accountLink}
+              onChange={(event) => onAccountLinkChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+                if (isLoading || !accountLink.trim()) return;
+                onApplyAccount();
+              }}
+              placeholder="https://substack.com/@…"
+              className="mt-0 w-full rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 placeholder:text-muted/55 focus:ring-ink/20 dark:bg-canvas/35"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={isLoading || !accountLink.trim()}
+            onClick={() => {
+              onApplyAccount();
+            }}
+            className="mt-2 w-full rounded-md bg-ink/[0.08] px-2.5 py-1.5 text-[12px] font-medium text-ink transition-colors hover:bg-ink/[0.12] disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.08] dark:hover:bg-white/[0.12]"
+          >
+            {isLoading ? "Loading..." : "Fetch posts"}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+type OutliersSettingsDropdownProps = {
+  contentType: ContentTypeFilter;
+  onContentTypeChange: (value: ContentTypeFilter) => void;
+  outlierScore: OutlierScoreFilter;
+  onOutlierScoreChange: (value: OutlierScoreFilter) => void;
+  postedWithin: PostedWithinFilter;
+  onPostedWithinChange: (value: PostedWithinFilter) => void;
+};
+
+function OutliersSettingsDropdown({
+  contentType,
+  onContentTypeChange,
+  outlierScore,
+  onOutlierScoreChange,
+  postedWithin,
+  onPostedWithinChange,
+}: OutliersSettingsDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const closeMenu = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  useOutliersPopoverDismiss(open, closeMenu, rootRef);
 
   return (
     <div ref={rootRef} className="relative shrink-0">
@@ -229,31 +320,7 @@ function OutliersSettingsDropdown({
         >
           <p className="text-[13px] font-semibold tracking-tight text-ink">Settings</p>
 
-          <label htmlFor="harvy-outlier-account-link" className="mt-3 block">
-            <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted/70">
-              Account link
-            </span>
-            <input
-              id="harvy-outlier-account-link"
-              type="url"
-              value={accountLink}
-              onChange={(event) => onAccountLinkChange(event.target.value)}
-              placeholder="https://substack.com/@…"
-              className="mt-1.5 w-full rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 placeholder:text-muted/55 focus:ring-ink/20 dark:bg-canvas/35"
-            />
-          </label>
-          <button
-            type="button"
-            disabled={isLoading || !accountLink.trim()}
-            onClick={() => {
-              onApplyAccount();
-            }}
-            className="mt-2 w-full rounded-md bg-ink/[0.08] px-2.5 py-1.5 text-[12px] font-medium text-ink transition-colors hover:bg-ink/[0.12] disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.08] dark:hover:bg-white/[0.12]"
-          >
-            {isLoading ? "Loading..." : "Load posts"}
-          </button>
-
-          <div className="mt-4">
+          <div className="mt-3">
             <p
               id="harvy-outlier-content-type-label"
               className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted/70"
@@ -341,10 +408,12 @@ function OutliersSearchBar({
   value,
   onChange,
   settings,
+  account,
 }: {
   value: string;
   onChange: (value: string) => void;
   settings: OutliersSettingsDropdownProps;
+  account: OutliersAccountDropdownProps;
 }) {
   return (
     <div className="harvy-outlier-search-bar w-full">
@@ -358,10 +427,8 @@ function OutliersSearchBar({
         aria-label="Search posts"
       />
       <div className="harvy-outlier-search-actions shrink-0">
+        <OutliersAccountDropdown {...account} />
         <OutliersSettingsDropdown {...settings} />
-        <button type="button" className={BAR_ACTION} aria-label="Add source" disabled title="Coming soon">
-          <Plus size={15} strokeWidth={2} aria-hidden />
-        </button>
       </div>
     </div>
   );
@@ -539,8 +606,10 @@ export function OutliersView({
   });
   const [isLoading, setIsLoading] = useState(() => {
     const { accountLink: savedAccount } = readOutliersSettings();
-    return !isCachedSubstackOutliersFresh(savedAccount);
+    // Only block the UI when we have nothing persisted to show.
+    return !hasCachedSubstackOutliers(savedAccount);
   });
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activePost, setActivePost] = useState<OutlierPost | null>(null);
   const columnCount = useOutlierColumnCount();
@@ -585,26 +654,43 @@ export function OutliersView({
     const cachedPosts = readCachedSubstackOutlierPosts(url);
     const cacheFresh = isCachedSubstackOutliersFresh(url);
 
+    // Offline-first: always paint the last successful fetch immediately.
     if (cachedPosts && !forceRefresh) {
       setPosts(cachedPosts);
-      if (cacheFresh) {
-        setIsLoading(false);
-        setError(null);
-        return;
+      setIsLoading(false);
+      setError(null);
+      if (cacheFresh) return;
+
+      // Stale cache: refresh in the background; keep cards if offline / fetch fails.
+      setIsRefreshing(true);
+      try {
+        const next = await fetchSubstackOutlierPosts(url, { forceRefresh: true });
+        setPosts(next.posts);
+      } catch {
+        // Keep persisted posts — no error banner when we already have a last fetch.
+      } finally {
+        setIsRefreshing(false);
       }
+      return;
     }
 
-    // Fresh miss / stale / force: hit the network. Cached cards stay visible while refreshing.
+    // No cache, or explicit Apply refresh.
     setIsLoading(true);
+    setIsRefreshing(false);
     setError(null);
     try {
       const next = await fetchSubstackOutlierPosts(url, { forceRefresh });
       setPosts(next.posts);
+      setError(null);
     } catch (err) {
-      if (!cachedPosts) {
+      if (cachedPosts) {
+        setPosts(cachedPosts);
+        // Force refresh failed but last fetch is still usable.
+        setError(null);
+      } else {
         setPosts([]);
+        setError(err instanceof Error ? err.message : "Could not load Substack posts.");
       }
-      setError(err instanceof Error ? err.message : "Could not load Substack posts.");
     } finally {
       setIsLoading(false);
     }
@@ -641,19 +727,21 @@ export function OutliersView({
         value={searchQuery}
         onChange={setSearchQuery}
         settings={{
-          accountLink,
-          onAccountLinkChange: handleAccountLinkChange,
           contentType,
           onContentTypeChange: handleContentTypeChange,
           outlierScore,
           onOutlierScoreChange: handleOutlierScoreChange,
           postedWithin,
           onPostedWithinChange: handlePostedWithinChange,
+        }}
+        account={{
+          accountLink,
+          onAccountLinkChange: handleAccountLinkChange,
           onApplyAccount: () => {
             persistSettings({ accountLink });
             void loadPosts(accountLink, true);
           },
-          isLoading,
+          isLoading: isLoading || isRefreshing,
         }}
       />
 
@@ -663,10 +751,6 @@ export function OutliersView({
 
       {isLoading && posts.length === 0 ? (
         <p className="mt-5 text-[13px] text-muted/65">Loading Substack posts…</p>
-      ) : null}
-
-      {isLoading && posts.length > 0 ? (
-        <p className="mt-3 text-[12px] text-muted/55">Refreshing Substack…</p>
       ) : null}
 
       {!isLoading && !error && filteredPosts.length === 0 ? (

@@ -1,7 +1,11 @@
 import type { SubstackPostResult } from "./fetchSubstackOutliers";
 
 const STORAGE_KEY = "harvy:outliers-substack-cache:v4";
-/** Refetch Substack when cache is older than this. */
+
+/**
+ * Soft TTL for background refresh only. Cached posts are always shown (including offline),
+ * regardless of age; this only limits how often we re-hit Substack when online.
+ */
 export const SUBSTACK_OUTLIERS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type SubstackOutliersCacheEntry = {
@@ -38,7 +42,7 @@ function writeStore(store: CacheStore): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
   } catch {
-    // Quota or private mode — ignore; network fetch still works.
+    // Quota or private mode — ignore; network fetch still works when available.
   }
 }
 
@@ -52,6 +56,7 @@ export function readSubstackOutliersCache(
   return entry;
 }
 
+/** True when a background network refresh is unnecessary. */
 export function isSubstackOutliersCacheFresh(
   entry: SubstackOutliersCacheEntry,
   nowMs = Date.now(),
