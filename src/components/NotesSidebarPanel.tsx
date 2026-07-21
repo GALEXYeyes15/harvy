@@ -1,4 +1,5 @@
 import { SquareArrowOutUpRight } from "lucide-react";
+import { handleNotesTextareaTabKey } from "../features/notes/notesTextareaIndent";
 
 type NotesSidebarPanelProps = {
   notes: string;
@@ -36,6 +37,7 @@ export function NotesSidebarPanel({
         id="harvy-document-notes"
         value={notes}
         onChange={(e) => onNotesChange(e.target.value)}
+        onKeyDown={(e) => handleNotesTextareaTabKey(e, e.currentTarget, onNotesChange)}
         placeholder="Ideas, references, reminders…"
         className="mt-6 h-[30rem] w-full resize-none overflow-y-auto rounded-md border-0 bg-canvas/45 px-3 py-2.5 text-[13px] leading-relaxed text-ink placeholder:text-muted/65 focus:outline-none focus:ring-0 dark:bg-canvas/35"
       />

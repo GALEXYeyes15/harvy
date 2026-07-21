@@ -36,6 +36,7 @@ import {
 import {
   isSubstackNoteDoc,
   SubstackNoteBody,
+  substackNoteDocToPlainText,
 } from "../features/outliers/substackNoteBody";
 import { useOutlierColumnCount } from "../features/outliers/useOutlierColumnCount";
 import { OutlierDetailModal } from "./OutlierDetailModal";
@@ -535,7 +536,9 @@ function OutlierCard({
           disabled={!onAddToNotes || !post.preview.trim()}
           onClick={(event) => {
             event.stopPropagation();
-            const body = post.preview.trim();
+            const body = isSubstackNoteDoc(post.noteBodyJson)
+              ? substackNoteDocToPlainText(post.noteBodyJson)
+              : post.preview.trim();
             if (!body) return;
             onAddToNotes?.(`Note:\n${body}`);
           }}
