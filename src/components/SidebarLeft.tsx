@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useState } from "react";
-import { FolderOpen, FolderPlus, Info, Settings } from "lucide-react";
+import { FolderOpen, FolderPlus, Settings } from "lucide-react";
 import { APP_NAME } from "../lib/constants";
 import { WorkspaceTree, WORKSPACE_ROW_SHELL_UNSELECTED } from "./WorkspaceTree";
 import type { FileNode } from "../features/workspace/types";
@@ -282,11 +282,20 @@ export function SidebarLeft({
             <button
               type="button"
               className={`${WORKSPACE_ROW_SHELL_UNSELECTED} justify-start gap-2.5 text-left`}
-              aria-label="About Harvy"
+              aria-label="Tribute"
               onClick={() => onOpenAbout?.()}
             >
-              <Info size={14} strokeWidth={1.5} className="shrink-0 text-muted/60" aria-hidden />
-              <span className="min-w-0 truncate">About</span>
+              <span
+                aria-hidden
+                className="inline-flex h-[14px] shrink-0 items-center justify-center text-[12px] leading-none tracking-tight text-muted/60"
+                style={{
+                  fontFamily:
+                    '"Libre Baskerville", Baskerville, "Baskerville Old Face", Palatino, "Palatino Linotype", Georgia, serif',
+                }}
+              >
+                H.
+              </span>
+              <span className="min-w-0 truncate">Tribute</span>
             </button>
             <button
               type="button"

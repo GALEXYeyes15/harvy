@@ -11,11 +11,12 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
     <CenteredOverlayModal
       open={open}
       onClose={onClose}
-      title="About"
-      titleId="about-dialog-title"
-      backdropLabel="Dismiss about"
-      closeLabel="Close about"
-      maxWidthClass="max-w-[min(520px,calc(100vw-3rem))]"
+      title="Tribute"
+      titleId="tribute-dialog-title"
+      backdropLabel="Dismiss tribute"
+      closeLabel="Close tribute"
+      panelSizeClassName="h-[min(500px,90vh)] w-[min(700px,90vw)] max-h-[90vh] max-w-[90vw]"
+      bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-5 pt-2"
     >
       <AboutModalContent />
     </CenteredOverlayModal>

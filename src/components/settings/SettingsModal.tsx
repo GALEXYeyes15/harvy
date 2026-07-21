@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { SquareArrowOutUpRight } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
 import type { DocumentHeaderPrefs } from "../../features/editor/documentHeaderSettings";
@@ -190,6 +190,45 @@ export function SettingsModal({
   );
 }
 
+function SettingsSectionHeader({
+  title,
+  description,
+}: {
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div>
+      <h2 className="text-[13px] font-semibold tracking-tight text-ink">{title}</h2>
+      {description ? (
+        <p className="mt-1 text-[12px] leading-relaxed text-muted/90">{description}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function SettingsGroup({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+        {label}
+      </p>
+      <ul className={`${SETTINGS_DIVIDE_Y} overflow-hidden rounded-lg bg-mist/80 dark:bg-ink/[0.035]`}>
+        {children}
+      </ul>
+      {hint ? <p className="mt-2 text-[11px] leading-snug text-muted/70">{hint}</p> : null}
+    </div>
+  );
+}
+
 function GeneralPanel({
   enableCollect,
   onEnableCollectChange,
@@ -207,51 +246,42 @@ function GeneralPanel({
 }) {
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-[13px] font-semibold tracking-tight text-ink">General</h2>
-        <p className="mt-1 text-[12px] leading-relaxed text-muted/90">
-          Workspace and application behavior.
-        </p>
-      </div>
-      <ul className={`${SETTINGS_DIVIDE_Y} overflow-hidden rounded-lg bg-mist/80 dark:bg-ink/[0.035]`}>
+      <SettingsSectionHeader
+        title="General"
+        description="Workspace features and Collect."
+      />
+      <SettingsGroup label="Collect">
         <ToggleRow
           id="enable-collect"
-          label="Enable Collect"
-          description="Show Collect in the left workspace navigation for saving research and inspiration."
+          label="Show Collect"
+          description="Add Collect to the left workspace rail."
           checked={enableCollect}
           onChange={onEnableCollectChange}
         />
-      </ul>
-      <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-          Collect views
-        </p>
-        <ul className={`${SETTINGS_DIVIDE_Y} overflow-hidden rounded-lg bg-mist/80 dark:bg-ink/[0.035]`}>
+      </SettingsGroup>
+      {enableCollect ? (
+        <SettingsGroup
+          label="Collect views"
+          hint="Keep at least one view on."
+        >
           <ToggleRow
             id="show-outliers-view"
             label="Outliers"
-            description="Show the Outliers view for creator signals."
+            description="Creator posts and Notes scored against your average."
             checked={showOutliersView}
             onChange={onShowOutliersViewChange}
             disabled={showOutliersView && !showCollectView}
           />
           <ToggleRow
             id="show-collect-view"
-            label="Collect"
-            description="Show the Collect table for saved items."
+            label="Saved items"
+            description="Your Collect table of saved research."
             checked={showCollectView}
             onChange={onShowCollectViewChange}
             disabled={showCollectView && !showOutliersView}
           />
-        </ul>
-        <p className="mt-2 text-[11px] leading-snug text-muted/70">
-          At least one Collect view must stay on.
-        </p>
-      </div>
-      <div className="rounded-lg bg-mist/90 px-3.5 py-3 dark:bg-ink/[0.04]">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">App name</p>
-        <p className="mt-1 text-[14px] font-medium tracking-tight text-ink">{APP_NAME}</p>
-      </div>
+        </SettingsGroup>
+      ) : null}
     </div>
   );
 }
@@ -272,12 +302,11 @@ function AppearancePanel({
 
   return (
     <div className="space-y-5">
+      <SettingsSectionHeader title="Appearance" description="Color theme for the app." />
       <div>
-        <h2 className="text-[13px] font-semibold tracking-tight text-ink">Appearance</h2>
-        <p className="mt-1 text-[12px] leading-relaxed text-muted/90">Choose how Harvy matches your environment.</p>
-      </div>
-      <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">Theme</p>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+          Theme
+        </p>
         <div
           className="inline-flex flex-wrap rounded-lg bg-mist/90 p-1 dark:bg-ink/[0.04]"
           role="radiogroup"
@@ -305,8 +334,8 @@ function AppearancePanel({
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-muted/70">
           {themeMode === "cyber"
-            ? "Cyber Mode: #000707 surfaces, cyan accents, Inter chrome, and mono typing. Restored on reopen."
-            : "Your theme choice is saved and restored the next time you open Harvy."}
+            ? "Dark surfaces, cyan accents, and mono typing. Saved for next launch."
+            : "Saved automatically and restored next time you open Harvy."}
         </p>
       </div>
     </div>
@@ -356,12 +385,10 @@ function EncouragementPanel({
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-[13px] font-semibold tracking-tight text-ink">Encouragement</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-muted/90">
-            Occasional text-style reminders in the top-right corner, drawn from your phrases.
-          </p>
-        </div>
+        <SettingsSectionHeader
+          title="Encouragement"
+          description="Occasional phrases in the top-right while you write."
+        />
         <button
           type="button"
           onClick={onTest}
@@ -377,19 +404,19 @@ function EncouragementPanel({
         </button>
       </div>
 
-      <ul className={`overflow-hidden rounded-lg bg-mist/90 dark:bg-ink/[0.04] ${SETTINGS_DIVIDE_Y}`}>
+      <SettingsGroup label="Notifications">
         <ToggleRow
           id="encouragement-enabled"
-          label="Enable encouragement"
-          description="Show random encouragement notifications within your timer range."
+          label="Enable"
+          description="Show a random phrase on a timer."
           checked={prefs.enabled}
           onChange={(enabled) => onChange({ enabled })}
         />
-      </ul>
+      </SettingsGroup>
 
       <div>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-          Timer range (minutes)
+          Interval (minutes)
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex min-w-[6.5rem] flex-col gap-1">
@@ -417,7 +444,7 @@ function EncouragementPanel({
           </label>
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-muted/70">
-          Notifications fire at a random time between these values (e.g. 15–45 minutes).
+          Picks a random time in this range (e.g. 15–45).
         </p>
       </div>
 
@@ -453,7 +480,7 @@ function EncouragementPanel({
           maxHeightClass="max-h-[14rem]"
         />
         <p className="mt-2 text-[11px] leading-relaxed text-muted/70">
-          Edit cells directly — Quote and Said by, one phrase per row.
+          One phrase per row — quote and attribution.
         </p>
       </div>
 
@@ -524,96 +551,100 @@ function EditorPanel({
 }) {
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-[13px] font-semibold tracking-tight text-ink">Editor</h2>
-        <p className="mt-1 text-[12px] leading-relaxed text-muted/90">Writing surface and distraction options.</p>
-      </div>
-      <ul className={`${SETTINGS_DIVIDE_Y} overflow-hidden rounded-lg bg-mist/80 dark:bg-ink/[0.035]`}>
+      <SettingsSectionHeader
+        title="Editor"
+        description="Writing surface, assistance, and chrome while you type."
+      />
+
+      <SettingsGroup label="Document">
+        <ToggleRow
+          id="show-document-title"
+          label="Title"
+          description="Headline field above the body."
+          checked={documentHeaderPrefs.showTitle}
+          onChange={(v) => onDocumentHeaderPrefChange({ showTitle: v })}
+        />
+        <ToggleRow
+          id="show-document-subtitle"
+          label="Subtitle"
+          description="Optional dek under the title."
+          checked={documentHeaderPrefs.showSubtitle}
+          onChange={(v) => onDocumentHeaderPrefChange({ showSubtitle: v })}
+        />
+      </SettingsGroup>
+
+      <SettingsGroup label="Assistance">
         <ToggleRow
           id="spellcheck"
           label="Spellcheck"
-          description="Uses the system dictionary in the editor. Misspellings are underlined; nothing is changed unless you choose a suggestion."
+          description="Underline misspellings; apply fixes from the menu."
           checked={spellcheckEnabled}
           onChange={onSpellcheckChange}
         />
         <ToggleRow
           id="grammar-checks"
           label="Writing hints"
-          description="Light editorial underlines (spacing, repetition, gentle style cues). Right-click for optional fixes where available."
+          description="Light underlines for spacing, repetition, and style."
           checked={grammarChecksEnabled}
           onChange={onGrammarChecksChange}
         />
+      </SettingsGroup>
+
+      <SettingsGroup label="Sidebar">
         <ToggleRow
           id="readability-panel"
-          label="Show readability panel"
-          description="Right-side tools and stats while you write."
+          label="Notes & stats"
+          description="Keep the right tools panel open by default."
           checked={showReadabilityPanel}
           onChange={onReadabilityChange}
         />
+      </SettingsGroup>
+
+      <SettingsGroup
+        label="While typing"
+        hint="Applies when both sidebars are closed."
+      >
+        <ToggleRow
+          id="keep-top-bar-visible-while-typing"
+          label="Top bar"
+          description="Tabs and sidebar toggles stay visible."
+          checked={focusVisibilityPrefs.keepTopBarVisibleWhileTyping}
+          onChange={(v) => onFocusVisibilityPrefChange({ keepTopBarVisibleWhileTyping: v })}
+        />
+        <ToggleRow
+          id="keep-document-title-visible-while-typing"
+          label="File name"
+          description="Document title and unsaved indicator."
+          checked={focusVisibilityPrefs.keepDocumentTitleVisibleWhileTyping}
+          onChange={(v) =>
+            onFocusVisibilityPrefChange({ keepDocumentTitleVisibleWhileTyping: v })
+          }
+        />
+        <ToggleRow
+          id="keep-bottom-tools-visible-while-typing"
+          label="Bottom tools"
+          description="Sidebar, timer, and copy controls."
+          checked={focusVisibilityPrefs.keepBottomToolsVisibleWhileTyping}
+          onChange={(v) => onFocusVisibilityPrefChange({ keepBottomToolsVisibleWhileTyping: v })}
+        />
+      </SettingsGroup>
+
+      <SettingsGroup label="Coming soon">
         <ToggleRow
           id="focus-mode"
           label="Focus mode"
-          description="Placeholder — dims chrome around the editor."
+          description="Dim chrome around the editor."
           checked={focusMode}
           onChange={onFocusModeChange}
         />
         <ToggleRow
           id="typewriter-scroll"
           label="Typewriter scrolling"
-          description="Placeholder — keeps the caret in a fixed vertical position."
+          description="Keep the caret at a fixed vertical position."
           checked={typewriterScroll}
           onChange={onTypewriterChange}
         />
-      </ul>
-      <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-          Document header
-        </p>
-        <ul className={`${SETTINGS_DIVIDE_Y} overflow-hidden rounded-lg bg-mist/80 dark:bg-ink/[0.035]`}>
-          <ToggleRow
-            id="show-document-title"
-            label="Title"
-            description="Show the Title field above the writing surface."
-            checked={documentHeaderPrefs.showTitle}
-            onChange={(v) => onDocumentHeaderPrefChange({ showTitle: v })}
-          />
-          <ToggleRow
-            id="show-document-subtitle"
-            label="Subtitle"
-            description="Show the Subtitle field below the Title."
-            checked={documentHeaderPrefs.showSubtitle}
-            onChange={(v) => onDocumentHeaderPrefChange({ showSubtitle: v })}
-          />
-        </ul>
-      </div>
-      <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-          Focus visibility
-        </p>
-        <ul className={`${SETTINGS_DIVIDE_Y} overflow-hidden rounded-lg bg-mist/80 dark:bg-ink/[0.035]`}>
-          <ToggleRow
-            id="keep-top-bar-visible-while-typing"
-            label="Keep top bar visible while typing"
-            description="Tab bar, sidebar toggles, and tab navigation when both sidebars are closed."
-            checked={focusVisibilityPrefs.keepTopBarVisibleWhileTyping}
-            onChange={(v) => onFocusVisibilityPrefChange({ keepTopBarVisibleWhileTyping: v })}
-          />
-          <ToggleRow
-            id="keep-document-title-visible-while-typing"
-            label="Keep document title visible while typing"
-            description="Document name and unsaved indicator when both sidebars are closed."
-            checked={focusVisibilityPrefs.keepDocumentTitleVisibleWhileTyping}
-            onChange={(v) => onFocusVisibilityPrefChange({ keepDocumentTitleVisibleWhileTyping: v })}
-          />
-          <ToggleRow
-            id="keep-bottom-tools-visible-while-typing"
-            label="Keep bottom tools visible while typing"
-            description="Bottom-center sidebar, timer, and copy controls when both sidebars are closed."
-            checked={focusVisibilityPrefs.keepBottomToolsVisibleWhileTyping}
-            onChange={(v) => onFocusVisibilityPrefChange({ keepBottomToolsVisibleWhileTyping: v })}
-          />
-        </ul>
-      </div>
+      </SettingsGroup>
     </div>
   );
 }
@@ -626,32 +657,30 @@ function ParametersPanel({
   onChange: (partial: Partial<ParametersPrefs>) => void;
 }) {
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-[13px] font-semibold tracking-tight text-ink">Parameters</h2>
-        <p className="mt-1 text-[12px] leading-relaxed text-muted/90">
-          Analysis settings for the tools sidebar and Edit highlights.
-        </p>
-      </div>
+    <div className="space-y-5">
+      <SettingsSectionHeader
+        title="Parameters"
+        description="Numbers used for reading stats and Edit highlights."
+      />
 
-      <div className="space-y-2">
+      <div className="space-y-2 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
         <div>
           <p className="text-[13px] font-medium text-ink">Reading grade</p>
           <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-            Flesch–Kincaid estimate of U.S. school grade level.
+            Flesch–Kincaid U.S. grade level for the document.
           </p>
         </div>
         <div className="font-mono text-[11px] leading-relaxed text-muted/80">
           <p>0.39 × (words ÷ sentences) + 11.8 × (syllables ÷ words) − 15.59</p>
-          <p className="mt-0.5">= Reading Grade Level</p>
         </div>
       </div>
 
-      <label className="flex items-start justify-between gap-4">
+      <label className="flex items-start justify-between gap-4 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-ink">Words per minute</p>
           <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-            For Reading time. Suggested {SUGGESTED_READING_WPM_MIN}–{SUGGESTED_READING_WPM_MAX}.
+            Reading-time estimate. Suggested {SUGGESTED_READING_WPM_MIN}–
+            {SUGGESTED_READING_WPM_MAX}.
           </p>
         </div>
         <input
@@ -665,13 +694,13 @@ function ParametersPanel({
         />
       </label>
 
-      <div className="space-y-2">
+      <div className="space-y-2 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
         <label className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium text-ink">Sentence complexity</p>
             <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-              Marks a sentence complex when its Flesch–Kincaid density meets the threshold.
-              Suggested {SUGGESTED_FK_COMPLEXITY_THRESHOLD_MIN}–{SUGGESTED_FK_COMPLEXITY_THRESHOLD_MAX}.
+              Highlight sentences at or above this F–K density. Suggested{" "}
+              {SUGGESTED_FK_COMPLEXITY_THRESHOLD_MIN}–{SUGGESTED_FK_COMPLEXITY_THRESHOLD_MAX}.
             </p>
           </div>
           <input
@@ -686,10 +715,7 @@ function ParametersPanel({
           />
         </label>
         <div className="font-mono text-[11px] leading-relaxed text-muted/80">
-          <p>0.39 × words + 11.8 × (syllables ÷ words) − 15.59</p>
-          <p className="mt-0.5">
-            ≥ {prefs.fkComplexityThreshold}
-          </p>
+          <p>0.39 × words + 11.8 × (syllables ÷ words) − 15.59 ≥ {prefs.fkComplexityThreshold}</p>
         </div>
       </div>
     </div>
@@ -699,12 +725,10 @@ function ParametersPanel({
 function HotkeysPanel() {
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-[13px] font-semibold tracking-tight text-ink">Shortcuts</h2>
-        <p className="mt-1 text-[12px] leading-relaxed text-muted/90">
-          Keyboard shortcuts available in Harvy. Keys adapt to your platform.
-        </p>
-      </div>
+      <SettingsSectionHeader
+        title="Shortcuts"
+        description="Keys adapt to your keyboard (⌘ / Ctrl)."
+      />
 
       {HOTKEY_GROUPS.map((group) => (
         <div key={group.id}>
@@ -754,7 +778,7 @@ function ToggleRow({
 }: {
   id: string;
   label: string;
-  description: string;
+  description?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
@@ -765,7 +789,9 @@ function ToggleRow({
         <label htmlFor={id} className="text-[13px] font-medium text-ink">
           {label}
         </label>
-        <p className="mt-0.5 text-[11px] leading-snug text-muted/85">{description}</p>
+        {description ? (
+          <p className="mt-0.5 text-[11px] leading-snug text-muted/85">{description}</p>
+        ) : null}
       </div>
       <button
         id={id}
@@ -802,25 +828,29 @@ function FilesPanel({
 }) {
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-[13px] font-semibold tracking-tight text-ink">Files</h2>
-        <p className="mt-1 text-[12px] leading-relaxed text-muted/90">
-          Harvy only reads and writes inside the folder you choose.
-        </p>
-      </div>
+      <SettingsSectionHeader
+        title="Files"
+        description="Harvy only reads and writes inside this folder."
+      />
       <div className="rounded-lg bg-mist/90 px-3.5 py-3 dark:bg-ink/[0.04]">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">Workspace folder</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+          Workspace
+        </p>
         {workspaceRootPath ? (
-          <p className="mt-1 break-all text-[13px] font-medium tracking-tight text-ink">{workspaceRootPath}</p>
+          <p className="mt-1 break-all text-[13px] font-medium tracking-tight text-ink">
+            {workspaceRootPath}
+          </p>
         ) : (
-          <p className="mt-1 text-[13px] font-medium tracking-tight text-muted/80">No folder selected</p>
+          <p className="mt-1 text-[13px] font-medium tracking-tight text-muted/80">
+            No folder selected
+          </p>
         )}
         <button
           type="button"
           onClick={() => void onChooseWorkspaceFolder?.()}
           className="mt-3 rounded-md bg-ink/[0.06] px-3 py-2 text-[12px] font-medium text-ink transition-colors hover:bg-ink/[0.1] dark:bg-white/[0.08] dark:hover:bg-white/[0.12]"
         >
-          {workspaceRootPath ? "Change Folder" : "Choose Folder"}
+          {workspaceRootPath ? "Change folder" : "Choose folder"}
         </button>
       </div>
     </div>
@@ -830,15 +860,13 @@ function FilesPanel({
 function SettingsAboutSection() {
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-[13px] font-semibold tracking-tight text-ink">About</h2>
-      </div>
-      <div className="space-y-2">
+      <SettingsSectionHeader title="About" />
+      <div className="space-y-2 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
         <p className="text-[14px] font-semibold tracking-tight text-ink">
           {APP_NAME} <span className="font-normal text-muted/80">v0.1.0</span>
         </p>
         <p className="max-w-md text-[12px] leading-relaxed text-muted/90">
-          Harvy is a calm, writing-focused workspace for drafting and refining text alongside your files.
+          A calm writing workspace for drafting and refining text next to your files.
         </p>
       </div>
     </div>

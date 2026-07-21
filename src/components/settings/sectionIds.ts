@@ -10,11 +10,11 @@ export type SettingsSectionId =
 
 export const SETTINGS_NAV: { id: SettingsSectionId; label: string }[] = [
   { id: "general", label: "General" },
-  { id: "appearance", label: "Appearance" },
   { id: "editor", label: "Editor" },
+  { id: "appearance", label: "Appearance" },
   { id: "parameters", label: "Parameters" },
-  { id: "shortcuts", label: "Shortcuts" },
   { id: "encouragement", label: "Encouragement" },
+  { id: "shortcuts", label: "Shortcuts" },
   { id: "files", label: "Files" },
   { id: "about", label: "About" },
 ];
