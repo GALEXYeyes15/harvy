@@ -49,6 +49,10 @@ type SettingsModalProps = {
   onFocusVisibilityPrefChange: (partial: Partial<FocusVisibilityPrefs>) => void;
   enableCollect: boolean;
   onEnableCollectChange: (enabled: boolean) => void;
+  showOutliersView: boolean;
+  showCollectView: boolean;
+  onShowOutliersViewChange: (enabled: boolean) => void;
+  onShowCollectViewChange: (enabled: boolean) => void;
   encouragementPrefs: EncouragementPrefs;
   onEncouragementPrefsChange: (partial: Partial<EncouragementPrefs>) => void;
   onTestEncouragement?: () => void;
@@ -73,6 +77,10 @@ export function SettingsModal({
   onFocusVisibilityPrefChange,
   enableCollect,
   onEnableCollectChange,
+  showOutliersView,
+  showCollectView,
+  onShowOutliersViewChange,
+  onShowCollectViewChange,
   encouragementPrefs,
   onEncouragementPrefsChange,
   onTestEncouragement,
@@ -123,7 +131,14 @@ export function SettingsModal({
 
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-5">
             {activeSection === "general" ? (
-              <GeneralPanel enableCollect={enableCollect} onEnableCollectChange={onEnableCollectChange} />
+              <GeneralPanel
+                enableCollect={enableCollect}
+                onEnableCollectChange={onEnableCollectChange}
+                showOutliersView={showOutliersView}
+                showCollectView={showCollectView}
+                onShowOutliersViewChange={onShowOutliersViewChange}
+                onShowCollectViewChange={onShowCollectViewChange}
+              />
             ) : null}
             {activeSection === "appearance" ? (
               <AppearancePanel themeMode={themeMode} onThemeModeChange={onThemeModeChange} />
@@ -171,9 +186,17 @@ export function SettingsModal({
 function GeneralPanel({
   enableCollect,
   onEnableCollectChange,
+  showOutliersView,
+  showCollectView,
+  onShowOutliersViewChange,
+  onShowCollectViewChange,
 }: {
   enableCollect: boolean;
   onEnableCollectChange: (enabled: boolean) => void;
+  showOutliersView: boolean;
+  showCollectView: boolean;
+  onShowOutliersViewChange: (enabled: boolean) => void;
+  onShowCollectViewChange: (enabled: boolean) => void;
 }) {
   return (
     <div className="space-y-5">
@@ -192,6 +215,32 @@ function GeneralPanel({
           onChange={onEnableCollectChange}
         />
       </ul>
+      <div>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+          Collect views
+        </p>
+        <ul className={`${SETTINGS_DIVIDE_Y} overflow-hidden rounded-lg bg-mist/80 dark:bg-ink/[0.035]`}>
+          <ToggleRow
+            id="show-outliers-view"
+            label="Outliers"
+            description="Show the Outliers view for creator signals."
+            checked={showOutliersView}
+            onChange={onShowOutliersViewChange}
+            disabled={showOutliersView && !showCollectView}
+          />
+          <ToggleRow
+            id="show-collect-view"
+            label="Collect"
+            description="Show the Collect table for saved items."
+            checked={showCollectView}
+            onChange={onShowCollectViewChange}
+            disabled={showCollectView && !showOutliersView}
+          />
+        </ul>
+        <p className="mt-2 text-[11px] leading-snug text-muted/70">
+          At least one Collect view must stay on.
+        </p>
+      </div>
       <div className="rounded-lg bg-mist/90 px-3.5 py-3 dark:bg-ink/[0.04]">
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">App name</p>
         <p className="mt-1 text-[14px] font-medium tracking-tight text-ink">{APP_NAME}</p>
@@ -669,12 +718,14 @@ function ToggleRow({
   description,
   checked,
   onChange,
+  disabled = false,
 }: {
   id: string;
   label: string;
   description: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <li className="flex items-start justify-between gap-4 px-3 py-3">
@@ -689,10 +740,15 @@ function ToggleRow({
         type="button"
         role="switch"
         aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`harvy-settings-switch relative mt-0.5 h-6 w-10 shrink-0 rounded-full transition-[background-color,box-shadow,border-color] duration-200 ${
+        aria-disabled={disabled || undefined}
+        disabled={disabled}
+        onClick={() => {
+          if (disabled) return;
+          onChange(!checked);
+        }}
+        className={`harvy-settings-switch relative mt-0.5 h-6 w-10 shrink-0 rounded-full transition-[background-color,box-shadow,border-color,opacity] duration-200 ${
           checked ? "harvy-settings-switch--on bg-ink" : "harvy-settings-switch--off"
-        }`}
+        } ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
       >
         <span
           aria-hidden

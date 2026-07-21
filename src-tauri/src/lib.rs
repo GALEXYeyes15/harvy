@@ -97,6 +97,8 @@ pub fn run() {
             commands::write_user_editor_rules,
             commands::unsplash::search_unsplash_photos,
             commands::unsplash::list_popular_unsplash_photos,
+            commands::substack::fetch_substack_posts,
+            commands::substack::fetch_substack_comments,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

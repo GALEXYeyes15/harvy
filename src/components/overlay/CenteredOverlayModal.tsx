@@ -28,6 +28,10 @@ export type CenteredOverlayModalProps = {
   showHeaderClose?: boolean;
   /** Optional line shown under the title in the header. */
   subtitle?: ReactNode;
+  /** Extra classes on the title (e.g. `sr-only` for a close-only header). */
+  titleClassName?: string;
+  /** Extra classes on the header row. */
+  headerClassName?: string;
   zIndexClass?: string;
   /**
    * When true, Escape closes this modal in the capture phase and stops other
@@ -52,6 +56,8 @@ export function CenteredOverlayModal({
   closeButtonClassName,
   showHeaderClose = true,
   subtitle,
+  titleClassName,
+  headerClassName,
   zIndexClass = "z-[200]",
   escapeCapture = false,
   children,
@@ -154,13 +160,19 @@ export function CenteredOverlayModal({
       >
         <header
           className={
-            showHeaderClose
+            headerClassName ??
+            (showHeaderClose
               ? "flex shrink-0 items-center justify-between gap-4 px-6 py-3.5"
-              : "flex shrink-0 items-center px-6 py-3.5"
+              : "flex shrink-0 items-center px-6 py-3.5")
           }
         >
           <div className="min-w-0">
-            <h1 id={titleId} className="text-[15px] font-semibold tracking-tight text-ink">
+            <h1
+              id={titleId}
+              className={
+                titleClassName ?? "text-[15px] font-semibold tracking-tight text-ink"
+              }
+            >
               {title}
             </h1>
             {subtitle ? (

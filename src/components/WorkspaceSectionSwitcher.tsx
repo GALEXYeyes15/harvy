@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import {
-  WORKSPACE_SECTION_LABELS,
+  workspaceSectionLabel,
   type WorkspaceSection,
 } from "../features/workspace/workspaceSection";
 
@@ -12,6 +12,9 @@ type WorkspaceSectionSwitcherProps = {
   activeSection: WorkspaceSection;
   onSectionChange: (section: WorkspaceSection) => void;
   sections: WorkspaceSection[];
+  /** When only Outliers is enabled, the Collect rail label becomes “Outliers”. */
+  showOutliersView?: boolean;
+  showCollectView?: boolean;
   /** Shared with top chrome (tabs, header, ambient controls) during distraction-free writing. */
   chromeHidden?: boolean;
   className?: string;
@@ -22,6 +25,8 @@ export function WorkspaceSectionSwitcher({
   activeSection,
   onSectionChange,
   sections,
+  showOutliersView = true,
+  showCollectView = true,
   chromeHidden = false,
   className,
   style,
@@ -65,7 +70,7 @@ export function WorkspaceSectionSwitcher({
                 active ? "text-ink" : ""
               }`}
             >
-              {WORKSPACE_SECTION_LABELS[section]}
+              {workspaceSectionLabel(section, { showOutliersView, showCollectView })}
             </span>
           </button>
         );

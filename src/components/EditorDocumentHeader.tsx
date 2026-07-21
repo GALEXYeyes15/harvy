@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { documentTitlePaddingLeft } from "../features/chrome/tabNavChromeInsets";
+import { TOOLS_SIDEBAR_WIDTH_PX } from "../features/workspace/workspaceSection";
 
 type EditorDocumentHeaderProps = {
   /** Basename only (no extension) for display and rename. */
@@ -64,8 +65,10 @@ export function EditorDocumentHeader({
     overlayWorkspaceRail && workspaceSidebarOpen ? "ml-[260px]" : "ml-0"
   }`;
 
-  const titleRowVisibleWidth =
-    overlayWorkspaceRail && readabilityPanelOpen ? "w-[calc(100%-300px)]" : "w-full";
+  const titleRowWidthStyle =
+    overlayWorkspaceRail && readabilityPanelOpen
+      ? ({ width: `calc(100% - ${TOOLS_SIDEBAR_WIDTH_PX}px)` } as const)
+      : ({ width: "100%" } as const);
 
   useEffect(() => {
     setDraftTitle(documentTitleBase);
@@ -210,7 +213,8 @@ export function EditorDocumentHeader({
     <div className="relative z-20 w-full min-w-0 shrink-0 bg-stage">
       <div className={`min-w-0 shrink-0 ${railShift}`}>
         <div
-          className={`min-w-0 shrink-0 transition-[width] duration-500 ease-in-out ${titleRowVisibleWidth}`}
+          className="min-w-0 shrink-0 transition-[width] duration-500 ease-in-out"
+          style={titleRowWidthStyle}
         >
           <div
             className={`relative z-[2] flex w-full min-w-0 flex-row items-center pb-2 pt-1.5 pr-10 ${LEADING_PAD_SYNC} pointer-events-auto transition-[opacity,transform] duration-500 ease-in-out ${

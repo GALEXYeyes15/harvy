@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import type { Editor } from "@tiptap/core";
 import { PanelLeft, PanelRight } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   applyResolvedTheme,
   readStoredThemeMode,
@@ -35,6 +35,8 @@ import {
 import { WorkspaceSectionSwitcher } from "./WorkspaceSectionSwitcher";
 import { useWindowFullscreen } from "../features/window/useWindowFullscreen";
 import {
+  TOOLS_SIDEBAR_WIDTH_PX,
+  WORKSPACE_SECTION_SWITCHER_WIDTH_PX,
   WORKSPACE_SIDEBAR_WIDTH_PX,
   visibleWorkspaceSections,
   type WorkspaceSection,
@@ -137,7 +139,10 @@ import {
   readWritingAssistancePrefs,
   writeWritingAssistancePrefs,
 } from "../features/writing-assistance/writingAssistanceSettings";
-import type { SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
+import {
+  isSidebarModeForSection,
+  type SidebarToolsMode,
+} from "../features/sidebar/sidebarToolsMode";
 import { setMechanicsUnderlinesVisible } from "../features/proofread/mechanicsUnderlineLayer";
 import {
   grammarDecorationsKey,
@@ -245,7 +250,15 @@ export function AppShell() {
   const [searchQuery, setSearchQuery] = useState("");
   const [mode, setMode] = useState<SidebarToolsMode>("notes");
   const [activeWorkspaceSection, setActiveWorkspaceSection] = useState<WorkspaceSection>("write");
+  /** After Collect’s first paint, animate padding with sidebar toggles. */
+  const [collectPaddingAnimated, setCollectPaddingAnimated] = useState(false);
   const [enableCollect, setEnableCollect] = useState(() => readWorkspaceSettings().enableCollect);
+  const [showOutliersView, setShowOutliersView] = useState(
+    () => readWorkspaceSettings().showOutliersView,
+  );
+  const [showCollectView, setShowCollectView] = useState(
+    () => readWorkspaceSettings().showCollectView,
+  );
   const [collectItems, setCollectItems] = useState<CollectItem[]>(() => loadPersistedCollectItems());
   const [isWorkspaceSidebarOpen, setIsWorkspaceSidebarOpen] = useState(true);
   /** `null` = browse at the selected workspace root. */
@@ -335,10 +348,25 @@ export function AppShell() {
         setEditorInactive(true);
         visuallyDeactivateEditor(tiptapEditor);
       }
+      if (section === "collect") {
+        setReadabilityPanelOpen(false);
+        setCollectPaddingAnimated(false);
+      }
       setActiveWorkspaceSection(section);
     },
     [setEditorInactive, tiptapEditor],
   );
+
+  useLayoutEffect(() => {
+    if (activeWorkspaceSection !== "collect") {
+      setCollectPaddingAnimated(false);
+      return;
+    }
+    const id = window.requestAnimationFrame(() => {
+      setCollectPaddingAnimated(true);
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [activeWorkspaceSection]);
 
   const handleEnableCollectChange = useCallback((enabled: boolean) => {
     setEnableCollect(enabled);
@@ -346,6 +374,18 @@ export function AppShell() {
     if (!enabled) {
       setActiveWorkspaceSection("write");
     }
+  }, []);
+
+  const handleShowOutliersViewChange = useCallback((enabled: boolean) => {
+    const next = writeWorkspaceSettings({ showOutliersView: enabled });
+    setShowOutliersView(next.showOutliersView);
+    setShowCollectView(next.showCollectView);
+  }, []);
+
+  const handleShowCollectViewChange = useCallback((enabled: boolean) => {
+    const next = writeWorkspaceSettings({ showCollectView: enabled });
+    setShowOutliersView(next.showOutliersView);
+    setShowCollectView(next.showCollectView);
   }, []);
 
   const showWorkspaceNavigation = enableCollect;
@@ -360,6 +400,12 @@ export function AppShell() {
       setActiveWorkspaceSection("write");
     }
   }, [enableCollect]);
+
+  useEffect(() => {
+    if (!isSidebarModeForSection(mode, activeWorkspaceSection)) {
+      setMode("notes");
+    }
+  }, [activeWorkspaceSection, mode]);
 
   useEffect(() => {
     if (activeWorkspaceSection !== "write") return;
@@ -1940,21 +1986,45 @@ export function AppShell() {
     </div>
   );
 
+  const collectUsesFullWidth = activeWorkspaceSection === "collect";
+  /**
+   * Collect/Outliers uses full width — inset so content clears floating rails and the
+   * Collect/Write section switcher. Applied on the Collect wrapper (not the shared
+   * Write/Collect section) so opening Collect doesn’t animate padding from 0 and
+   * slide under an already-open left sidebar.
+   */
+  const collectInsetStyle = {
+    paddingLeft:
+      (sidebarOverlayLayout && isWorkspaceSidebarOpen ? WORKSPACE_SIDEBAR_WIDTH_PX : 0) +
+      (showWorkspaceNavigation ? WORKSPACE_SECTION_SWITCHER_WIDTH_PX : 0),
+    paddingRight:
+      sidebarOverlayLayout && readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0,
+  };
+
   const editorPanelSection = (
     <div className="flex min-h-0 w-full flex-1 justify-center overflow-hidden bg-stage">
       <section
-        className="mx-auto flex min-h-0 w-full max-w-[820px] flex-1 flex-col overflow-hidden bg-stage"
-        aria-label="Editor"
+        className={`flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-stage ${
+          collectUsesFullWidth ? "max-w-none" : "mx-auto max-w-[820px]"
+        }`}
+        aria-label={collectUsesFullWidth ? "Collect" : "Editor"}
         role="tabpanel"
         id="harvy-editor-panel"
         aria-labelledby={activeTabId ? `harvy-tab-${activeTabId}` : undefined}
       >
         {activeWorkspaceSection === "collect" ? (
-          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div
+            className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
+              collectPaddingAnimated ? "transition-[padding] duration-500 ease-in-out" : ""
+            }`}
+            style={collectInsetStyle}
+          >
             <CollectPanel
               items={collectItems}
               onItemsChange={setCollectItems}
               onAddPreviewToNotes={handleAddCollectPreviewToNotes}
+              showOutliersView={showOutliersView}
+              showCollectView={showCollectView}
             />
           </div>
         ) : null}
@@ -2027,13 +2097,15 @@ export function AppShell() {
               <div
                 aria-hidden={!readabilityPanelOpen}
                 className={`absolute bottom-0 right-0 top-[2.125rem] z-10 flex flex-col overflow-hidden bg-stage transition-[width] duration-500 ease-in-out [backdrop-filter:none] ${
-                  readabilityPanelOpen ? "w-[300px]" : "pointer-events-none w-0"
+                  readabilityPanelOpen ? "" : "pointer-events-none"
                 }`}
+                style={{ width: readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0 }}
               >
                 <div
-                  className={`flex h-full min-h-0 w-[300px] shrink-0 flex-col transition-opacity duration-500 ease-in-out ${
+                  className={`flex h-full min-h-0 shrink-0 flex-col transition-opacity duration-500 ease-in-out ${
                     readabilityPanelOpen ? "opacity-100 delay-0" : "opacity-0 delay-0"
                   }`}
+                  style={{ width: TOOLS_SIDEBAR_WIDTH_PX }}
                 >
                   {readabilitySidebarPanel}
                 </div>
@@ -2045,6 +2117,8 @@ export function AppShell() {
               activeSection={activeWorkspaceSection}
               onSectionChange={handleWorkspaceSectionChange}
               sections={workspaceSections}
+              showOutliersView={showOutliersView}
+              showCollectView={showCollectView}
               chromeHidden={isTopChromeHidden}
               className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
               style={{
@@ -2092,6 +2166,8 @@ export function AppShell() {
                 activeSection={activeWorkspaceSection}
                 onSectionChange={handleWorkspaceSectionChange}
                 sections={workspaceSections}
+                showOutliersView={showOutliersView}
+                showCollectView={showCollectView}
                 chromeHidden={isTopChromeHidden}
                 className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
                 style={{
@@ -2110,13 +2186,15 @@ export function AppShell() {
               <div
                 aria-hidden={!readabilityPanelOpen}
                 className={`flex shrink-0 flex-col overflow-hidden bg-stage transition-[width] duration-500 ease-in-out [backdrop-filter:none] ${
-                  readabilityPanelOpen ? "w-[300px]" : "pointer-events-none w-0"
+                  readabilityPanelOpen ? "" : "pointer-events-none"
                 }`}
+                style={{ width: readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0 }}
               >
                 <div
-                  className={`flex h-full min-h-0 w-[300px] shrink-0 flex-col transition-opacity duration-500 ease-in-out ${
+                  className={`flex h-full min-h-0 shrink-0 flex-col transition-opacity duration-500 ease-in-out ${
                     readabilityPanelOpen ? "opacity-100 delay-0" : "opacity-0 delay-0"
                   }`}
+                  style={{ width: TOOLS_SIDEBAR_WIDTH_PX }}
                 >
                   {readabilitySidebarPanel}
                 </div>
@@ -2173,6 +2251,10 @@ export function AppShell() {
         onFocusVisibilityPrefChange={handleFocusVisibilityPrefChange}
         enableCollect={enableCollect}
         onEnableCollectChange={handleEnableCollectChange}
+        showOutliersView={showOutliersView}
+        showCollectView={showCollectView}
+        onShowOutliersViewChange={handleShowOutliersViewChange}
+        onShowCollectViewChange={handleShowCollectViewChange}
         encouragementPrefs={encouragementPrefs}
         onEncouragementPrefsChange={handleEncouragementPrefsChange}
         onTestEncouragement={testEncouragement}

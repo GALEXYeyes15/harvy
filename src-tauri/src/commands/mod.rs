@@ -5,6 +5,7 @@ use tauri::AppHandle;
 use tauri::Manager;
 
 pub mod unsplash;
+pub mod substack;
 mod pdf_export;
 
 #[derive(Debug, Clone, Serialize)]
