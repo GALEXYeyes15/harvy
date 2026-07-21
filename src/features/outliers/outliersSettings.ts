@@ -8,11 +8,20 @@ import {
 
 const STORAGE_KEY = "harvy:outliers-settings:v1";
 
+/** Fired on `window` after Outliers settings are written (so an active refresh timer can reschedule). */
+export const OUTLIERS_SETTINGS_CHANGED_EVENT = "harvy:outliers-settings-changed";
+
+export const DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES = 5;
+export const OUTLIERS_FETCH_INTERVAL_MIN_MINUTES = 1;
+export const OUTLIERS_FETCH_INTERVAL_MAX_MINUTES = 240;
+
 export type OutliersSettings = {
   accountLink: string;
   contentType: ContentTypeFilter;
   outlierScore: OutlierScoreFilter;
   postedWithin: PostedWithinFilter;
+  /** Minutes between automatic refreshes after an explicit Fetch posts. */
+  fetchIntervalMinutes: number;
 };
 
 const defaultSettings: OutliersSettings = {
@@ -20,6 +29,7 @@ const defaultSettings: OutliersSettings = {
   contentType: { ...DEFAULT_CONTENT_TYPE_FILTER },
   outlierScore: "any",
   postedWithin: "year",
+  fetchIntervalMinutes: DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES,
 };
 
 const SCORE_FILTERS = new Set<OutlierScoreFilter>(["any", "3x", "5x", "10x", "20x"]);
@@ -29,6 +39,21 @@ const POSTED_WITHIN_FILTERS = new Set<PostedWithinFilter>([
   "3months",
   "year",
 ]);
+
+export function clampOutliersFetchIntervalMinutes(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES;
+  return Math.min(
+    OUTLIERS_FETCH_INTERVAL_MAX_MINUTES,
+    Math.max(OUTLIERS_FETCH_INTERVAL_MIN_MINUTES, Math.round(n)),
+  );
+}
+
+export function outliersFetchIntervalMs(
+  minutes: number = readOutliersSettings().fetchIntervalMinutes,
+): number {
+  return clampOutliersFetchIntervalMinutes(minutes) * 60_000;
+}
 
 function parseContentType(raw: unknown): ContentTypeFilter {
   if (!raw || typeof raw !== "object") {
@@ -79,6 +104,7 @@ export function readOutliersSettings(): OutliersSettings {
       contentType: parseContentType(parsed.contentType),
       outlierScore,
       postedWithin,
+      fetchIntervalMinutes: clampOutliersFetchIntervalMinutes(parsed.fetchIntervalMinutes),
     };
   } catch {
     return {
@@ -100,6 +126,10 @@ export function writeOutliersSettings(partial: Partial<OutliersSettings>): Outli
       partial.accountLink !== undefined
         ? partial.accountLink.trim() || defaultSettings.accountLink
         : current.accountLink,
+    fetchIntervalMinutes:
+      partial.fetchIntervalMinutes !== undefined
+        ? clampOutliersFetchIntervalMinutes(partial.fetchIntervalMinutes)
+        : current.fetchIntervalMinutes,
   };
 
   if (typeof localStorage !== "undefined") {
@@ -109,5 +139,13 @@ export function writeOutliersSettings(partial: Partial<OutliersSettings>): Outli
       // Quota / private mode — keep in-memory next for this session.
     }
   }
+
+  const intervalChanged =
+    partial.fetchIntervalMinutes !== undefined &&
+    next.fetchIntervalMinutes !== current.fetchIntervalMinutes;
+  if (intervalChanged && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(OUTLIERS_SETTINGS_CHANGED_EVENT));
+  }
+
   return next;
 }

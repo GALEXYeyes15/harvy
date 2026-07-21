@@ -2,10 +2,7 @@ import type { SubstackPostResult } from "./fetchSubstackOutliers";
 
 const STORAGE_KEY = "harvy:outliers-substack-cache:v4";
 
-/**
- * Soft TTL for background refresh only. Cached posts are always shown (including offline),
- * regardless of age; this only limits how often we re-hit Substack when online.
- */
+/** Fallback soft TTL when no interval is passed (matches default fetch interval). */
 export const SUBSTACK_OUTLIERS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type SubstackOutliersCacheEntry = {
@@ -56,12 +53,13 @@ export function readSubstackOutliersCache(
   return entry;
 }
 
-/** True when a background network refresh is unnecessary. */
+/** True when a background network refresh is unnecessary for the given TTL. */
 export function isSubstackOutliersCacheFresh(
   entry: SubstackOutliersCacheEntry,
   nowMs = Date.now(),
+  ttlMs = SUBSTACK_OUTLIERS_CACHE_TTL_MS,
 ): boolean {
-  return nowMs - entry.fetchedAt < SUBSTACK_OUTLIERS_CACHE_TTL_MS;
+  return nowMs - entry.fetchedAt < ttlMs;
 }
 
 export function writeSubstackOutliersCache(

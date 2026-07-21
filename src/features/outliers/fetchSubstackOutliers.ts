@@ -114,7 +114,8 @@ export type FetchSubstackOutlierPostsResult = {
 
 /**
  * Serves the last persisted fetch whenever available (offline-friendly).
- * Refreshes from the network when cache is missing, stale, or `forceRefresh` is set.
+ * Hits the network when cache is missing, stale, or `forceRefresh` is set.
+ * Outliers UI only calls this with `forceRefresh` after an explicit Fetch posts.
  * On network failure, falls back to the last cache instead of throwing when one exists.
  */
 export async function fetchSubstackOutlierPosts(

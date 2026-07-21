@@ -99,6 +99,30 @@ export function formatPostedAgo(isoDate: string, nowMs = Date.now()): string {
   return `${Math.max(1, years)}y`;
 }
 
+function pluralUnit(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/** Relative time for “last fetch” labels, e.g. “12 minutes ago”, “1 day ago”. */
+export function formatFetchedAgo(fetchedAtMs: number, nowMs = Date.now()): string {
+  if (!Number.isFinite(fetchedAtMs)) return "";
+  const deltaMs = Math.max(0, nowMs - fetchedAtMs);
+  const seconds = Math.floor(deltaMs / 1000);
+  if (seconds < 45) return "just now";
+  const minutes = Math.floor(deltaMs / 60_000);
+  if (minutes < 60) return `${pluralUnit(Math.max(1, minutes), "minute")} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${pluralUnit(hours, "hour")} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 14) return `${pluralUnit(days, "day")} ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 9) return `${pluralUnit(weeks, "week")} ago`;
+  const months = Math.floor(days / 30);
+  if (months < 18) return `${pluralUnit(Math.max(1, months), "month")} ago`;
+  const years = Math.floor(days / 365);
+  return `${pluralUnit(Math.max(1, years), "year")} ago`;
+}
+
 export function formatOutlierMultiple(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "—";
   if (value < 10) return `${value.toFixed(1).replace(/\.0$/, "")}x`;

@@ -20,6 +20,14 @@ import {
   type ParametersPrefs,
 } from "../../features/settings/parametersSettings";
 import type { ThemeMode } from "../../theme/themeMode";
+import {
+  clampOutliersFetchIntervalMinutes,
+  DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES,
+  OUTLIERS_FETCH_INTERVAL_MAX_MINUTES,
+  OUTLIERS_FETCH_INTERVAL_MIN_MINUTES,
+  readOutliersSettings,
+  writeOutliersSettings,
+} from "../../features/outliers/outliersSettings";
 import { CenteredOverlayModal } from "../overlay/CenteredOverlayModal";
 import { PhrasesCsvTable } from "./PhrasesCsvTable";
 import { SETTINGS_NAV, type SettingsSectionId } from "./sectionIds";
@@ -244,6 +252,10 @@ function GeneralPanel({
   onShowOutliersViewChange: (enabled: boolean) => void;
   onShowCollectViewChange: (enabled: boolean) => void;
 }) {
+  const [fetchIntervalMinutes, setFetchIntervalMinutes] = useState(
+    () => readOutliersSettings().fetchIntervalMinutes,
+  );
+
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
@@ -281,6 +293,31 @@ function GeneralPanel({
             disabled={showCollectView && !showOutliersView}
           />
         </SettingsGroup>
+      ) : null}
+      {enableCollect && showOutliersView ? (
+        <label className="flex items-start justify-between gap-4 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-ink">Outliers fetch interval</p>
+            <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+              Minutes between refreshes after you click Fetch posts. Default{" "}
+              {DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES}.
+            </p>
+          </div>
+          <input
+            type="number"
+            min={OUTLIERS_FETCH_INTERVAL_MIN_MINUTES}
+            max={OUTLIERS_FETCH_INTERVAL_MAX_MINUTES}
+            step={1}
+            value={fetchIntervalMinutes}
+            onChange={(e) => {
+              const next = clampOutliersFetchIntervalMinutes(Number(e.target.value));
+              setFetchIntervalMinutes(next);
+              writeOutliersSettings({ fetchIntervalMinutes: next });
+            }}
+            aria-label="Outliers fetch interval in minutes"
+            className="w-[4.5rem] shrink-0 rounded-md border-0 bg-canvas/45 px-2 py-1.5 text-right text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
+          />
+        </label>
       ) : null}
     </div>
   );

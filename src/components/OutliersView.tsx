@@ -16,13 +16,12 @@ import {
 } from "react";
 import {
   fetchSubstackOutlierPosts,
-  hasCachedSubstackOutliers,
-  isCachedSubstackOutliersFresh,
   readCachedSubstackOutlierPosts,
 } from "../features/outliers/fetchSubstackOutliers";
 import { distributeOutlierPosts } from "../features/outliers/outlierMasonry";
 import {
   filterOutlierPosts,
+  formatFetchedAgo,
   toggleContentType,
   type ContentTypeFilter,
   type OutlierPost,
@@ -30,9 +29,12 @@ import {
   type PostedWithinFilter,
 } from "../features/outliers/outlierPosts";
 import {
+  OUTLIERS_SETTINGS_CHANGED_EVENT,
+  outliersFetchIntervalMs,
   readOutliersSettings,
   writeOutliersSettings,
 } from "../features/outliers/outliersSettings";
+import { readSubstackOutliersCache } from "../features/outliers/substackOutliersCache";
 import {
   isSubstackNoteDoc,
   SubstackNoteBody,
@@ -253,21 +255,12 @@ function OutliersAccountDropdown({
                 event.preventDefault();
                 if (isLoading || !accountLink.trim()) return;
                 onApplyAccount();
+                closeMenu();
               }}
               placeholder="https://substack.com/@…"
               className="mt-0 w-full rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 placeholder:text-muted/55 focus:ring-ink/20 dark:bg-canvas/35"
             />
           </label>
-          <button
-            type="button"
-            disabled={isLoading || !accountLink.trim()}
-            onClick={() => {
-              onApplyAccount();
-            }}
-            className="mt-2 w-full rounded-md bg-ink/[0.08] px-2.5 py-1.5 text-[12px] font-medium text-ink transition-colors hover:bg-ink/[0.12] disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.08] dark:hover:bg-white/[0.12]"
-          >
-            {isLoading ? "Loading..." : "Fetch posts"}
-          </button>
         </div>
       ) : null}
     </div>
@@ -281,6 +274,10 @@ type OutliersSettingsDropdownProps = {
   onOutlierScoreChange: (value: OutlierScoreFilter) => void;
   postedWithin: PostedWithinFilter;
   onPostedWithinChange: (value: PostedWithinFilter) => void;
+  onFetchPosts: () => void;
+  isFetching: boolean;
+  canFetch: boolean;
+  lastFetchedAt: number | null;
 };
 
 function OutliersSettingsDropdown({
@@ -290,8 +287,13 @@ function OutliersSettingsDropdown({
   onOutlierScoreChange,
   postedWithin,
   onPostedWithinChange,
+  onFetchPosts,
+  isFetching,
+  canFetch,
+  lastFetchedAt,
 }: OutliersSettingsDropdownProps) {
   const [open, setOpen] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const rootRef = useRef<HTMLDivElement>(null);
 
   const closeMenu = useCallback(() => {
@@ -299,6 +301,16 @@ function OutliersSettingsDropdown({
   }, []);
 
   useOutliersPopoverDismiss(open, closeMenu, rootRef);
+
+  useEffect(() => {
+    if (!open) return;
+    setNowMs(Date.now());
+    const id = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, [open]);
+
+  const lastFetchedLabel =
+    lastFetchedAt != null ? formatFetchedAgo(lastFetchedAt, nowMs) : "Never fetched";
 
   return (
     <div ref={rootRef} className="relative shrink-0">
@@ -320,6 +332,18 @@ function OutliersSettingsDropdown({
           className="absolute right-0 top-[calc(100%+8px)] z-50 w-[17.5rem] rounded-lg bg-page px-3.5 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.28)] ring-1 ring-line/40 dark:bg-[#1e1e1e] dark:ring-white/10"
         >
           <p className="text-[13px] font-semibold tracking-tight text-ink">Settings</p>
+
+          <button
+            type="button"
+            disabled={isFetching || !canFetch}
+            onClick={onFetchPosts}
+            className="mt-3 w-full rounded-md bg-ink/[0.08] px-2.5 py-1.5 text-[12px] font-medium text-ink transition-colors hover:bg-ink/[0.12] disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.08] dark:hover:bg-white/[0.12]"
+          >
+            {isFetching ? "Loading..." : "Fetch posts"}
+          </button>
+          <p className="mt-1.5 text-center text-[11px] text-muted/65 dark:text-white/45">
+            {lastFetchedAt != null ? `Last fetch ${lastFetchedLabel}` : lastFetchedLabel}
+          </p>
 
           <div className="mt-3">
             <p
@@ -607,26 +631,48 @@ export function OutliersView({
     const { accountLink: savedAccount } = readOutliersSettings();
     return readCachedSubstackOutlierPosts(savedAccount) ?? [];
   });
-  const [isLoading, setIsLoading] = useState(() => {
-    const { accountLink: savedAccount } = readOutliersSettings();
-    // Only block the UI when we have nothing persisted to show.
-    return !hasCachedSubstackOutliers(savedAccount);
-  });
+  const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activePost, setActivePost] = useState<OutlierPost | null>(null);
+  const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(() => {
+    const { accountLink: savedAccount } = readOutliersSettings();
+    return readSubstackOutliersCache(savedAccount)?.fetchedAt ?? null;
+  });
   const columnCount = useOutlierColumnCount();
+  const refreshTimerRef = useRef<number | null>(null);
+  const refreshArmedRef = useRef(false);
+  const accountLinkRef = useRef(accountLink);
+  accountLinkRef.current = accountLink;
 
   const persistSettings = useCallback((partial: Parameters<typeof writeOutliersSettings>[0]) => {
     writeOutliersSettings(partial);
+  }, []);
+
+  const syncLastFetchedAt = useCallback((url: string) => {
+    setLastFetchedAt(readSubstackOutliersCache(url)?.fetchedAt ?? null);
+  }, []);
+
+  const clearRefreshTimer = useCallback(() => {
+    if (refreshTimerRef.current == null) return;
+    window.clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = null;
   }, []);
 
   const handleAccountLinkChange = useCallback(
     (value: string) => {
       setAccountLink(value);
       persistSettings({ accountLink: value });
+      // Show that account’s cache only — never network until Fetch posts.
+      refreshArmedRef.current = false;
+      clearRefreshTimer();
+      setPosts(readCachedSubstackOutlierPosts(value) ?? []);
+      setError(null);
+      setIsLoading(false);
+      setIsRefreshing(false);
+      syncLastFetchedAt(value);
     },
-    [persistSettings],
+    [clearRefreshTimer, persistSettings, syncLastFetchedAt],
   );
 
   const handleContentTypeChange = useCallback(
@@ -653,55 +699,103 @@ export function OutliersView({
     [persistSettings],
   );
 
-  const loadPosts = useCallback(async (url: string, forceRefresh = false) => {
-    const cachedPosts = readCachedSubstackOutlierPosts(url);
-    const cacheFresh = isCachedSubstackOutliersFresh(url);
+  const fetchPosts = useCallback(
+    async (url: string) => {
+      const trimmed = url.trim();
+      if (!trimmed) return;
 
-    // Offline-first: always paint the last successful fetch immediately.
-    if (cachedPosts && !forceRefresh) {
-      setPosts(cachedPosts);
-      setIsLoading(false);
-      setError(null);
-      if (cacheFresh) return;
+      const cachedPosts = readCachedSubstackOutlierPosts(trimmed);
+      const hadCache = Boolean(cachedPosts);
 
-      // Stale cache: refresh in the background; keep cards if offline / fetch fails.
-      setIsRefreshing(true);
-      try {
-        const next = await fetchSubstackOutlierPosts(url, { forceRefresh: true });
-        setPosts(next.posts);
-      } catch {
-        // Keep persisted posts — no error banner when we already have a last fetch.
-      } finally {
+      if (hadCache) {
+        setPosts(cachedPosts!);
+        setIsRefreshing(true);
+        setIsLoading(false);
+      } else {
+        setIsLoading(true);
         setIsRefreshing(false);
       }
-      return;
-    }
-
-    // No cache, or explicit Apply refresh.
-    setIsLoading(true);
-    setIsRefreshing(false);
-    setError(null);
-    try {
-      const next = await fetchSubstackOutlierPosts(url, { forceRefresh });
-      setPosts(next.posts);
       setError(null);
-    } catch (err) {
-      if (cachedPosts) {
-        setPosts(cachedPosts);
-        // Force refresh failed but last fetch is still usable.
+
+      try {
+        const next = await fetchSubstackOutlierPosts(trimmed, { forceRefresh: true });
+        setPosts(next.posts);
         setError(null);
-      } else {
-        setPosts([]);
-        setError(err instanceof Error ? err.message : "Could not load Substack posts.");
+        if (next.refreshed) syncLastFetchedAt(trimmed);
+      } catch (err) {
+        if (cachedPosts) {
+          setPosts(cachedPosts);
+          setError(null);
+        } else {
+          setPosts([]);
+          setError(err instanceof Error ? err.message : "Could not load Substack posts.");
+        }
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
       }
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    },
+    [syncLastFetchedAt],
+  );
+
+  const scheduleRefreshTimer = useCallback(
+    (url: string) => {
+      clearRefreshTimer();
+      const trimmed = url.trim();
+      if (!trimmed) return;
+      refreshArmedRef.current = true;
+
+      const arm = () => {
+        clearRefreshTimer();
+        if (!refreshArmedRef.current) return;
+        if (accountLinkRef.current.trim() !== trimmed) {
+          refreshArmedRef.current = false;
+          return;
+        }
+        // Recurring refresh only after an explicit Fetch posts; never on view open.
+        // Re-read interval each cycle so Settings changes apply on the next wait.
+        refreshTimerRef.current = window.setTimeout(() => {
+          void (async () => {
+            if (!refreshArmedRef.current) return;
+            if (accountLinkRef.current.trim() !== trimmed) {
+              refreshArmedRef.current = false;
+              return;
+            }
+            await fetchPosts(trimmed);
+            arm();
+          })();
+        }, outliersFetchIntervalMs());
+      };
+
+      arm();
+    },
+    [clearRefreshTimer, fetchPosts],
+  );
+
+  const handleFetchPosts = useCallback(() => {
+    const url = accountLink.trim();
+    if (!url) return;
+    persistSettings({ accountLink: url });
+    void (async () => {
+      await fetchPosts(url);
+      scheduleRefreshTimer(url);
+    })();
+  }, [accountLink, fetchPosts, persistSettings, scheduleRefreshTimer]);
 
   useEffect(() => {
-    void loadPosts(readOutliersSettings().accountLink);
-  }, [loadPosts]);
+    const onSettingsChanged = () => {
+      if (!refreshArmedRef.current) return;
+      const url = accountLinkRef.current.trim();
+      if (!url) return;
+      scheduleRefreshTimer(url);
+    };
+    window.addEventListener(OUTLIERS_SETTINGS_CHANGED_EVENT, onSettingsChanged);
+    return () => {
+      window.removeEventListener(OUTLIERS_SETTINGS_CHANGED_EVENT, onSettingsChanged);
+      refreshArmedRef.current = false;
+      clearRefreshTimer();
+    };
+  }, [clearRefreshTimer, scheduleRefreshTimer]);
 
   const filteredPosts = useMemo(() => {
     const byFilters = filterOutlierPosts(posts, {
@@ -736,14 +830,15 @@ export function OutliersView({
           onOutlierScoreChange: handleOutlierScoreChange,
           postedWithin,
           onPostedWithinChange: handlePostedWithinChange,
+          onFetchPosts: handleFetchPosts,
+          isFetching: isLoading || isRefreshing,
+          canFetch: Boolean(accountLink.trim()),
+          lastFetchedAt,
         }}
         account={{
           accountLink,
           onAccountLinkChange: handleAccountLinkChange,
-          onApplyAccount: () => {
-            persistSettings({ accountLink });
-            void loadPosts(accountLink, true);
-          },
+          onApplyAccount: handleFetchPosts,
           isLoading: isLoading || isRefreshing,
         }}
       />
@@ -758,7 +853,9 @@ export function OutliersView({
 
       {!isLoading && !error && filteredPosts.length === 0 ? (
         <p className="mt-5 text-[13px] text-muted/65">
-          No posts match these filters. Try a wider date range or a lower outlier score.
+          {posts.length === 0
+            ? "No cached posts yet. Use Fetch posts in Settings to load them."
+            : "No posts match these filters. Try a wider date range or a lower outlier score."}
         </p>
       ) : null}
 
