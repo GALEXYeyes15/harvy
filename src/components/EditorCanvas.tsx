@@ -71,6 +71,13 @@ type EditorCanvasProps = {
   text: string;
   /** When opening a file, used to choose Markdown vs plain vs HTML. */
   contentSourcePath?: string | null;
+  /** Substack-style in-document title (not the file name). */
+  postTitle?: string;
+  subtitle?: string;
+  showPostTitle?: boolean;
+  showSubtitle?: boolean;
+  onChangePostTitle?: (value: string) => void;
+  onChangeSubtitle?: (value: string) => void;
   placeholder?: string;
   isEditable: boolean;
   /** When true, sets `spellcheck` on the ProseMirror root (native wavy underlines). Shell should gate Edit tab + panel + user pref. */
@@ -104,6 +111,12 @@ export function EditorCanvas({
   documentTitle,
   text,
   contentSourcePath = null,
+  postTitle = "",
+  subtitle = "",
+  showPostTitle = true,
+  showSubtitle = true,
+  onChangePostTitle,
+  onChangeSubtitle,
   placeholder,
   isEditable,
   spellcheckEnabled,
@@ -193,7 +206,7 @@ export function EditorCanvas({
           "aria-multiline": "true",
           spellcheck: spellcheckEnabled ? "true" : "false",
           class:
-            "editor-content ProseMirror-harvy block min-h-full w-full max-w-none resize-none bg-transparent py-10 text-[18px] font-normal text-ink caret-muted outline-none focus:outline-none placeholder:text-muted/45 sm:py-11 " +
+            "editor-content ProseMirror-harvy block min-h-full w-full max-w-none resize-none bg-transparent pb-10 pt-1 text-[18px] font-normal text-ink caret-muted outline-none focus:outline-none placeholder:text-muted/45 sm:pb-11 sm:pt-1.5 " +
             (isEditable ? "cursor-text" : "cursor-default select-text opacity-75"),
         },
         handleKeyDown: (view, event) => handleBackspaceOnEmptyTextBlockKeyDown(view, event),
@@ -455,6 +468,8 @@ export function EditorCanvas({
   const handleCanvasMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (!editor || !isEditable || event.button !== 0) return;
     if (editor.view.dom.contains(event.target as Node)) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest(".harvy-doc-header")) return;
     handleEditorWritingSurfacePointerDown(event.nativeEvent, editorFocusControl);
     if (handleEditorCanvasFocusPointerDown(editor.view, event.nativeEvent, editorFocusControl)) {
       event.preventDefault();
@@ -502,7 +517,91 @@ export function EditorCanvas({
         onDragOver={handleSurfaceDragOver}
         onDrop={handleSurfaceDrop}
       >
-        <div className="flex min-h-full w-full flex-col px-10 pb-52 pt-2 sm:px-14 sm:pb-9 sm:pt-2.5">
+        <div className="flex min-h-full w-full flex-col px-10 pb-52 pt-6 sm:px-14 sm:pb-9 sm:pt-8">
+          {showPostTitle || showSubtitle ? (
+            <div className="harvy-doc-header shrink-0">
+              {showPostTitle ? (
+                <>
+                  <label htmlFor="harvy-post-title" className="sr-only">
+                    Title
+                  </label>
+                  <textarea
+                    id="harvy-post-title"
+                    rows={1}
+                    value={postTitle}
+                    disabled={!isEditable}
+                    placeholder="Title"
+                    spellCheck={spellcheckEnabled}
+                    onChange={(event) => {
+                      onChangePostTitle?.(event.target.value);
+                      onTypingActivity?.();
+                      const el = event.target;
+                      el.style.height = "auto";
+                      el.style.height = `${el.scrollHeight}px`;
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return;
+                      event.preventDefault();
+                      if (showSubtitle) {
+                        document.getElementById("harvy-post-subtitle")?.focus();
+                        return;
+                      }
+                      editor?.commands.focus("start");
+                    }}
+                    onInput={(event) => {
+                      const el = event.currentTarget;
+                      el.style.height = "auto";
+                      el.style.height = `${el.scrollHeight}px`;
+                    }}
+                    ref={(el) => {
+                      if (!el) return;
+                      el.style.height = "auto";
+                      el.style.height = `${el.scrollHeight}px`;
+                    }}
+                    className="harvy-doc-title"
+                  />
+                </>
+              ) : null}
+              {showSubtitle ? (
+                <>
+                  <label htmlFor="harvy-post-subtitle" className="sr-only">
+                    Subtitle
+                  </label>
+                  <textarea
+                    id="harvy-post-subtitle"
+                    rows={1}
+                    value={subtitle}
+                    disabled={!isEditable}
+                    placeholder="Add a subtitle…"
+                    spellCheck={spellcheckEnabled}
+                    onChange={(event) => {
+                      onChangeSubtitle?.(event.target.value);
+                      onTypingActivity?.();
+                      const el = event.target;
+                      el.style.height = "auto";
+                      el.style.height = `${el.scrollHeight}px`;
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return;
+                      event.preventDefault();
+                      editor?.commands.focus("start");
+                    }}
+                    onInput={(event) => {
+                      const el = event.currentTarget;
+                      el.style.height = "auto";
+                      el.style.height = `${el.scrollHeight}px`;
+                    }}
+                    ref={(el) => {
+                      if (!el) return;
+                      el.style.height = "auto";
+                      el.style.height = `${el.scrollHeight}px`;
+                    }}
+                    className={`harvy-doc-subtitle${showPostTitle ? "" : " harvy-doc-subtitle--solo"}`}
+                  />
+                </>
+              ) : null}
+            </div>
+          ) : null}
           <label htmlFor="harvy-editor" className="sr-only">
             {documentTitle}
           </label>

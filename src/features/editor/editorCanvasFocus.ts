@@ -6,6 +6,7 @@ function isFocusableWritingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Node)) return false;
   const el = target instanceof HTMLElement ? target : target.parentElement;
   if (!el) return false;
+  if (el.closest(".harvy-doc-header")) return false;
   if (el.closest(".harvy-image-node__toolbar")) return false;
   if (el.closest(".harvy-image-node__insertion-zone")) return false;
   if (el.closest("[data-harvy-grammar]")) return false;

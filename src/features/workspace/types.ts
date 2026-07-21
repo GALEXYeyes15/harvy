@@ -14,6 +14,12 @@ export type WorkspaceDocument = {
   kind: "text" | "placeholder";
   /** Markdown (or legacy HTML) last successfully written to disk for this tab (`sourcePath`). */
   lastSavedContent: string;
+  /** In-document headline (Substack-style Title) — not the file/tab name. */
+  postTitle: string;
+  lastSavedPostTitle: string;
+  /** In-document dek (Substack-style Subtitle). */
+  subtitle: string;
+  lastSavedSubtitle: string;
   /** Sidebar scratchpad notes for this document (persisted under `Notes/` in project folders). */
   notes: string;
   lastSavedNotes: string;

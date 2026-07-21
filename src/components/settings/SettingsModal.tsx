@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { SquareArrowOutUpRight } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
+import type { DocumentHeaderPrefs } from "../../features/editor/documentHeaderSettings";
 import type { FocusVisibilityPrefs } from "../../features/editor/focusVisibilitySettings";
 import {
   type EncouragementPhrase,
@@ -47,6 +48,8 @@ type SettingsModalProps = {
   onGrammarChecksChange: (enabled: boolean) => void;
   focusVisibilityPrefs: FocusVisibilityPrefs;
   onFocusVisibilityPrefChange: (partial: Partial<FocusVisibilityPrefs>) => void;
+  documentHeaderPrefs: DocumentHeaderPrefs;
+  onDocumentHeaderPrefChange: (partial: Partial<DocumentHeaderPrefs>) => void;
   enableCollect: boolean;
   onEnableCollectChange: (enabled: boolean) => void;
   showOutliersView: boolean;
@@ -75,6 +78,8 @@ export function SettingsModal({
   onGrammarChecksChange,
   focusVisibilityPrefs,
   onFocusVisibilityPrefChange,
+  documentHeaderPrefs,
+  onDocumentHeaderPrefChange,
   enableCollect,
   onEnableCollectChange,
   showOutliersView,
@@ -153,6 +158,8 @@ export function SettingsModal({
                 onGrammarChecksChange={onGrammarChecksChange}
                 focusVisibilityPrefs={focusVisibilityPrefs}
                 onFocusVisibilityPrefChange={onFocusVisibilityPrefChange}
+                documentHeaderPrefs={documentHeaderPrefs}
+                onDocumentHeaderPrefChange={onDocumentHeaderPrefChange}
                 focusMode={focusMode}
                 onFocusModeChange={setFocusMode}
                 typewriterScroll={typewriterScroll}
@@ -493,6 +500,8 @@ function EditorPanel({
   onGrammarChecksChange,
   focusVisibilityPrefs,
   onFocusVisibilityPrefChange,
+  documentHeaderPrefs,
+  onDocumentHeaderPrefChange,
   focusMode,
   onFocusModeChange,
   typewriterScroll,
@@ -506,6 +515,8 @@ function EditorPanel({
   onGrammarChecksChange: (v: boolean) => void;
   focusVisibilityPrefs: FocusVisibilityPrefs;
   onFocusVisibilityPrefChange: (partial: Partial<FocusVisibilityPrefs>) => void;
+  documentHeaderPrefs: DocumentHeaderPrefs;
+  onDocumentHeaderPrefChange: (partial: Partial<DocumentHeaderPrefs>) => void;
   focusMode: boolean;
   onFocusModeChange: (v: boolean) => void;
   typewriterScroll: boolean;
@@ -554,6 +565,27 @@ function EditorPanel({
           onChange={onTypewriterChange}
         />
       </ul>
+      <div>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+          Document header
+        </p>
+        <ul className={`${SETTINGS_DIVIDE_Y} overflow-hidden rounded-lg bg-mist/80 dark:bg-ink/[0.035]`}>
+          <ToggleRow
+            id="show-document-title"
+            label="Title"
+            description="Show the Title field above the writing surface."
+            checked={documentHeaderPrefs.showTitle}
+            onChange={(v) => onDocumentHeaderPrefChange({ showTitle: v })}
+          />
+          <ToggleRow
+            id="show-document-subtitle"
+            label="Subtitle"
+            description="Show the Subtitle field below the Title."
+            checked={documentHeaderPrefs.showSubtitle}
+            onChange={(v) => onDocumentHeaderPrefChange({ showSubtitle: v })}
+          />
+        </ul>
+      </div>
       <div>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
           Focus visibility

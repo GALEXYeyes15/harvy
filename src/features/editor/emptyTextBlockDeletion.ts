@@ -300,6 +300,17 @@ export function handleBackspaceOnEmptyTextBlockKeyDown(view: EditorView, event: 
     return false;
   }
 
+  // Sole empty paragraph: leave it so the empty-doc placeholder (“Start writing…”) stays.
+  if (
+    state.doc.childCount === 1 &&
+    state.doc.firstChild?.isTextblock &&
+    isTextBlockEffectivelyEmpty(state.doc.firstChild)
+  ) {
+    logSubstackBackspace("skip: sole empty paragraph");
+    event.preventDefault();
+    return true;
+  }
+
   const { from, to } = range;
   const { schema, doc } = state;
   const { $from } = selection;

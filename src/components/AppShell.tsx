@@ -98,6 +98,10 @@ import {
 } from "../features/workspace/documentNotes";
 import { countSpellingWords } from "../features/proofread/mechanics/spellingNormalize";
 import { appendTextToDocumentNotes } from "../features/workspace/appendDocumentNotes";
+import {
+  parseDocumentFrontmatter,
+  serializeDocumentWithFrontmatter,
+} from "../features/editor/documentFrontmatter";
 import type { FileNode, WorkspaceDocument } from "../features/workspace/types";
 import { nextActiveTabIdAfterClose, toPageTabs } from "../features/tabs/pageTabs";
 import {
@@ -126,6 +130,10 @@ import {
   readFocusVisibilityPrefs,
   writeFocusVisibilityPrefs,
 } from "../features/editor/focusVisibilitySettings";
+import {
+  readDocumentHeaderPrefs,
+  writeDocumentHeaderPrefs,
+} from "../features/editor/documentHeaderSettings";
 import {
   readEncouragementPrefs,
   writeEncouragementPrefs,
@@ -193,6 +201,10 @@ function createInitialUntitledWorkspaceDocument(): WorkspaceDocument {
     sourcePath: "",
     kind: "text",
     lastSavedContent: "",
+    postTitle: "",
+    lastSavedPostTitle: "",
+    subtitle: "",
+    lastSavedSubtitle: "",
     notes: "",
     lastSavedNotes: "",
   };
@@ -206,13 +218,29 @@ function createUntitledWorkspaceDocument(id: string): WorkspaceDocument {
     sourcePath: "",
     kind: "text",
     lastSavedContent: "",
+    postTitle: "",
+    lastSavedPostTitle: "",
+    subtitle: "",
+    lastSavedSubtitle: "",
     notes: "",
     lastSavedNotes: "",
   };
 }
 
 function isDocumentDirty(doc: WorkspaceDocument): boolean {
-  return doc.content !== doc.lastSavedContent || doc.notes !== doc.lastSavedNotes;
+  return (
+    doc.content !== doc.lastSavedContent ||
+    doc.notes !== doc.lastSavedNotes ||
+    doc.postTitle !== doc.lastSavedPostTitle ||
+    doc.subtitle !== doc.lastSavedSubtitle
+  );
+}
+
+function markdownForDisk(body: string, doc: WorkspaceDocument | null | undefined): string {
+  return serializeDocumentWithFrontmatter(body, {
+    postTitle: doc?.postTitle ?? "",
+    subtitle: doc?.subtitle ?? "",
+  });
 }
 
 function getFolderSegmentsRelativeToRoot(rootPath: string, targetPath: string): string[] | null {
@@ -292,6 +320,7 @@ export function AppShell() {
 
   const [writingAssistancePrefs, setWritingAssistancePrefs] = useState(readWritingAssistancePrefs);
   const [focusVisibilityPrefs, setFocusVisibilityPrefs] = useState(readFocusVisibilityPrefs);
+  const [documentHeaderPrefs, setDocumentHeaderPrefs] = useState(readDocumentHeaderPrefs);
   const [encouragementPrefs, setEncouragementPrefs] = useState(readEncouragementPrefs);
   const [parametersPrefs, setParametersPrefs] = useState(readParametersPrefs);
   const { activePhrase: encouragementPhrase, dismiss: dismissEncouragement, showTest: testEncouragement } =
@@ -436,6 +465,13 @@ export function AppShell() {
   const handleFocusVisibilityPrefChange = useCallback(
     (partial: Parameters<typeof writeFocusVisibilityPrefs>[0]) => {
       setFocusVisibilityPrefs(writeFocusVisibilityPrefs(partial));
+    },
+    [],
+  );
+
+  const handleDocumentHeaderPrefChange = useCallback(
+    (partial: Parameters<typeof writeDocumentHeaderPrefs>[0]) => {
+      setDocumentHeaderPrefs(writeDocumentHeaderPrefs(partial));
     },
     [],
   );
@@ -817,6 +853,24 @@ export function AppShell() {
     }
   }
 
+  function updateActiveDocumentPostTitle(nextValue: string) {
+    if (!activeTabId) return;
+    setOpenDocuments((prev) => {
+      const current = prev[activeTabId];
+      if (!current) return prev;
+      return { ...prev, [activeTabId]: { ...current, postTitle: nextValue } };
+    });
+  }
+
+  function updateActiveDocumentSubtitle(nextValue: string) {
+    if (!activeTabId) return;
+    setOpenDocuments((prev) => {
+      const current = prev[activeTabId];
+      if (!current) return prev;
+      return { ...prev, [activeTabId]: { ...current, subtitle: nextValue } };
+    });
+  }
+
   function updateActiveDocumentNotes(nextValue: string) {
     if (!activeTabId) return;
     setOpenDocuments((prev) => {
@@ -848,6 +902,8 @@ export function AppShell() {
   const finalizeSavedPath = useCallback(
     (outPath: string, markdown: string) => {
       const savedNotes = activeDocument?.notes ?? "";
+      const savedPostTitle = activeDocument?.postTitle ?? "";
+      const savedSubtitle = activeDocument?.subtitle ?? "";
       if (activeTabId && activeDocument) {
         const oldId = activeTabId;
         if (oldId !== outPath) {
@@ -858,6 +914,8 @@ export function AppShell() {
             sourcePath: outPath,
             content: markdown,
             lastSavedContent: markdown,
+            lastSavedPostTitle: savedPostTitle,
+            lastSavedSubtitle: savedSubtitle,
             lastSavedNotes: savedNotes,
           };
           setOpenDocuments((prev) => {
@@ -875,6 +933,8 @@ export function AppShell() {
             ...prev[outPath]!,
             content: markdown,
             lastSavedContent: markdown,
+            lastSavedPostTitle: savedPostTitle,
+            lastSavedSubtitle: savedSubtitle,
             lastSavedNotes: savedNotes,
           },
         }));
@@ -889,6 +949,10 @@ export function AppShell() {
         sourcePath: outPath,
         kind: "text",
         lastSavedContent: markdown,
+        postTitle: savedPostTitle,
+        lastSavedPostTitle: savedPostTitle,
+        subtitle: savedSubtitle,
+        lastSavedSubtitle: savedSubtitle,
         notes: savedNotes,
         lastSavedNotes: savedNotes,
       };
@@ -1041,7 +1105,10 @@ export function AppShell() {
           if (!ok) return;
         }
 
-        await invoke("write_text_file", { path: outPath, contents: markdown });
+        await invoke("write_text_file", {
+          path: outPath,
+          contents: markdownForDisk(markdown, activeDocument),
+        });
         if (folderContext.hasNotes) {
           await saveDocumentNotes(outPath, activeDocument?.notes ?? "");
         }
@@ -1210,7 +1277,10 @@ export function AppShell() {
           markdown = applyImageSrcRewrites(tiptapEditor, markdown, replacements);
         }
 
-        await invoke("write_text_file", { path: outPath, contents: markdown });
+        await invoke("write_text_file", {
+          path: outPath,
+          contents: markdownForDisk(markdown, activeDocument),
+        });
         await saveDocumentNotes(outPath, activeDocument.notes);
         if (outPath !== path) {
           finalizeSavedPath(outPath, markdown);
@@ -1222,6 +1292,8 @@ export function AppShell() {
               ...prev[activeTabId]!,
               content: markdown,
               lastSavedContent: markdown,
+              lastSavedPostTitle: activeDocument.postTitle,
+              lastSavedSubtitle: activeDocument.subtitle,
               lastSavedNotes: activeDocument.notes,
             },
           }));
@@ -1251,7 +1323,10 @@ export function AppShell() {
             markdown = applyImageSrcRewrites(tiptapEditor, markdown, replacements);
             outPath = scratchDiskPath;
           }
-          await invoke("write_text_file", { path: outPath, contents: markdown });
+          await invoke("write_text_file", {
+            path: outPath,
+            contents: markdownForDisk(markdown, null),
+          });
           setScratchLastSavedContent(markdown);
           setScratchDraftContent(markdown);
         } else {
@@ -1443,8 +1518,28 @@ export function AppShell() {
     if (previewable) {
       try {
         const raw = await invoke<string>("read_workspace_text_file", { path: node.path });
-        content = ingestTextFileContent(raw, node.path);
+        const { meta, body: rawBody } = parseDocumentFrontmatter(raw);
+        content = ingestTextFileContent(rawBody, node.path);
         kind = "text";
+        const notes = await loadDocumentNotes(node.path);
+        const nextDoc: WorkspaceDocument = {
+          id,
+          title: node.name,
+          content,
+          sourcePath: node.path,
+          kind,
+          lastSavedContent: content,
+          postTitle: meta.postTitle,
+          lastSavedPostTitle: meta.postTitle,
+          subtitle: meta.subtitle,
+          lastSavedSubtitle: meta.subtitle,
+          notes,
+          lastSavedNotes: notes,
+        };
+        setOpenDocuments((prev) => ({ ...prev, [id]: nextDoc }));
+        setActiveTabId(id);
+        setOpenTabIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+        return;
       } catch (error) {
         content =
           "Could not read this file.\n\n" +
@@ -1453,7 +1548,7 @@ export function AppShell() {
       }
     }
 
-    const notes = previewable ? await loadDocumentNotes(node.path) : "";
+    const notes = "";
 
     const nextDoc: WorkspaceDocument = {
       id,
@@ -1462,6 +1557,10 @@ export function AppShell() {
       sourcePath: node.path,
       kind,
       lastSavedContent: content,
+      postTitle: "",
+      lastSavedPostTitle: "",
+      subtitle: "",
+      lastSavedSubtitle: "",
       notes,
       lastSavedNotes: notes,
     };
@@ -2000,6 +2099,10 @@ export function AppShell() {
     paddingRight:
       sidebarOverlayLayout && readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0,
   };
+  /** Write column: clear the Collect/Write rail so title/body aren’t flush against it. */
+  const writeInsetStyle = showWorkspaceNavigation
+    ? { paddingLeft: WORKSPACE_SECTION_SWITCHER_WIDTH_PX }
+    : undefined;
 
   const editorPanelSection = (
     <div className="flex min-h-0 w-full flex-1 justify-center overflow-hidden bg-stage">
@@ -2034,6 +2137,7 @@ export function AppShell() {
               ? "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
               : "hidden"
           }
+          style={activeWorkspaceSection === "write" ? writeInsetStyle : undefined}
           aria-hidden={activeWorkspaceSection !== "write"}
         >
           {SHOW_FORMATTING_TOOLBAR ? <EditorToolbar mode={mode} onRunCommand={runToolbarCommand} /> : null}
@@ -2044,6 +2148,12 @@ export function AppShell() {
               documentTitle={editorTitle}
               text={editorText}
               contentSourcePath={activeDocument?.sourcePath ?? null}
+              postTitle={activeDocument?.postTitle ?? ""}
+              subtitle={activeDocument?.subtitle ?? ""}
+              showPostTitle={documentHeaderPrefs.showTitle}
+              showSubtitle={documentHeaderPrefs.showSubtitle}
+              onChangePostTitle={updateActiveDocumentPostTitle}
+              onChangeSubtitle={updateActiveDocumentSubtitle}
               placeholder={editorPlaceholder}
               isEditable={editorEditable}
               spellcheckEnabled={showEditModeSpellcheck}
@@ -2249,6 +2359,8 @@ export function AppShell() {
         onGrammarChecksChange={handleGrammarChecksPref}
         focusVisibilityPrefs={focusVisibilityPrefs}
         onFocusVisibilityPrefChange={handleFocusVisibilityPrefChange}
+        documentHeaderPrefs={documentHeaderPrefs}
+        onDocumentHeaderPrefChange={handleDocumentHeaderPrefChange}
         enableCollect={enableCollect}
         onEnableCollectChange={handleEnableCollectChange}
         showOutliersView={showOutliersView}
