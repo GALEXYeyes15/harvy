@@ -57,12 +57,12 @@ export function WorkspaceSectionSwitcher({
             aria-current={active ? "page" : undefined}
             className={`group relative flex w-full items-center justify-start py-1 pl-2 pr-1 text-left transition-colors ${
               chromeHidden ? "pointer-events-none" : "pointer-events-auto"
-            } ${active ? "text-ink" : "text-muted/55 hover:text-muted/90"}`}
+            } ${active ? "text-ink" : "text-accent/60 hover:text-accent"}`}
           >
             <span
               aria-hidden
               className={`pointer-events-none absolute inset-y-0 left-0 w-[2px] rounded-full transition-colors duration-150 ${
-                active ? "bg-[#6f6f6f]" : "bg-transparent group-hover:bg-line/25"
+                active ? "bg-accent" : "bg-transparent group-hover:bg-accent/35"
               }`}
             />
             <span

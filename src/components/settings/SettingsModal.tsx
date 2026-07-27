@@ -1,5 +1,6 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
-import { SquareArrowOutUpRight, SquarePen } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { Check, ChevronDown, SquareArrowOutUpRight, SquarePen } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
 import type { DocumentHeaderPrefs } from "../../features/editor/documentHeaderSettings";
 import type { FocusVisibilityPrefs } from "../../features/editor/focusVisibilitySettings";
@@ -21,6 +22,16 @@ import {
 } from "../../features/settings/parametersSettings";
 import type { ThemeMode, ResolvedTheme } from "../../theme/themeMode";
 import {
+  APPEARANCE_FONTS_CHANGED_EVENT,
+  ensureAllUserAppearanceFontsLoaded,
+  ensureAppearanceBodyFontLoaded,
+  isUserAppearanceFontsStorageKey,
+  listAppearanceBodyFonts,
+  resolveAppearanceBodyFont,
+  type AppearanceBodyFontId,
+} from "../../theme/appearanceFonts";
+import { listenFontsCatalogChanged, openAddFontsWindow } from "../../features/fonts/addFontsPopout";
+import {
   applyAppearanceStyle,
   CYBER_STYLE_ID,
   CLASSIC_STYLE_ID,
@@ -30,7 +41,9 @@ import {
   readCyberAppearanceStyle,
   readCustomAppearanceStyles,
   resetCyberAppearanceStyle,
+  resolveStyleBodyFont,
   seedsFromStyle,
+  setLiveAppearancePreview,
   styleWithSeeds,
   upsertCustomAppearanceStyle,
   writeCyberAppearanceStyle,
@@ -38,9 +51,6 @@ import {
   type CustomAppearanceStyle,
   type StyleBasics,
 } from "../../theme/appearanceStyles";
-import {
-  derivePairFromSeed,
-} from "../../theme/styleColorFormula";
 import {
   clampOutliersFetchIntervalMinutes,
   DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES,
@@ -50,6 +60,7 @@ import {
   writeOutliersSettings,
 } from "../../features/outliers/outliersSettings";
 import { CenteredOverlayModal } from "../overlay/CenteredOverlayModal";
+import { CanvaColorPicker } from "./CanvaColorPicker";
 import { PhrasesCsvTable } from "./PhrasesCsvTable";
 import { SETTINGS_NAV, type SettingsSectionId } from "./sectionIds";
 
@@ -72,6 +83,7 @@ type SettingsModalProps = {
   appearanceStyleId: AppearanceStyleId;
   onAppearanceStyleIdChange: (id: AppearanceStyleId) => void;
   resolvedTheme: ResolvedTheme;
+  systemPrefersDark: boolean;
   readabilityPanelOpen: boolean;
   onReadabilityPanelChange: (open: boolean) => void;
   spellcheckEnabled: boolean;
@@ -105,6 +117,7 @@ export function SettingsModal({
   appearanceStyleId,
   onAppearanceStyleIdChange,
   resolvedTheme,
+  systemPrefersDark,
   readabilityPanelOpen,
   onReadabilityPanelChange,
   spellcheckEnabled,
@@ -187,6 +200,7 @@ export function SettingsModal({
                 appearanceStyleId={appearanceStyleId}
                 onAppearanceStyleIdChange={onAppearanceStyleIdChange}
                 resolvedTheme={resolvedTheme}
+                systemPrefersDark={systemPrefersDark}
               />
             ) : null}
             {activeSection === "editor" ? (
@@ -362,40 +376,69 @@ function AppearancePanel({
   appearanceStyleId,
   onAppearanceStyleIdChange,
   resolvedTheme,
+  systemPrefersDark,
 }: {
   themeMode: ThemeMode;
   onThemeModeChange: (t: ThemeMode) => void;
   appearanceStyleId: AppearanceStyleId;
   onAppearanceStyleIdChange: (id: AppearanceStyleId) => void;
   resolvedTheme: ResolvedTheme;
+  systemPrefersDark: boolean;
 }) {
-  const themeOptions: { id: ThemeMode; label: string }[] = [
-    { id: "light", label: "Light" },
-    { id: "dark", label: "Dark" },
-    { id: "system", label: "System" },
-  ];
-
   const [customStyles, setCustomStyles] = useState(() => readCustomAppearanceStyles());
   const [cyberStyle, setCyberStyle] = useState(() => readCyberAppearanceStyle());
   const [editor, setEditor] = useState<CustomAppearanceStyle | null>(null);
+
+  const classicResolvedDark =
+    themeMode === "dark" || (themeMode === "system" && systemPrefersDark);
+  const classicLightSelected =
+    appearanceStyleId === CLASSIC_STYLE_ID && !classicResolvedDark;
+  const classicDarkSelected =
+    appearanceStyleId === CLASSIC_STYLE_ID && classicResolvedDark;
 
   function selectStyle(id: AppearanceStyleId) {
     onAppearanceStyleIdChange(id);
   }
 
+  function selectClassicLight() {
+    // OS-matching Classic stays on system so appearance follows the desktop.
+    onThemeModeChange(systemPrefersDark ? "light" : "system");
+    onAppearanceStyleIdChange(CLASSIC_STYLE_ID);
+  }
+
+  function selectClassicDark() {
+    onThemeModeChange(systemPrefersDark ? "system" : "dark");
+    onAppearanceStyleIdChange(CLASSIC_STYLE_ID);
+  }
+
+  function beginEditing(style: CustomAppearanceStyle) {
+    const draft = { ...style, seeds: seedsFromStyle(style) };
+    setEditor(draft);
+    setLiveAppearancePreview(draft, resolvedTheme);
+  }
+
+  function updateEditor(next: CustomAppearanceStyle) {
+    setEditor(next);
+    setLiveAppearancePreview(next, resolvedTheme);
+  }
+
+  function endEditingPreview() {
+    setLiveAppearancePreview(null, resolvedTheme);
+    applyAppearanceStyle(appearanceStyleId, resolvedTheme);
+  }
+
   function openNewStyle() {
-    setEditor(createBlankCustomStyle());
+    beginEditing(createBlankCustomStyle());
   }
 
   function openEditStyle(style: CustomAppearanceStyle) {
-    const seeds = seedsFromStyle(style);
-    setEditor(styleWithSeeds(style, seeds));
+    beginEditing(style);
   }
 
   function openEditCyber() {
     const current = readCyberAppearanceStyle();
     setCyberStyle(current);
-    openEditStyle(current);
+    beginEditing(current);
   }
 
   function saveEditor() {
@@ -404,24 +447,32 @@ function AppearancePanel({
       writeCyberAppearanceStyle({
         ...editor,
         id: CYBER_STYLE_ID,
-        name: "Cyber",
+        name: editor.name.trim() || "Cyber",
       });
       const next = readCyberAppearanceStyle();
       setCyberStyle(next);
-      applyAppearanceStyle(appearanceStyleId, resolvedTheme);
       setEditor(null);
+      setLiveAppearancePreview(null, resolvedTheme);
+      onAppearanceStyleIdChange(CYBER_STYLE_ID);
+      applyAppearanceStyle(CYBER_STYLE_ID, resolvedTheme);
       return;
     }
 
     const named = {
       ...editor,
-      name: editor.name.trim() || "New style",
+      name: editor.name.trim() || "New theme",
     };
     const next = upsertCustomAppearanceStyle(named);
     setCustomStyles(next);
+    setEditor(null);
+    setLiveAppearancePreview(null, resolvedTheme);
     onAppearanceStyleIdChange(named.id);
     applyAppearanceStyle(named.id, resolvedTheme);
+  }
+
+  function cancelEditor() {
     setEditor(null);
+    endEditingPreview();
   }
 
   function removeEditorStyle() {
@@ -429,77 +480,81 @@ function AppearancePanel({
     if (editor.id === CYBER_STYLE_ID) {
       resetCyberAppearanceStyle();
       setCyberStyle(readCyberAppearanceStyle());
-      applyAppearanceStyle(appearanceStyleId, resolvedTheme);
       setEditor(null);
+      setLiveAppearancePreview(null, resolvedTheme);
+      applyAppearanceStyle(appearanceStyleId, resolvedTheme);
       return;
     }
     const next = deleteCustomAppearanceStyle(editor.id);
     setCustomStyles(next);
+    setEditor(null);
+    setLiveAppearancePreview(null, resolvedTheme);
     if (appearanceStyleId === editor.id) {
       onAppearanceStyleIdChange(CLASSIC_STYLE_ID);
+      applyAppearanceStyle(CLASSIC_STYLE_ID, resolvedTheme);
+    } else {
+      applyAppearanceStyle(appearanceStyleId, resolvedTheme);
     }
-    setEditor(null);
   }
 
+  useEffect(() => {
+    if (!editor) return;
+    setLiveAppearancePreview(editor, resolvedTheme);
+  }, [resolvedTheme, editor]);
+
+  const appearanceStyleIdRef = useRef(appearanceStyleId);
+  const resolvedThemeRef = useRef(resolvedTheme);
+  appearanceStyleIdRef.current = appearanceStyleId;
+  resolvedThemeRef.current = resolvedTheme;
+
+  useEffect(() => {
+    return () => {
+      // Leaving Appearance (or closing Settings) drops unsaved live preview.
+      setLiveAppearancePreview(null, resolvedThemeRef.current);
+      applyAppearanceStyle(appearanceStyleIdRef.current, resolvedThemeRef.current);
+    };
+  }, []);
+
+  const cyberPreviewSource = editor?.id === CYBER_STYLE_ID ? editor : cyberStyle;
   const cyberPreview =
-    resolvedTheme === "dark" ? cyberStyle.dark : cyberStyle.light;
+    resolvedTheme === "dark" ? cyberPreviewSource.dark : cyberPreviewSource.light;
 
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
         title="Appearance"
-        description="Built-in themes and appearances you create and save."
+        description="Built-in themes and themes you create and save."
       />
 
       <div>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-          Theme
-        </p>
-        <div
-          className="inline-flex flex-wrap rounded-lg bg-mist/90 p-1 dark:bg-ink/[0.04]"
-          role="radiogroup"
-          aria-label="Color theme"
-        >
-          {themeOptions.map((opt) => {
-            const selected = themeMode === opt.id;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => onThemeModeChange(opt.id)}
-                className={
-                  selected
-                    ? "rounded-md bg-page px-3 py-1.5 text-[12px] font-medium text-ink shadow-sm dark:bg-page/80"
-                    : "rounded-md px-3 py-1.5 text-[12px] font-normal text-muted/85 transition-colors hover:text-ink"
-                }
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-          Styles
+          Themes
         </p>
         <div className="flex flex-wrap gap-3" role="list">
           <StylePreviewCard
-            label="Classic"
-            selected={appearanceStyleId === CLASSIC_STYLE_ID}
-            previewStyle={
-              resolvedTheme === "dark"
-                ? { backgroundColor: "#1d1d1d", color: "#e5e5e5" }
-                : { backgroundColor: "#faf7f2", color: "#2a2622" }
-            }
-            onSelect={() => selectStyle(CLASSIC_STYLE_ID)}
+            label="Classic Light"
+            subtitle={!systemPrefersDark ? "(System)" : undefined}
+            selected={classicLightSelected}
+            bodyFontId="libre-baskerville"
+            previewStyle={{ backgroundColor: "#faf7f2", color: "#2a2622" }}
+            onSelect={selectClassicLight}
           />
           <StylePreviewCard
-            label="Cyber"
+            label="Classic Dark"
+            subtitle={systemPrefersDark ? "(System)" : undefined}
+            selected={classicDarkSelected}
+            bodyFontId="libre-baskerville"
+            previewStyle={{ backgroundColor: "#1d1d1d", color: "#e5e5e5" }}
+            onSelect={selectClassicDark}
+          />
+          <StylePreviewCard
+            label={
+              editor?.id === CYBER_STYLE_ID ? editor.name : cyberStyle.name
+            }
             selected={appearanceStyleId === CYBER_STYLE_ID}
+            bodyFontId={resolveStyleBodyFont(
+              editor?.id === CYBER_STYLE_ID ? editor : cyberStyle,
+            )}
             previewStyle={{
               backgroundColor: cyberPreview.page,
               color: cyberPreview.ink,
@@ -508,12 +563,14 @@ function AppearancePanel({
             onEdit={openEditCyber}
           />
           {customStyles.map((style) => {
-            const palette = resolvedTheme === "dark" ? style.dark : style.light;
+            const previewSource = editor?.id === style.id ? editor : style;
+            const palette = resolvedTheme === "dark" ? previewSource.dark : previewSource.light;
             return (
               <StylePreviewCard
                 key={style.id}
-                label={style.name}
+                label={previewSource.name}
                 selected={appearanceStyleId === style.id}
+                bodyFontId={resolveStyleBodyFont(previewSource)}
                 previewStyle={{
                   backgroundColor: palette.page,
                   color: palette.ink,
@@ -527,8 +584,8 @@ function AppearancePanel({
             type="button"
             role="listitem"
             onClick={openNewStyle}
-            className="group flex w-[4.75rem] flex-col items-center gap-1.5"
-            aria-label="Add new style"
+            className="group flex w-[5.25rem] flex-col items-center gap-1.5"
+            aria-label="Add new theme"
           >
             <span className="flex h-[4.75rem] w-[4.75rem] items-center justify-center rounded-xl bg-mist/80 text-[1.75rem] font-light text-ink/70 ring-1 ring-line/35 transition-colors group-hover:bg-mist group-hover:text-ink dark:bg-ink/[0.04] dark:ring-white/10">
               +
@@ -541,9 +598,9 @@ function AppearancePanel({
       {editor ? (
         <StyleEditorForm
           style={editor}
-          onChange={setEditor}
+          onChange={updateEditor}
           onSave={saveEditor}
-          onCancel={() => setEditor(null)}
+          onCancel={cancelEditor}
           onDelete={
             editor.id === CYBER_STYLE_ID
               ? hasCyberAppearanceOverrides()
@@ -554,7 +611,6 @@ function AppearancePanel({
                 : undefined
           }
           deleteLabel={editor.id === CYBER_STYLE_ID ? "Reset" : "Delete"}
-          nameLocked={editor.id === CYBER_STYLE_ID}
         />
       ) : null}
     </div>
@@ -563,33 +619,43 @@ function AppearancePanel({
 
 function StylePreviewCard({
   label,
+  subtitle,
   selected,
+  bodyFontId,
   previewClassName,
   previewStyle,
   onSelect,
   onEdit,
 }: {
   label: string;
+  subtitle?: string;
   selected: boolean;
+  bodyFontId: AppearanceBodyFontId;
   previewClassName?: string;
   previewStyle?: CSSProperties;
   onSelect: () => void;
   onEdit?: () => void;
 }) {
+  const bodyFont = resolveAppearanceBodyFont(bodyFontId);
+
+  useEffect(() => {
+    ensureAppearanceBodyFontLoaded(bodyFontId);
+  }, [bodyFontId]);
+
   return (
-    <div className="group flex w-[4.75rem] flex-col items-center gap-1.5" role="listitem">
+    <div className="group flex w-[5.25rem] flex-col items-center gap-1.5" role="listitem">
       <div className="relative">
         <button
           type="button"
           onClick={onSelect}
           aria-pressed={selected}
-          title={label}
+          title={subtitle ? `${label} ${subtitle}` : label}
           className={`flex h-[4.75rem] w-[4.75rem] items-center justify-center rounded-xl text-[1.35rem] font-medium tracking-tight transition-[box-shadow] ${
             selected
               ? "ring-2 ring-ink/55 dark:ring-white/55"
               : "ring-1 ring-line/30 hover:ring-line/55 dark:ring-white/10"
           } ${previewClassName ?? ""}`}
-          style={previewStyle}
+          style={{ ...previewStyle, fontFamily: bodyFont.stack }}
         >
           Abc
         </button>
@@ -608,7 +674,135 @@ function StylePreviewCard({
           </button>
         ) : null}
       </div>
-      <span className="w-full truncate text-center text-[11px] text-ink/85">{label}</span>
+      <div className="flex w-full flex-col items-center gap-0.5">
+        <span className="w-full text-center text-[11px] leading-tight text-ink/85">{label}</span>
+        {subtitle ? (
+          <span className="w-full text-center text-[10px] leading-tight text-muted/65">{subtitle}</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function BodyFontPicker({
+  value,
+  onChange,
+}: {
+  value: AppearanceBodyFontId;
+  onChange: (next: AppearanceBodyFontId) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [fonts, setFonts] = useState(() => listAppearanceBodyFonts());
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selected = resolveAppearanceBodyFont(value);
+
+  useEffect(() => {
+    const refresh = () => {
+      ensureAllUserAppearanceFontsLoaded();
+      setFonts(listAppearanceBodyFonts());
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (isUserAppearanceFontsStorageKey(event.key)) refresh();
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener(APPEARANCE_FONTS_CHANGED_EVENT, refresh);
+    let unlisten: (() => void) | undefined;
+    void listenFontsCatalogChanged(() => {
+      refresh();
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(APPEARANCE_FONTS_CHANGED_EVENT, refresh);
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    setFonts(listAppearanceBodyFonts());
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (rootRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative mt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-label="Body font"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-left text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
+        style={{ fontFamily: selected.stack }}
+      >
+        <span className="min-w-0 truncate">{selected.label}</span>
+        <ChevronDown
+          size={14}
+          strokeWidth={2}
+          className={`shrink-0 text-muted/70 transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-md bg-page shadow-[0_12px_40px_rgba(0,0,0,0.28)] ring-1 ring-line/40 dark:bg-[#1e1e1e] dark:ring-white/10">
+          <ul role="listbox" aria-label="Body font" className="max-h-56 overflow-y-auto py-1">
+            {fonts.map((font) => {
+              const isSelected = font.id === value;
+              return (
+                <li key={font.id} role="presentation">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => {
+                      onChange(font.id);
+                      setOpen(false);
+                    }}
+                    className={`flex w-full items-center gap-2 px-2.5 py-2 text-left text-[13px] text-ink hover:bg-mist/80 dark:hover:bg-white/[0.06] ${
+                      isSelected ? "bg-mist/55 dark:bg-white/[0.04]" : ""
+                    }`}
+                    style={{ fontFamily: font.stack }}
+                  >
+                    <span className="flex w-4 shrink-0 justify-center">
+                      {isSelected ? (
+                        <Check size={14} strokeWidth={2.5} className="text-ink" aria-hidden />
+                      ) : null}
+                    </span>
+                    <span className="min-w-0 truncate">{font.label}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="border-t border-line/20 p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                void openAddFontsWindow();
+              }}
+              className="w-full rounded-md px-2.5 py-2 text-left text-[13px] font-medium text-ink hover:bg-mist/80 dark:hover:bg-white/[0.06]"
+            >
+              Add Fonts
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -631,27 +825,88 @@ function StyleEditorForm({
   nameLocked?: boolean;
 }) {
   const seeds = seedsFromStyle(style);
+  const [activeSeed, setActiveSeed] = useState<keyof StyleBasics | null>(null);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
+  const swatchRefs = useRef<Partial<Record<keyof StyleBasics, HTMLButtonElement | null>>>({});
+  const pickerRootRef = useRef<HTMLDivElement>(null);
 
   function setSeed(key: keyof StyleBasics, value: string) {
     onChange(styleWithSeeds(style, { ...seeds, [key]: value }));
   }
 
+  useLayoutEffect(() => {
+    if (!activeSeed) {
+      setPickerPos(null);
+      return;
+    }
+    const swatch = swatchRefs.current[activeSeed];
+    if (!swatch) return;
+
+    function place() {
+      const el = activeSeed ? swatchRefs.current[activeSeed] : null;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const pickerWidth = 280;
+      const pickerHeight = 280;
+      const gap = 8;
+      const left = Math.min(
+        Math.max(8, rect.left),
+        window.innerWidth - pickerWidth - 8,
+      );
+      let top = rect.bottom + gap;
+      if (top + pickerHeight > window.innerHeight - 8) {
+        top = Math.max(8, rect.top - pickerHeight - gap);
+      }
+      setPickerPos({ top, left });
+    }
+
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [activeSeed]);
+
+  useEffect(() => {
+    if (!activeSeed) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (pickerRootRef.current?.contains(target)) return;
+      const swatch = swatchRefs.current[activeSeed];
+      if (swatch?.contains(target)) return;
+      setActiveSeed(null);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setActiveSeed(null);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [activeSeed]);
+
   const fields: Array<{
     key: keyof StyleBasics;
     label: string;
-    role: "surface" | "ink" | "muted" | "accent";
-    solid?: boolean;
   }> = [
-    { key: "canvas", label: "Canvas", role: "surface" },
-    { key: "ink", label: "Ink", role: "ink" },
-    { key: "muted", label: "Muted", role: "muted" },
-    { key: "accent", label: "Accent", role: "accent", solid: true },
+    { key: "canvas", label: "Canvas" },
+    { key: "ink", label: "Ink" },
+    { key: "muted", label: "Muted" },
+    { key: "accent", label: "Accent" },
   ];
 
   return (
     <div className="space-y-4 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[13px] font-semibold text-ink">Edit style</p>
+        <p className="text-[13px] font-semibold text-ink">Edit theme</p>
         <div className="flex items-center gap-2">
           {onDelete ? (
             <button
@@ -690,70 +945,76 @@ function StyleEditorForm({
         />
       </label>
 
-      <label className="flex items-center justify-between gap-3">
-        <span className="text-[13px] text-ink">Mono typing</span>
-        <input
-          type="checkbox"
-          checked={Boolean(style.monoContent)}
-          onChange={(e) => onChange({ ...style, monoContent: e.target.checked })}
-          className="h-4 w-4"
+      <div className="block">
+        <span className="text-[11px] text-muted/75">Body font</span>
+        <BodyFontPicker
+          value={resolveStyleBodyFont(style)}
+          onChange={(bodyFont) =>
+            onChange({
+              ...style,
+              bodyFont,
+              monoContent: undefined,
+            })
+          }
         />
-      </label>
+      </div>
 
       <div className="space-y-2 rounded-md bg-page/60 px-3 py-2.5 dark:bg-page/35">
         <p className="text-[11px] leading-snug text-muted/75">
-          Each box shows the calculated <span className="text-ink/80">light | dark</span> pair from
-          your seed (accent stays one color). Click a box to pick the seed.
+          Muted colors the notes, search, and tab bar; accent colors chrome icons. Click a
+          swatch to pick a color.
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-x-6 gap-y-4">
         {fields.map((field) => {
-          const pair = derivePairFromSeed(seeds[field.key], field.role);
-          const inputId = `harvy-style-seed-${field.key}`;
+          const color = normalizeHexColor(seeds[field.key]);
+          const open = activeSeed === field.key;
           return (
-            <div key={field.key} className="flex items-center gap-2.5">
+            <div key={field.key} className="relative flex items-center gap-2.5">
               <button
+                ref={(el) => {
+                  swatchRefs.current[field.key] = el;
+                }}
                 type="button"
-                onClick={() => document.getElementById(inputId)?.click()}
-                aria-label={`${field.label} seed color (shows calculated light and dark)`}
-                title={`${field.label}: light ${pair.light} · dark ${pair.dark}`}
-                className="relative h-8 w-11 shrink-0 overflow-hidden rounded-lg ring-2 ring-[var(--color-focus-ring,#5f6a7a)]/55 transition-[box-shadow] hover:ring-[var(--color-focus-ring,#5f6a7a)]"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => setActiveSeed(open ? null : field.key)}
+                aria-expanded={open}
+                aria-haspopup="dialog"
+                aria-label={`${field.label} color`}
+                title={`${field.label}: ${color}`}
+                className={`relative h-8 w-11 shrink-0 overflow-hidden rounded-lg ring-2 transition-[box-shadow] ${
+                  open
+                    ? "ring-[var(--color-focus-ring,#5f6a7a)]"
+                    : "ring-[var(--color-focus-ring,#5f6a7a)]/55 hover:ring-[var(--color-focus-ring,#5f6a7a)]"
+                }`}
               >
-                {field.solid ? (
-                  <span
-                    className="absolute inset-0"
-                    style={{ backgroundColor: pair.light }}
-                  />
-                ) : (
-                  <>
-                    <span
-                      className="absolute inset-y-0 left-0 w-1/2"
-                      style={{ backgroundColor: pair.light }}
-                      aria-hidden
-                    />
-                    <span
-                      className="absolute inset-y-0 right-0 w-1/2"
-                      style={{ backgroundColor: pair.dark }}
-                      aria-hidden
-                    />
-                  </>
-                )}
+                <span className="absolute inset-0" style={{ backgroundColor: color }} />
               </button>
-              <input
-                id={inputId}
-                type="color"
-                value={normalizeHexColor(seeds[field.key])}
-                onChange={(e) => setSeed(field.key, e.target.value)}
-                className="sr-only"
-                tabIndex={-1}
-                aria-hidden
-              />
               <span className="text-[13px] text-ink/90">{field.label}</span>
             </div>
           );
         })}
       </div>
+
+      {activeSeed && pickerPos
+        ? createPortal(
+            <div
+              ref={pickerRootRef}
+              role="dialog"
+              aria-label={`${fields.find((f) => f.key === activeSeed)?.label ?? "Color"} color picker`}
+              className="fixed z-[400]"
+              style={{ top: pickerPos.top, left: pickerPos.left }}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <CanvaColorPicker
+                value={normalizeHexColor(seeds[activeSeed])}
+                onChange={(hex) => setSeed(activeSeed, hex)}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

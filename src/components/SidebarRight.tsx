@@ -70,7 +70,7 @@ function SidebarToolsTab({
       <span
         aria-hidden
         className={`${TAB_UNDERLINE_TRACK} transition-[background-color] duration-150 ${
-          active ? "bg-[#6f6f6f]" : "bg-transparent"
+          active ? "bg-accent" : "bg-transparent"
         }`}
       />
     </button>

@@ -114,7 +114,7 @@ export function NotesPopoutApp() {
             })
           }
           placeholder="Ideas, references, reminders…"
-          className="mt-6 min-h-0 w-full flex-1 resize-none overflow-y-auto rounded-md border-0 bg-canvas/45 px-4 py-3.5 text-[15px] leading-relaxed text-ink placeholder:text-muted/65 focus:outline-none focus:ring-0 dark:bg-canvas/35"
+          className="mt-6 min-h-0 w-full flex-1 resize-none overflow-y-auto rounded-md border-0 bg-mist px-4 py-3.5 text-[15px] leading-relaxed text-ink placeholder:text-muted/65 focus:outline-none focus:ring-0"
         />
       </div>
     </div>

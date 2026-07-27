@@ -12,6 +12,7 @@ export default {
         canvas: "var(--color-canvas)",
         ink: "var(--color-ink)",
         muted: "var(--color-muted)",
+        accent: "var(--color-accent)",
         line: "var(--color-line)",
         panel: "var(--color-panel)",
         stage: "var(--color-stage)",

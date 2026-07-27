@@ -4,7 +4,7 @@ import { tabNavLeadingPadding } from "../features/chrome/tabNavChromeInsets";
 import type { PageTab } from "../features/tabs/pageTabs";
 
 const TAB_NAV_BTN =
-  "flex h-full w-7 shrink-0 items-center justify-center rounded text-muted/45 transition-colors hover:bg-ink/[0.04] hover:text-muted/80 disabled:pointer-events-none disabled:opacity-25";
+  "flex h-full w-7 shrink-0 items-center justify-center rounded text-accent/50 transition-colors hover:bg-ink/[0.04] hover:text-accent/85 disabled:pointer-events-none disabled:opacity-25";
 
 /** Single `transition-property` so `margin-left` isn’t dropped when also transitioning chrome `background-color`. */
 const RAIL_AND_CHROME_BG =
@@ -153,8 +153,8 @@ export function OpenWindowsBar({
                       }}
                       className={`-ml-0.5 shrink-0 rounded px-1 py-0.5 text-[12px] leading-none transition hover:bg-ink/[0.06] ${
                         active
-                          ? "text-muted/55 opacity-90 hover:text-ink/80 group-hover:opacity-100"
-                          : "text-muted/40 opacity-0 hover:text-muted/65 group-hover:opacity-100"
+                          ? "text-accent/70 opacity-90 hover:text-accent group-hover:opacity-100"
+                          : "text-accent/40 opacity-0 hover:text-accent/70 group-hover:opacity-100"
                       }`}
                     >
                       ×
@@ -166,7 +166,7 @@ export function OpenWindowsBar({
                 type="button"
                 aria-label="Create new page"
                 onClick={onCreateTab}
-                className="flex w-8 shrink-0 items-center justify-center text-[15px] leading-none text-muted/55 transition-colors hover:bg-ink/[0.04] hover:text-ink/80"
+                className="flex w-8 shrink-0 items-center justify-center text-[15px] leading-none text-accent/60 transition-colors hover:bg-ink/[0.04] hover:text-accent"
               >
                 +
               </button>

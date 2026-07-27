@@ -22,6 +22,12 @@ describe("derivePairFromSeed", () => {
     expect(hexToHsl(pair.dark)!.l).toBeGreaterThan(0.8);
   });
 
+  it("maps muted seed to light wells in light mode and dark wells in dark mode", () => {
+    const pair = derivePairFromSeed("#6b5344", "muted");
+    expect(hexToHsl(pair.light)!.l).toBeGreaterThan(0.8);
+    expect(hexToHsl(pair.dark)!.l).toBeLessThan(0.25);
+  });
+
   it("keeps accent the same in both modes", () => {
     const pair = derivePairFromSeed("#03daff", "accent");
     expect(pair.light).toBe(pair.dark);

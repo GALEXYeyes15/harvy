@@ -12,8 +12,8 @@
  * Ink:
  *   light L = 0.12–0.28 (dark text)    dark L = 0.85–0.95 (light text)
  *
- * Muted:
- *   light L = 0.38–0.55                dark L = 0.58–0.75
+ * Muted (chrome wells — notes, search, tab bar):
+ *   light L = 0.86–0.96 (soft panel)   dark L = 0.08–0.20 (recessed)
  *
  * Accent:
  *   same vivid color in both modes (shown as a solid swatch)
@@ -119,6 +119,20 @@ export function hexToHsl(hex: string): Hsl | null {
   return rgbToHsl(rgb[0], rgb[1], rgb[2]);
 }
 
+/**
+ * Secondary UI text derived from ink so labels stay readable when the muted
+ * seed is used for chrome wells (notes / search / tab bar).
+ */
+export function secondaryTextFromInk(inkHex: string): string {
+  const hsl = hexToHsl(inkHex);
+  if (!hsl) return inkHex;
+  const l =
+    hsl.l < 0.5
+      ? clamp(hsl.l + 0.32, 0.42, 0.62)
+      : clamp(hsl.l - 0.28, 0.42, 0.68);
+  return toHex(hslToRgb(hsl.h, clamp(hsl.s * 0.4, 0, 0.4), l));
+}
+
 /** From a seed color, derive light-mode and dark-mode hexes for a semantic role. */
 export function derivePairFromSeed(seedHex: string, role: StyleColorRole): StyleColorPair {
   const hsl = hexToHsl(seedHex);
@@ -128,28 +142,55 @@ export function derivePairFromSeed(seedHex: string, role: StyleColorRole): Style
     case "surface":
       return {
         light: toHex(
-          hslToRgb(hsl.h, clamp(hsl.s * 0.28, 0, 0.35), clamp(0.94, 0.985, 0.94 + hsl.l * 0.04)),
+          hslToRgb(
+            hsl.h,
+            clamp(hsl.s * 0.28, 0, 0.35),
+            clamp(0.94 + hsl.l * 0.04, 0.94, 0.985),
+          ),
         ),
         dark: toHex(
-          hslToRgb(hsl.h, clamp(hsl.s * 0.55, 0, 0.5), clamp(0.045, 0.12, 0.05 + (1 - hsl.l) * 0.04)),
+          hslToRgb(
+            hsl.h,
+            clamp(hsl.s * 0.55, 0, 0.5),
+            clamp(0.05 + (1 - hsl.l) * 0.04, 0.045, 0.12),
+          ),
         ),
       };
     case "ink":
+      // Keep the seed’s hue/chroma so picks read clearly; only remap lightness
+      // for contrast (dark text in light mode, light text in dark mode).
       return {
         light: toHex(
-          hslToRgb(hsl.h, clamp(hsl.s * 0.35, 0, 0.35), clamp(0.12, 0.28, 0.14 + (1 - hsl.l) * 0.08)),
+          hslToRgb(
+            hsl.h,
+            clamp(Math.max(hsl.s, 0.2) * 0.85, 0.12, 0.8),
+            clamp(Math.min(hsl.l, 0.22), 0.1, 0.3),
+          ),
         ),
         dark: toHex(
-          hslToRgb(hsl.h, clamp(hsl.s * 0.22, 0, 0.28), clamp(0.85, 0.95, 0.86 + hsl.l * 0.06)),
+          hslToRgb(
+            hsl.h,
+            clamp(Math.max(hsl.s, 0.15) * 0.7, 0.1, 0.65),
+            clamp(Math.max(hsl.l, 0.82), 0.78, 0.96),
+          ),
         ),
       };
     case "muted":
+      // Chrome wells: light panels in light mode, recessed panels in dark mode.
       return {
         light: toHex(
-          hslToRgb(hsl.h, clamp(hsl.s * 0.4, 0, 0.42), clamp(0.38, 0.55, 0.4 + hsl.l * 0.1)),
+          hslToRgb(
+            hsl.h,
+            clamp(hsl.s * 0.35, 0.04, 0.4),
+            clamp(0.88 + hsl.l * 0.06, 0.86, 0.96),
+          ),
         ),
         dark: toHex(
-          hslToRgb(hsl.h, clamp(hsl.s * 0.38, 0, 0.42), clamp(0.58, 0.75, 0.58 + (1 - hsl.l) * 0.12)),
+          hslToRgb(
+            hsl.h,
+            clamp(hsl.s * 0.45, 0.05, 0.45),
+            clamp(0.1 + (1 - hsl.l) * 0.06, 0.08, 0.2),
+          ),
         ),
       };
     case "accent": {
@@ -204,6 +245,6 @@ export const STYLE_COLOR_FORMULA_SUMMARY = [
   "Pick a seed → both modes calculated (HSL, hue kept)",
   "Surface  light L≈0.96   dark L≈0.07",
   "Ink      light L≈0.18   dark L≈0.90",
-  "Muted    light L≈0.45   dark L≈0.65",
+  "Muted    light L≈0.90   dark L≈0.12  (wells)",
   "Accent   same vivid color in both modes",
 ].join("\n");

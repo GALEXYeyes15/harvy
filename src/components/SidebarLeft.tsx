@@ -156,7 +156,7 @@ export function SidebarLeft({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search…"
-          className="mt-3 w-full rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[12px] text-ink placeholder:text-muted/65 dark:bg-canvas/35"
+          className="mt-3 w-full rounded-md border-0 bg-mist px-2.5 py-2 text-[12px] text-ink placeholder:text-muted/65"
           aria-label="Search documents"
         />
       </div>
@@ -303,7 +303,7 @@ export function SidebarLeft({
               aria-label="Settings"
               onClick={() => onOpenSettings?.()}
             >
-              <Settings size={14} strokeWidth={1.5} className="shrink-0 text-muted/60" aria-hidden />
+              <Settings size={14} strokeWidth={1.5} className="shrink-0 text-accent/70" aria-hidden />
               <span className="min-w-0 truncate">Settings</span>
             </button>
           </div>

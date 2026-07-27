@@ -32,6 +32,7 @@
     /* Type — soft charcoal, not pure black */
     --color-ink: #2a2622;
     --color-muted: #6e6860;
+    --color-accent: #5f6a7a;
     /* Structure — warm, low-contrast rules */
     --color-line: #e0d8cf;
     /* Focus: dusty blue-gray — use for focus-visible / active affordances only */
@@ -48,6 +49,7 @@
     --color-page: #1d1d1d;
     --color-ink: #e5e5e5;
     --color-muted: #a1a1a1;
+    --color-accent: #6a7588;
     --color-line: #ffffff14;
     --color-focus-ring: #6a7588;
     color-scheme: dark;
@@ -67,6 +69,7 @@
     --color-page: #ffffff;
     --color-ink: #062828;
     --color-muted: #3a7a7a;
+    --color-accent: #12b0b0;
     --color-line: #7dfdfe66;
     --color-focus-ring: #12b0b0;
     color-scheme: light;
@@ -80,6 +83,7 @@
     --color-page: #001010;
     --color-ink: #e8ffff;
     --color-muted: #7dfdfe;
+    --color-accent: #7dfdfe;
     --color-line: #7dfdfe33;
     --color-focus-ring: #7dfdfe;
     color-scheme: dark;
@@ -97,29 +101,29 @@
     color: #000707;
   }
 
-  /* Typing surfaces use the code font; chrome/UI stays Inter. */
+  /* Typing surfaces use the content font; chrome/UI stays Inter. */
   html.cyber #harvy-document-notes,
   html.cyber #harvy-notes-popout,
   html.cyber .editor-content,
   html.cyber .ProseMirror,
-  html.harvy-custom-style.harvy-mono-content #harvy-document-notes,
-  html.harvy-custom-style.harvy-mono-content #harvy-notes-popout,
-  html.harvy-custom-style.harvy-mono-content .editor-content,
-  html.harvy-custom-style.harvy-mono-content .ProseMirror {
+  html.harvy-custom-style #harvy-document-notes,
+  html.harvy-custom-style #harvy-notes-popout,
+  html.harvy-custom-style .editor-content,
+  html.harvy-custom-style .ProseMirror {
     font-family: var(--font-content);
   }
 
-  /* Solid wells for Notes + Search (override translucent canvas utilities). */
+  /* Solid wells for Notes + Search use mist (muted seed). */
   html.cyber:not(.dark) #harvy-document-notes,
   html.cyber:not(.dark) #harvy-notes-popout,
   html.cyber:not(.dark) #harvy-workspace-search {
-    background-color: #ffffff;
+    background-color: var(--color-mist);
   }
 
   html.cyber.dark #harvy-document-notes,
   html.cyber.dark #harvy-notes-popout,
   html.cyber.dark #harvy-workspace-search {
-    background-color: #001010;
+    background-color: var(--color-mist);
   }
 
   html {
@@ -1820,14 +1824,14 @@
     border-color: rgba(255, 255, 255, 0.16);
   }
 
-  /* Eden-inspired Outliers cards + search bar */
+  /* Outliers cards + search bar use mist (muted seed wells). */
   .harvy-outlier-search-bar {
     display: flex;
     align-items: center;
     gap: 0.65rem;
     border: 1px solid color-mix(in oklab, var(--color-line) 22%, transparent);
     border-radius: 0.625rem;
-    background: color-mix(in oklab, var(--color-ink) 5%, var(--color-stage));
+    background: var(--color-mist);
     padding: 0.45rem 0.5rem 0.45rem 0.85rem;
   }
 
@@ -1836,20 +1840,19 @@
   }
 
   html.dark .harvy-outlier-search-bar {
-    border-color: rgba(255, 255, 255, 0.08);
-    background: #1e1e1e;
+    border-color: color-mix(in oklab, var(--color-line) 55%, transparent);
   }
 
   html.dark .harvy-outlier-search-bar:focus-within {
-    border-color: rgba(255, 255, 255, 0.14);
+    border-color: color-mix(in oklab, var(--color-line) 75%, transparent);
   }
 
   .harvy-outlier-search-icon {
-    color: color-mix(in oklab, var(--color-muted) 70%, transparent);
+    color: color-mix(in oklab, var(--color-accent) 70%, transparent);
   }
 
   html.dark .harvy-outlier-search-icon {
-    color: rgba(255, 255, 255, 0.38);
+    color: color-mix(in oklab, var(--color-accent) 75%, transparent);
   }
 
   .harvy-outlier-search-input {
@@ -1874,7 +1877,7 @@
   }
 
   html.dark .harvy-outlier-search-input::placeholder {
-    color: rgba(255, 255, 255, 0.38);
+    color: color-mix(in oklab, var(--color-muted) 80%, transparent);
   }
 
   .harvy-outlier-search-actions {
@@ -1886,18 +1889,17 @@
   }
 
   html.dark .harvy-outlier-search-actions {
-    border-left-color: rgba(255, 255, 255, 0.08);
+    border-left-color: color-mix(in oklab, var(--color-line) 45%, transparent);
   }
 
   .harvy-outlier-card {
     border: 1px solid color-mix(in oklab, var(--color-line) 20%, transparent);
     border-radius: 0.75rem;
-    background: color-mix(in oklab, var(--color-ink) 6%, var(--color-stage));
+    background: var(--color-mist);
   }
 
   html.dark .harvy-outlier-card {
-    border-color: rgba(255, 255, 255, 0.08);
-    background: #1e1e1e;
+    border-color: color-mix(in oklab, var(--color-line) 55%, transparent);
   }
 
   .harvy-outlier-badge {

@@ -9,9 +9,9 @@ const IDLE_BEFORE_REVEAL_MS = 2000;
 const ICON_SIZE = 19;
 const ICON_STROKE = 1.5;
 
-/** Theme-aware icons on the ambient pill (dark appearance unchanged via semantic tokens). */
+/** Theme-aware icons on the ambient pill — always accent (not muted/ink). */
 const ICON_BTN =
-  "pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted opacity-90 transition-[opacity,background-color,color] duration-200 hover:bg-ink/[0.08] hover:opacity-100 hover:text-ink dark:hover:bg-white/[0.08] dark:hover:text-ink";
+  "pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-accent transition-[opacity,background-color,color] duration-200 hover:bg-accent/10 hover:text-accent";
 
 /** Solid surface aligned with workspace stage — no border, shadow, or outline. */
 const PILL_SURFACE = "rounded-full bg-stage px-4 py-1.5 sm:px-5";
@@ -118,7 +118,7 @@ export function EditorAmbientControls({
           type="button"
           className={
             focusModeActive
-              ? "pointer-events-auto flex h-9 min-w-9 shrink-0 items-center justify-center rounded-md px-1.5 font-mono text-[12px] font-medium tabular-nums tracking-tight text-ink opacity-100 transition-[opacity,background-color,color] duration-200 hover:bg-ink/[0.08] dark:hover:bg-white/[0.08]"
+              ? "pointer-events-auto flex h-9 min-w-9 shrink-0 items-center justify-center rounded-md px-1.5 font-mono text-[12px] font-medium tabular-nums tracking-tight text-accent opacity-100 transition-[opacity,background-color,color] duration-200 hover:bg-accent/10"
               : ICON_BTN
           }
           aria-label={

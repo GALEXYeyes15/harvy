@@ -1,3 +1,4 @@
+import { ensureAllUserAppearanceFontsLoaded } from "./appearanceFonts";
 import {
   applyAppearanceStyle,
   migrateLegacyCyberTheme,
@@ -44,5 +45,6 @@ export function bootStoredTheme() {
   const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const resolved = resolveTheme(readStoredThemeMode(), systemDark);
   applyResolvedTheme(resolved);
+  ensureAllUserAppearanceFontsLoaded();
   applyAppearanceStyle(readStoredAppearanceStyleId(), resolved);
 }

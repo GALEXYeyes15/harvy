@@ -10,7 +10,7 @@ const ICON_SIZE = 19;
 const ICON_STROKE = 1.5;
 
 const ICON_BTN =
-  "pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted opacity-90 transition-[opacity,background-color,color] duration-200 hover:bg-ink/[0.08] hover:opacity-100 hover:text-ink dark:hover:bg-white/[0.08] dark:hover:text-ink";
+  "pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-accent transition-[opacity,background-color,color] duration-200 hover:bg-accent/10 hover:text-accent";
 
 type EditorExportMenuProps = {
   onCopyDocument: () => Promise<boolean>;

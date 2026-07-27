@@ -6,6 +6,7 @@ use tauri::Manager;
 
 pub mod unsplash;
 pub mod substack;
+pub mod google_fonts;
 mod pdf_export;
 
 #[derive(Debug, Clone, Serialize)]

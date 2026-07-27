@@ -99,6 +99,7 @@ pub fn run() {
             commands::unsplash::list_popular_unsplash_photos,
             commands::substack::fetch_substack_posts,
             commands::substack::fetch_substack_comments,
+            commands::google_fonts::fetch_google_fonts_catalog,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

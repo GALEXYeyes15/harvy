@@ -2498,6 +2498,7 @@ export function AppShell() {
         appearanceStyleId={appearanceStyleId}
         onAppearanceStyleIdChange={setAppearanceStyleId}
         resolvedTheme={resolvedTheme}
+        systemPrefersDark={systemPrefersDark}
         readabilityPanelOpen={readabilityPanelOpen}
         onReadabilityPanelChange={(open) => {
           if (focusModeActive) return;

@@ -1,10 +1,20 @@
 import type { ResolvedTheme } from "./themeMode";
 import {
-  deriveBasicsFromSeeds,
+  appearanceBodyFontStack,
+  bodyFontFromLegacyMono,
+  CYBER_BODY_FONT_ID,
+  DEFAULT_BODY_FONT_ID,
+  ensureAppearanceBodyFontLoaded,
+  isAppearanceBodyFontId,
+  type AppearanceBodyFontId,
+} from "./appearanceFonts";
+import {
+  secondaryTextFromInk,
   type StyleBasics,
 } from "./styleColorFormula";
 
 export type { StyleBasics };
+export type { AppearanceBodyFontId };
 
 const STYLE_ID_KEY = "harvy-style";
 const CUSTOM_STYLES_KEY = "harvy:appearance-styles:v1";
@@ -27,6 +37,7 @@ export type StylePalette = {
   page: string;
   ink: string;
   muted: string;
+  accent: string;
   line: string;
   focusRing: string;
 };
@@ -38,11 +49,17 @@ export type CustomAppearanceStyle = {
   seeds?: StyleBasics;
   light: StylePalette;
   dark: StylePalette;
-  /** When true, editor/notes use mono like Cyber. */
+  /** Body / editor font for this style. */
+  bodyFont?: AppearanceBodyFontId;
+  /** @deprecated Prefer `bodyFont`. */
   monoContent?: boolean;
 };
 
-export type BuiltinStyleId = typeof CLASSIC_STYLE_ID | typeof CYBER_STYLE_ID;
+export function resolveStyleBodyFont(style: CustomAppearanceStyle): AppearanceBodyFontId {
+  if (isAppearanceBodyFontId(style.bodyFont)) return style.bodyFont;
+  if (style.monoContent !== undefined) return bodyFontFromLegacyMono(style.monoContent);
+  return style.id === CYBER_STYLE_ID ? CYBER_BODY_FONT_ID : DEFAULT_BODY_FONT_ID;
+}
 
 const TOKEN_VARS: Array<[keyof StylePalette, string]> = [
   ["canvas", "--color-canvas"],
@@ -52,6 +69,7 @@ const TOKEN_VARS: Array<[keyof StylePalette, string]> = [
   ["page", "--color-page"],
   ["ink", "--color-ink"],
   ["muted", "--color-muted"],
+  ["accent", "--color-accent"],
   ["line", "--color-line"],
   ["focusRing", "--color-focus-ring"],
 ];
@@ -64,6 +82,7 @@ export const DEFAULT_LIGHT_PALETTE: StylePalette = {
   page: "#faf7f2",
   ink: "#2a2622",
   muted: "#6e6860",
+  accent: "#5f6a7a",
   line: "#e0d8cf",
   focusRing: "#5f6a7a",
 };
@@ -76,6 +95,7 @@ export const DEFAULT_DARK_PALETTE: StylePalette = {
   page: "#1d1d1d",
   ink: "#e5e5e5",
   muted: "#a1a1a1",
+  accent: "#6a7588",
   line: "#ffffff14",
   focusRing: "#6a7588",
 };
@@ -88,6 +108,7 @@ export const CYBER_LIGHT_PALETTE: StylePalette = {
   page: "#ffffff",
   ink: "#062828",
   muted: "#3a7a7a",
+  accent: "#12b0b0",
   line: "#7dfdfe66",
   focusRing: "#12b0b0",
 };
@@ -100,6 +121,7 @@ export const CYBER_DARK_PALETTE: StylePalette = {
   page: "#001010",
   ink: "#e8ffff",
   muted: "#7dfdfe",
+  accent: "#7dfdfe",
   line: "#7dfdfe33",
   focusRing: "#7dfdfe",
 };
@@ -112,19 +134,18 @@ export const NEW_STYLE_DARK_PALETTE: StylePalette = { ...DEFAULT_DARK_PALETTE };
 
 export function builtInCyberAppearanceStyle(): CustomAppearanceStyle {
   const seeds: StyleBasics = {
-    canvas: "#03daff",
-    ink: "#0a2a2a",
-    muted: "#2a6a6a",
-    accent: "#7dfdfe",
+    canvas: CYBER_DARK_PALETTE.canvas,
+    ink: CYBER_DARK_PALETTE.ink,
+    muted: CYBER_DARK_PALETTE.mist,
+    accent: CYBER_DARK_PALETTE.accent,
   };
-  const { light, dark } = palettesFromSeeds(seeds);
   return {
     id: CYBER_STYLE_ID,
     name: "Cyber",
     seeds,
-    light,
-    dark,
-    monoContent: true,
+    light: { ...CYBER_LIGHT_PALETTE },
+    dark: { ...CYBER_DARK_PALETTE },
+    bodyFont: CYBER_BODY_FONT_ID,
   };
 }
 
@@ -144,10 +165,13 @@ export function expandPaletteFromBasics(basics: StyleBasics): StylePalette {
     canvas: basics.canvas,
     panel: basics.canvas,
     stage: basics.canvas,
-    mist: basics.canvas,
+    // Muted seed → chrome wells (notes, search, tab bar via bg-mist).
+    mist: basics.muted,
     page: basics.canvas,
     ink: basics.ink,
-    muted: basics.muted,
+    // Secondary text stays readable on mist wells (derived from ink).
+    muted: secondaryTextFromInk(basics.ink),
+    accent: basics.accent,
     line: basics.accent.length === 7 ? `${basics.accent}33` : basics.accent,
     focusRing: basics.accent,
   };
@@ -157,11 +181,9 @@ export function palettesFromSeeds(seeds: StyleBasics): {
   light: StylePalette;
   dark: StylePalette;
 } {
-  const derived = deriveBasicsFromSeeds(seeds);
-  return {
-    light: expandPaletteFromBasics(derived.light),
-    dark: expandPaletteFromBasics(derived.dark),
-  };
+  // Seeds are the colors you pick — applied as-is (no light/dark HSL remapping).
+  const palette = expandPaletteFromBasics(seeds);
+  return { light: { ...palette }, dark: { ...palette } };
 }
 
 /** Prefer stored seeds; otherwise treat current light palette as seeds. */
@@ -172,8 +194,8 @@ export function seedsFromStyle(style: CustomAppearanceStyle): StyleBasics {
   return {
     canvas: style.light.canvas,
     ink: style.light.ink,
-    muted: style.light.muted,
-    accent: style.light.focusRing,
+    muted: style.light.mist,
+    accent: style.light.focusRing || style.light.accent,
   };
 }
 
@@ -194,21 +216,40 @@ export function readCyberAppearanceStyle(): CustomAppearanceStyle {
     if (!raw) return defaults;
     const parsed = JSON.parse(raw) as Partial<CustomAppearanceStyle>;
     if (isStyleBasics(parsed.seeds)) {
-      return styleWithSeeds({ ...defaults, monoContent: parsed.monoContent !== false }, parsed.seeds);
+      return styleWithSeeds(
+        {
+          ...defaults,
+          name:
+            typeof parsed.name === "string" && parsed.name.trim()
+              ? parsed.name.trim()
+              : defaults.name,
+          bodyFont: isAppearanceBodyFontId(parsed.bodyFont)
+            ? parsed.bodyFont
+            : bodyFontFromLegacyMono(parsed.monoContent),
+        },
+        parsed.seeds,
+      );
     }
     if (!isStylePalette(parsed.light) || !isStylePalette(parsed.dark)) return defaults;
+    const light = normalizeStylePalette(parsed.light)!;
+    const dark = normalizeStylePalette(parsed.dark)!;
     return {
       id: CYBER_STYLE_ID,
-      name: "Cyber",
+      name:
+        typeof parsed.name === "string" && parsed.name.trim()
+          ? parsed.name.trim()
+          : "Cyber",
       seeds: {
-        canvas: parsed.light.canvas,
-        ink: parsed.light.ink,
-        muted: parsed.light.muted,
-        accent: parsed.light.focusRing,
+        canvas: light.canvas,
+        ink: light.ink,
+        muted: light.mist !== light.canvas ? light.mist : light.muted,
+        accent: light.accent,
       },
-      light: parsed.light,
-      dark: parsed.dark,
-      monoContent: parsed.monoContent !== false,
+      light,
+      dark,
+      bodyFont: isAppearanceBodyFontId(parsed.bodyFont)
+        ? parsed.bodyFont
+        : bodyFontFromLegacyMono(parsed.monoContent),
     };
   } catch {
     return defaults;
@@ -222,10 +263,11 @@ export function writeCyberAppearanceStyle(style: CustomAppearanceStyle) {
   localStorage.setItem(
     CYBER_STYLE_KEY,
     JSON.stringify({
+      name: next.name.trim() || "Cyber",
       seeds: next.seeds,
       light: next.light,
       dark: next.dark,
-      monoContent: Boolean(next.monoContent),
+      bodyFont: resolveStyleBodyFont(next),
     }),
   );
 }
@@ -286,7 +328,17 @@ export function readCustomAppearanceStyles(): CustomAppearanceStyle[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isCustomAppearanceStyle);
+    return parsed.flatMap((row) => {
+      if (!isCustomAppearanceStyle(row)) return [];
+      const light = normalizeStylePalette(row.light);
+      const dark = normalizeStylePalette(row.dark);
+      if (!light || !dark) return [];
+      const base = { ...row, light, dark };
+      if (base.seeds && isStyleBasics(base.seeds)) {
+        return [styleWithSeeds(base, base.seeds)];
+      }
+      return [base];
+    });
   } catch {
     return [];
   }
@@ -303,10 +355,38 @@ function isCustomAppearanceStyle(value: unknown): value is CustomAppearanceStyle
   );
 }
 
-function isStylePalette(value: unknown): value is StylePalette {
-  if (!value || typeof value !== "object") return false;
+/** Accept legacy palettes that predate `--color-accent`. */
+function normalizeStylePalette(value: unknown): StylePalette | null {
+  if (!value || typeof value !== "object") return null;
   const p = value as Record<string, unknown>;
-  return TOKEN_VARS.every(([key]) => typeof p[key] === "string");
+  const keys = [
+    "canvas",
+    "panel",
+    "stage",
+    "mist",
+    "page",
+    "ink",
+    "muted",
+    "line",
+    "focusRing",
+  ] as const;
+  if (!keys.every((key) => typeof p[key] === "string")) return null;
+  return {
+    canvas: p.canvas as string,
+    panel: p.panel as string,
+    stage: p.stage as string,
+    mist: p.mist as string,
+    page: p.page as string,
+    ink: p.ink as string,
+    muted: p.muted as string,
+    accent: typeof p.accent === "string" ? p.accent : (p.focusRing as string),
+    line: p.line as string,
+    focusRing: p.focusRing as string,
+  };
+}
+
+function isStylePalette(value: unknown): value is StylePalette {
+  return normalizeStylePalette(value) != null;
 }
 
 export function writeCustomAppearanceStyles(styles: CustomAppearanceStyle[]) {
@@ -334,21 +414,21 @@ export function deleteCustomAppearanceStyle(id: string): CustomAppearanceStyle[]
   return next;
 }
 
-export function createBlankCustomStyle(name = "New style"): CustomAppearanceStyle {
+export function createBlankCustomStyle(name = "New theme"): CustomAppearanceStyle {
   const seeds: StyleBasics = {
     canvas: NEW_STYLE_LIGHT_PALETTE.canvas,
     ink: NEW_STYLE_LIGHT_PALETTE.ink,
-    muted: NEW_STYLE_LIGHT_PALETTE.muted,
-    accent: NEW_STYLE_LIGHT_PALETTE.focusRing,
+    muted: NEW_STYLE_LIGHT_PALETTE.mist,
+    accent: NEW_STYLE_LIGHT_PALETTE.accent,
   };
   const { light, dark } = palettesFromSeeds(seeds);
   return {
     id: `style-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    name: name.trim() || "New style",
+    name: name.trim() || "New theme",
     seeds,
     light,
     dark,
-    monoContent: false,
+    bodyFont: DEFAULT_BODY_FONT_ID,
   };
 }
 
@@ -359,27 +439,73 @@ function clearInlineStyleTokens(root: HTMLElement) {
   root.style.removeProperty("--font-content");
 }
 
-function applyInlinePalette(root: HTMLElement, palette: StylePalette, monoContent: boolean) {
+function applyInlinePalette(
+  root: HTMLElement,
+  palette: StylePalette,
+  bodyFont: AppearanceBodyFontId,
+) {
   for (const [key, cssVar] of TOKEN_VARS) {
     root.style.setProperty(cssVar, palette[key]);
   }
-  if (monoContent) {
-    root.style.setProperty(
-      "--font-content",
-      '"IBM Plex Mono", ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace',
-    );
-  } else {
-    root.style.removeProperty("--font-content");
+  root.style.setProperty("--font-content", appearanceBodyFontStack(bodyFont));
+}
+
+/** In-editor draft; when set, `applyAppearanceStyle` keeps showing this instead of disk. */
+let livePreviewStyle: CustomAppearanceStyle | null = null;
+
+/**
+ * Live-preview a style draft in the app chrome (not written to storage until Save).
+ * Pass `null` to clear the preview lock (caller should re-apply the saved style).
+ */
+export function setLiveAppearancePreview(
+  style: CustomAppearanceStyle | null,
+  resolvedTheme: ResolvedTheme,
+) {
+  livePreviewStyle = style;
+  if (style) {
+    paintAppearanceStyle(style, resolvedTheme);
   }
+}
+
+function paintAppearanceStyle(style: CustomAppearanceStyle, resolvedTheme: ResolvedTheme) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  const id = style.id || CLASSIC_STYLE_ID;
+  const bodyFont = resolveStyleBodyFont(style);
+  ensureAppearanceBodyFontLoaded(bodyFont);
+
+  root.dataset.style = id;
+  root.classList.toggle("cyber", id === CYBER_STYLE_ID);
+  root.classList.toggle(
+    "harvy-custom-style",
+    id !== CLASSIC_STYLE_ID && id !== CYBER_STYLE_ID,
+  );
+  root.classList.remove("harvy-mono-content");
+
+  if (id === CLASSIC_STYLE_ID) {
+    clearInlineStyleTokens(root);
+    return;
+  }
+
+  // Draft / custom / edited cyber: always paint the in-memory palette + body font.
+  const palette = resolvedTheme === "dark" ? style.dark : style.light;
+  applyInlinePalette(root, palette, bodyFont);
 }
 
 /**
  * Apply an appearance style on top of the resolved light/dark theme.
  * Classic uses CSS theme tokens. Cyber uses `.cyber` plus optional saved overrides.
  * Custom styles set CSS variables inline.
+ * If a live preview draft is active, that wins until cleared.
  */
 export function applyAppearanceStyle(styleId: AppearanceStyleId, resolvedTheme: ResolvedTheme) {
   if (typeof document === "undefined") return;
+
+  if (livePreviewStyle) {
+    paintAppearanceStyle(livePreviewStyle, resolvedTheme);
+    return;
+  }
+
   const root = document.documentElement;
   const id = styleId || CLASSIC_STYLE_ID;
 
@@ -393,14 +519,16 @@ export function applyAppearanceStyle(styleId: AppearanceStyleId, resolvedTheme: 
   }
 
   if (id === CYBER_STYLE_ID) {
-    root.classList.remove("harvy-custom-style");
+    root.classList.remove("harvy-custom-style", "harvy-mono-content");
     const cyber = readCyberAppearanceStyle();
-    root.classList.toggle("harvy-mono-content", Boolean(cyber.monoContent));
+    const bodyFont = resolveStyleBodyFont(cyber);
+    ensureAppearanceBodyFontLoaded(bodyFont);
     if (hasCyberAppearanceOverrides()) {
       const palette = resolvedTheme === "dark" ? cyber.dark : cyber.light;
-      applyInlinePalette(root, palette, Boolean(cyber.monoContent));
+      applyInlinePalette(root, palette, bodyFont);
     } else {
       clearInlineStyleTokens(root);
+      root.style.setProperty("--font-content", appearanceBodyFontStack(bodyFont));
     }
     return;
   }
@@ -414,9 +542,11 @@ export function applyAppearanceStyle(styleId: AppearanceStyleId, resolvedTheme: 
   }
 
   root.classList.add("harvy-custom-style");
-  root.classList.toggle("harvy-mono-content", Boolean(custom.monoContent));
+  root.classList.remove("harvy-mono-content");
+  const bodyFont = resolveStyleBodyFont(custom);
+  ensureAppearanceBodyFontLoaded(bodyFont);
   const palette = resolvedTheme === "dark" ? custom.dark : custom.light;
-  applyInlinePalette(root, palette, Boolean(custom.monoContent));
+  applyInlinePalette(root, palette, bodyFont);
 }
 
 /** Stage RGB for native Notes window chrome. */

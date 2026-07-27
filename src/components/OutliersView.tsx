@@ -73,7 +73,7 @@ function NoteFoldIcon({
 }
 
 const BAR_ACTION =
-  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted/55 transition-colors hover:bg-white/[0.06] hover:text-ink dark:hover:text-white/88";
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-accent/65 transition-colors hover:bg-white/[0.06] hover:text-accent dark:hover:text-accent";
 
 const OUTLIER_SCORE_OPTIONS = [
   { id: "any", label: "Any" },
