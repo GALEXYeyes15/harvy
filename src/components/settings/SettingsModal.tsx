@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react";
-import { SquareArrowOutUpRight } from "lucide-react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import { SquareArrowOutUpRight, SquarePen } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
 import type { DocumentHeaderPrefs } from "../../features/editor/documentHeaderSettings";
 import type { FocusVisibilityPrefs } from "../../features/editor/focusVisibilitySettings";
@@ -19,7 +19,28 @@ import {
   SUGGESTED_READING_WPM_MIN,
   type ParametersPrefs,
 } from "../../features/settings/parametersSettings";
-import type { ThemeMode } from "../../theme/themeMode";
+import type { ThemeMode, ResolvedTheme } from "../../theme/themeMode";
+import {
+  applyAppearanceStyle,
+  CYBER_STYLE_ID,
+  CLASSIC_STYLE_ID,
+  createBlankCustomStyle,
+  deleteCustomAppearanceStyle,
+  hasCyberAppearanceOverrides,
+  readCyberAppearanceStyle,
+  readCustomAppearanceStyles,
+  resetCyberAppearanceStyle,
+  seedsFromStyle,
+  styleWithSeeds,
+  upsertCustomAppearanceStyle,
+  writeCyberAppearanceStyle,
+  type AppearanceStyleId,
+  type CustomAppearanceStyle,
+  type StyleBasics,
+} from "../../theme/appearanceStyles";
+import {
+  derivePairFromSeed,
+} from "../../theme/styleColorFormula";
 import {
   clampOutliersFetchIntervalMinutes,
   DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES,
@@ -48,6 +69,9 @@ type SettingsModalProps = {
   onClose: () => void;
   themeMode: ThemeMode;
   onThemeModeChange: (mode: ThemeMode) => void;
+  appearanceStyleId: AppearanceStyleId;
+  onAppearanceStyleIdChange: (id: AppearanceStyleId) => void;
+  resolvedTheme: ResolvedTheme;
   readabilityPanelOpen: boolean;
   onReadabilityPanelChange: (open: boolean) => void;
   spellcheckEnabled: boolean;
@@ -78,6 +102,9 @@ export function SettingsModal({
   onClose,
   themeMode,
   onThemeModeChange,
+  appearanceStyleId,
+  onAppearanceStyleIdChange,
+  resolvedTheme,
   readabilityPanelOpen,
   onReadabilityPanelChange,
   spellcheckEnabled,
@@ -154,7 +181,13 @@ export function SettingsModal({
               />
             ) : null}
             {activeSection === "appearance" ? (
-              <AppearancePanel themeMode={themeMode} onThemeModeChange={onThemeModeChange} />
+              <AppearancePanel
+                themeMode={themeMode}
+                onThemeModeChange={onThemeModeChange}
+                appearanceStyleId={appearanceStyleId}
+                onAppearanceStyleIdChange={onAppearanceStyleIdChange}
+                resolvedTheme={resolvedTheme}
+              />
             ) : null}
             {activeSection === "editor" ? (
               <EditorPanel
@@ -326,20 +359,98 @@ function GeneralPanel({
 function AppearancePanel({
   themeMode,
   onThemeModeChange,
+  appearanceStyleId,
+  onAppearanceStyleIdChange,
+  resolvedTheme,
 }: {
   themeMode: ThemeMode;
   onThemeModeChange: (t: ThemeMode) => void;
+  appearanceStyleId: AppearanceStyleId;
+  onAppearanceStyleIdChange: (id: AppearanceStyleId) => void;
+  resolvedTheme: ResolvedTheme;
 }) {
-  const options: { id: ThemeMode; label: string }[] = [
+  const themeOptions: { id: ThemeMode; label: string }[] = [
     { id: "light", label: "Light" },
     { id: "dark", label: "Dark" },
     { id: "system", label: "System" },
-    { id: "cyber", label: "Cyber" },
   ];
+
+  const [customStyles, setCustomStyles] = useState(() => readCustomAppearanceStyles());
+  const [cyberStyle, setCyberStyle] = useState(() => readCyberAppearanceStyle());
+  const [editor, setEditor] = useState<CustomAppearanceStyle | null>(null);
+
+  function selectStyle(id: AppearanceStyleId) {
+    onAppearanceStyleIdChange(id);
+  }
+
+  function openNewStyle() {
+    setEditor(createBlankCustomStyle());
+  }
+
+  function openEditStyle(style: CustomAppearanceStyle) {
+    const seeds = seedsFromStyle(style);
+    setEditor(styleWithSeeds(style, seeds));
+  }
+
+  function openEditCyber() {
+    const current = readCyberAppearanceStyle();
+    setCyberStyle(current);
+    openEditStyle(current);
+  }
+
+  function saveEditor() {
+    if (!editor) return;
+    if (editor.id === CYBER_STYLE_ID) {
+      writeCyberAppearanceStyle({
+        ...editor,
+        id: CYBER_STYLE_ID,
+        name: "Cyber",
+      });
+      const next = readCyberAppearanceStyle();
+      setCyberStyle(next);
+      applyAppearanceStyle(appearanceStyleId, resolvedTheme);
+      setEditor(null);
+      return;
+    }
+
+    const named = {
+      ...editor,
+      name: editor.name.trim() || "New style",
+    };
+    const next = upsertCustomAppearanceStyle(named);
+    setCustomStyles(next);
+    onAppearanceStyleIdChange(named.id);
+    applyAppearanceStyle(named.id, resolvedTheme);
+    setEditor(null);
+  }
+
+  function removeEditorStyle() {
+    if (!editor) return;
+    if (editor.id === CYBER_STYLE_ID) {
+      resetCyberAppearanceStyle();
+      setCyberStyle(readCyberAppearanceStyle());
+      applyAppearanceStyle(appearanceStyleId, resolvedTheme);
+      setEditor(null);
+      return;
+    }
+    const next = deleteCustomAppearanceStyle(editor.id);
+    setCustomStyles(next);
+    if (appearanceStyleId === editor.id) {
+      onAppearanceStyleIdChange(CLASSIC_STYLE_ID);
+    }
+    setEditor(null);
+  }
+
+  const cyberPreview =
+    resolvedTheme === "dark" ? cyberStyle.dark : cyberStyle.light;
 
   return (
     <div className="space-y-5">
-      <SettingsSectionHeader title="Appearance" description="Color theme for the app." />
+      <SettingsSectionHeader
+        title="Appearance"
+        description="Built-in themes and appearances you create and save."
+      />
+
       <div>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
           Theme
@@ -349,7 +460,7 @@ function AppearancePanel({
           role="radiogroup"
           aria-label="Color theme"
         >
-          {options.map((opt) => {
+          {themeOptions.map((opt) => {
             const selected = themeMode === opt.id;
             return (
               <button
@@ -369,14 +480,295 @@ function AppearancePanel({
             );
           })}
         </div>
-        <p className="mt-2 text-[11px] leading-relaxed text-muted/70">
-          {themeMode === "cyber"
-            ? "Dark surfaces, cyan accents, and mono typing. Saved for next launch."
-            : "Saved automatically and restored next time you open Harvy."}
+      </div>
+
+      <div>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+          Styles
         </p>
+        <div className="flex flex-wrap gap-3" role="list">
+          <StylePreviewCard
+            label="Classic"
+            selected={appearanceStyleId === CLASSIC_STYLE_ID}
+            previewStyle={
+              resolvedTheme === "dark"
+                ? { backgroundColor: "#1d1d1d", color: "#e5e5e5" }
+                : { backgroundColor: "#faf7f2", color: "#2a2622" }
+            }
+            onSelect={() => selectStyle(CLASSIC_STYLE_ID)}
+          />
+          <StylePreviewCard
+            label="Cyber"
+            selected={appearanceStyleId === CYBER_STYLE_ID}
+            previewStyle={{
+              backgroundColor: cyberPreview.page,
+              color: cyberPreview.ink,
+            }}
+            onSelect={() => selectStyle(CYBER_STYLE_ID)}
+            onEdit={openEditCyber}
+          />
+          {customStyles.map((style) => {
+            const palette = resolvedTheme === "dark" ? style.dark : style.light;
+            return (
+              <StylePreviewCard
+                key={style.id}
+                label={style.name}
+                selected={appearanceStyleId === style.id}
+                previewStyle={{
+                  backgroundColor: palette.page,
+                  color: palette.ink,
+                }}
+                onSelect={() => selectStyle(style.id)}
+                onEdit={() => openEditStyle(style)}
+              />
+            );
+          })}
+          <button
+            type="button"
+            role="listitem"
+            onClick={openNewStyle}
+            className="group flex w-[4.75rem] flex-col items-center gap-1.5"
+            aria-label="Add new style"
+          >
+            <span className="flex h-[4.75rem] w-[4.75rem] items-center justify-center rounded-xl bg-mist/80 text-[1.75rem] font-light text-ink/70 ring-1 ring-line/35 transition-colors group-hover:bg-mist group-hover:text-ink dark:bg-ink/[0.04] dark:ring-white/10">
+              +
+            </span>
+            <span className="text-center text-[11px] text-muted/80">Add New</span>
+          </button>
+        </div>
+      </div>
+
+      {editor ? (
+        <StyleEditorForm
+          style={editor}
+          onChange={setEditor}
+          onSave={saveEditor}
+          onCancel={() => setEditor(null)}
+          onDelete={
+            editor.id === CYBER_STYLE_ID
+              ? hasCyberAppearanceOverrides()
+                ? removeEditorStyle
+                : undefined
+              : customStyles.some((s) => s.id === editor.id)
+                ? removeEditorStyle
+                : undefined
+          }
+          deleteLabel={editor.id === CYBER_STYLE_ID ? "Reset" : "Delete"}
+          nameLocked={editor.id === CYBER_STYLE_ID}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function StylePreviewCard({
+  label,
+  selected,
+  previewClassName,
+  previewStyle,
+  onSelect,
+  onEdit,
+}: {
+  label: string;
+  selected: boolean;
+  previewClassName?: string;
+  previewStyle?: CSSProperties;
+  onSelect: () => void;
+  onEdit?: () => void;
+}) {
+  return (
+    <div className="group flex w-[4.75rem] flex-col items-center gap-1.5" role="listitem">
+      <div className="relative">
+        <button
+          type="button"
+          onClick={onSelect}
+          aria-pressed={selected}
+          title={label}
+          className={`flex h-[4.75rem] w-[4.75rem] items-center justify-center rounded-xl text-[1.35rem] font-medium tracking-tight transition-[box-shadow] ${
+            selected
+              ? "ring-2 ring-ink/55 dark:ring-white/55"
+              : "ring-1 ring-line/30 hover:ring-line/55 dark:ring-white/10"
+          } ${previewClassName ?? ""}`}
+          style={previewStyle}
+        >
+          Abc
+        </button>
+        {onEdit ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit();
+            }}
+            aria-label={`Edit ${label}`}
+            title={`Edit ${label}`}
+            className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md bg-page/90 text-ink opacity-0 shadow-sm ring-1 ring-line/35 transition-opacity hover:bg-page group-hover:opacity-100 dark:bg-[#2a2a2a]/90 dark:ring-white/15"
+          >
+            <SquarePen size={12} strokeWidth={1.75} aria-hidden />
+          </button>
+        ) : null}
+      </div>
+      <span className="w-full truncate text-center text-[11px] text-ink/85">{label}</span>
+    </div>
+  );
+}
+
+function StyleEditorForm({
+  style,
+  onChange,
+  onSave,
+  onCancel,
+  onDelete,
+  deleteLabel = "Delete",
+  nameLocked = false,
+}: {
+  style: CustomAppearanceStyle;
+  onChange: (next: CustomAppearanceStyle) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  onDelete?: () => void;
+  deleteLabel?: string;
+  nameLocked?: boolean;
+}) {
+  const seeds = seedsFromStyle(style);
+
+  function setSeed(key: keyof StyleBasics, value: string) {
+    onChange(styleWithSeeds(style, { ...seeds, [key]: value }));
+  }
+
+  const fields: Array<{
+    key: keyof StyleBasics;
+    label: string;
+    role: "surface" | "ink" | "muted" | "accent";
+    solid?: boolean;
+  }> = [
+    { key: "canvas", label: "Canvas", role: "surface" },
+    { key: "ink", label: "Ink", role: "ink" },
+    { key: "muted", label: "Muted", role: "muted" },
+    { key: "accent", label: "Accent", role: "accent", solid: true },
+  ];
+
+  return (
+    <div className="space-y-4 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] font-semibold text-ink">Edit style</p>
+        <div className="flex items-center gap-2">
+          {onDelete ? (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="rounded-md px-2 py-1 text-[12px] text-muted/80 hover:text-ink"
+            >
+              {deleteLabel}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-md px-2 py-1 text-[12px] text-muted/80 hover:text-ink"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            className="rounded-md bg-ink px-2.5 py-1 text-[12px] font-medium text-page"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+
+      <label className="block">
+        <span className="text-[11px] text-muted/75">Name</span>
+        <input
+          type="text"
+          value={style.name}
+          disabled={nameLocked}
+          onChange={(e) => onChange({ ...style, name: e.target.value })}
+          className="mt-1 w-full rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-canvas/35"
+        />
+      </label>
+
+      <label className="flex items-center justify-between gap-3">
+        <span className="text-[13px] text-ink">Mono typing</span>
+        <input
+          type="checkbox"
+          checked={Boolean(style.monoContent)}
+          onChange={(e) => onChange({ ...style, monoContent: e.target.checked })}
+          className="h-4 w-4"
+        />
+      </label>
+
+      <div className="space-y-2 rounded-md bg-page/60 px-3 py-2.5 dark:bg-page/35">
+        <p className="text-[11px] leading-snug text-muted/75">
+          Each box shows the calculated <span className="text-ink/80">light | dark</span> pair from
+          your seed (accent stays one color). Click a box to pick the seed.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+        {fields.map((field) => {
+          const pair = derivePairFromSeed(seeds[field.key], field.role);
+          const inputId = `harvy-style-seed-${field.key}`;
+          return (
+            <div key={field.key} className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => document.getElementById(inputId)?.click()}
+                aria-label={`${field.label} seed color (shows calculated light and dark)`}
+                title={`${field.label}: light ${pair.light} · dark ${pair.dark}`}
+                className="relative h-8 w-11 shrink-0 overflow-hidden rounded-lg ring-2 ring-[var(--color-focus-ring,#5f6a7a)]/55 transition-[box-shadow] hover:ring-[var(--color-focus-ring,#5f6a7a)]"
+              >
+                {field.solid ? (
+                  <span
+                    className="absolute inset-0"
+                    style={{ backgroundColor: pair.light }}
+                  />
+                ) : (
+                  <>
+                    <span
+                      className="absolute inset-y-0 left-0 w-1/2"
+                      style={{ backgroundColor: pair.light }}
+                      aria-hidden
+                    />
+                    <span
+                      className="absolute inset-y-0 right-0 w-1/2"
+                      style={{ backgroundColor: pair.dark }}
+                      aria-hidden
+                    />
+                  </>
+                )}
+              </button>
+              <input
+                id={inputId}
+                type="color"
+                value={normalizeHexColor(seeds[field.key])}
+                onChange={(e) => setSeed(field.key, e.target.value)}
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden
+              />
+              <span className="text-[13px] text-ink/90">{field.label}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
+}
+
+function normalizeHexColor(value: string): string {
+  const raw = value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw;
+  if (/^#[0-9a-fA-F]{8}$/.test(raw)) return `#${raw.slice(1, 7)}`;
+  if (/^#[0-9a-fA-F]{3}$/.test(raw)) {
+    const r = raw[1]!;
+    const g = raw[2]!;
+    const b = raw[3]!;
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  return "#888888";
 }
 
 function EncouragementPanel({

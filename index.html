@@ -7,18 +7,25 @@
     <script>
       (function () {
         try {
-          var mode = localStorage.getItem("harvy-theme");
+          var theme = localStorage.getItem("harvy-theme");
+          var style = localStorage.getItem("harvy-style") || "classic";
+          if (theme === "cyber") {
+            theme = "dark";
+            if (!localStorage.getItem("harvy-style")) {
+              style = "cyber";
+              localStorage.setItem("harvy-style", "cyber");
+            }
+            localStorage.setItem("harvy-theme", "dark");
+          }
+          if (style === "default") style = "classic";
           var systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
           var resolved =
-            mode === "light" || mode === "dark" || mode === "cyber"
-              ? mode
-              : systemDark
-                ? "dark"
-                : "light";
+            theme === "light" || theme === "dark" ? theme : systemDark ? "dark" : "light";
           var root = document.documentElement;
           root.dataset.theme = resolved;
-          root.classList.toggle("dark", resolved === "dark" || resolved === "cyber");
-          root.classList.toggle("cyber", resolved === "cyber");
+          root.dataset.style = style;
+          root.classList.toggle("dark", resolved === "dark");
+          root.classList.toggle("cyber", style === "cyber");
         } catch (_) {}
       })();
     </script>

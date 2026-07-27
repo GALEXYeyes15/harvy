@@ -8,6 +8,10 @@ import { handleNotesTextareaTabKey } from "../features/notes/notesTextareaIndent
 import { isMacOSPlatform, isTauriRuntime } from "../features/save/saveRuntime";
 import { setupWindowDragRegions } from "../features/window/setupWindowDragRegions";
 import {
+  applyAppearanceStyle,
+  readStoredAppearanceStyleId,
+} from "../theme/appearanceStyles";
+import {
   applyResolvedTheme,
   readStoredThemeMode,
   resolveTheme,
@@ -15,7 +19,9 @@ import {
 } from "../theme/themeMode";
 
 function applyTheme(mode: ThemeMode, systemPrefersDark: boolean) {
-  applyResolvedTheme(resolveTheme(mode, systemPrefersDark));
+  const resolved = resolveTheme(mode, systemPrefersDark);
+  applyResolvedTheme(resolved);
+  applyAppearanceStyle(readStoredAppearanceStyleId(), resolved);
 }
 
 /**
@@ -32,7 +38,9 @@ export function NotesPopoutApp() {
     syncTheme();
     mq.addEventListener("change", syncTheme);
     const onStorage = (event: StorageEvent) => {
-      if (event.key === "harvy-theme") syncTheme();
+      if (event.key === "harvy-theme" || event.key === "harvy-style" || event.key === "harvy:appearance-styles:v1") {
+        syncTheme();
+      }
     };
     window.addEventListener("storage", onStorage);
     return () => {

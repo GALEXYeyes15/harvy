@@ -1,13 +1,20 @@
-export type ThemeMode = "light" | "dark" | "system" | "cyber";
+import {
+  applyAppearanceStyle,
+  migrateLegacyCyberTheme,
+  readStoredAppearanceStyleId,
+} from "./appearanceStyles";
 
-export type ResolvedTheme = "light" | "dark" | "cyber";
+export type ThemeMode = "light" | "dark" | "system";
+
+export type ResolvedTheme = "light" | "dark";
 
 const STORAGE_KEY = "harvy-theme";
 
 export function readStoredThemeMode(): ThemeMode {
   if (typeof window === "undefined") return "system";
+  migrateLegacyCyberTheme();
   const v = localStorage.getItem(STORAGE_KEY);
-  if (v === "light" || v === "dark" || v === "system" || v === "cyber") return v;
+  if (v === "light" || v === "dark" || v === "system") return v;
   return "system";
 }
 
@@ -19,22 +26,23 @@ export function writeStoredThemeMode(mode: ThemeMode) {
 export function resolveTheme(mode: ThemeMode, systemPrefersDark: boolean): ResolvedTheme {
   if (mode === "light") return "light";
   if (mode === "dark") return "dark";
-  if (mode === "cyber") return "cyber";
   return systemPrefersDark ? "dark" : "light";
 }
 
-/** Apply resolved theme classes / data attributes on `<html>`. */
+/** Apply light/dark classes. Style layer is applied via `applyAppearanceStyle`. */
 export function applyResolvedTheme(resolved: ResolvedTheme) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
   root.dataset.theme = resolved;
-  root.classList.toggle("dark", resolved === "dark" || resolved === "cyber");
-  root.classList.toggle("cyber", resolved === "cyber");
+  root.classList.toggle("dark", resolved === "dark");
 }
 
-/** Restore the last-used theme before React paints (avoids a light/dark flash). */
+/** Restore theme + style before React paints (avoids a light/dark flash). */
 export function bootStoredTheme() {
   if (typeof window === "undefined") return;
+  migrateLegacyCyberTheme();
   const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  applyResolvedTheme(resolveTheme(readStoredThemeMode(), systemDark));
+  const resolved = resolveTheme(readStoredThemeMode(), systemDark);
+  applyResolvedTheme(resolved);
+  applyAppearanceStyle(readStoredAppearanceStyleId(), resolved);
 }

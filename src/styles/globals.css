@@ -53,10 +53,26 @@
     color-scheme: dark;
   }
 
-  /* Cyber Mode — void teal surface, neon cyan accents; Inter UI + mono typing. */
+  /* Cyber style — works with light or dark theme (theme toggles `.dark`). */
   html.cyber {
     --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     --font-content: "IBM Plex Mono", ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
+  }
+
+  html.cyber:not(.dark) {
+    --color-canvas: #f2fbfb;
+    --color-panel: #f2fbfb;
+    --color-stage: #f2fbfb;
+    --color-mist: #e8f7f7;
+    --color-page: #ffffff;
+    --color-ink: #062828;
+    --color-muted: #3a7a7a;
+    --color-line: #7dfdfe66;
+    --color-focus-ring: #12b0b0;
+    color-scheme: light;
+  }
+
+  html.cyber.dark {
     --color-canvas: #000707;
     --color-panel: #000707;
     --color-stage: #000707;
@@ -71,6 +87,13 @@
 
   html.cyber ::selection {
     background: rgb(125 253 254 / 0.28);
+  }
+
+  html.cyber:not(.dark) ::selection {
+    color: #062828;
+  }
+
+  html.cyber.dark ::selection {
     color: #000707;
   }
 
@@ -78,14 +101,24 @@
   html.cyber #harvy-document-notes,
   html.cyber #harvy-notes-popout,
   html.cyber .editor-content,
-  html.cyber .ProseMirror {
+  html.cyber .ProseMirror,
+  html.harvy-custom-style.harvy-mono-content #harvy-document-notes,
+  html.harvy-custom-style.harvy-mono-content #harvy-notes-popout,
+  html.harvy-custom-style.harvy-mono-content .editor-content,
+  html.harvy-custom-style.harvy-mono-content .ProseMirror {
     font-family: var(--font-content);
   }
 
   /* Solid wells for Notes + Search (override translucent canvas utilities). */
-  html.cyber #harvy-document-notes,
-  html.cyber #harvy-notes-popout,
-  html.cyber #harvy-workspace-search {
+  html.cyber:not(.dark) #harvy-document-notes,
+  html.cyber:not(.dark) #harvy-notes-popout,
+  html.cyber:not(.dark) #harvy-workspace-search {
+    background-color: #ffffff;
+  }
+
+  html.cyber.dark #harvy-document-notes,
+  html.cyber.dark #harvy-notes-popout,
+  html.cyber.dark #harvy-workspace-search {
     background-color: #001010;
   }
 

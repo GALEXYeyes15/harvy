@@ -2,6 +2,10 @@ import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { primaryMonitor } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { isTauriRuntime } from "../save/saveRuntime";
+import {
+  readStoredAppearanceStyleId,
+  stageBackgroundRgb,
+} from "../../theme/appearanceStyles";
 import { readStoredThemeMode, resolveTheme } from "../../theme/themeMode";
 
 /** Match `--color-stage` so the macOS title bar blends with the Notes body. */
@@ -10,9 +14,7 @@ function stageBackgroundColor(): [number, number, number] {
     typeof window !== "undefined" &&
     window.matchMedia("(prefers-color-scheme: dark)").matches;
   const resolved = resolveTheme(readStoredThemeMode(), systemDark);
-  if (resolved === "cyber") return [0, 7, 7]; // #000707
-  if (resolved === "dark") return [26, 26, 26];
-  return [250, 247, 242];
+  return stageBackgroundRgb(resolved, readStoredAppearanceStyleId());
 }
 
 export const NOTES_WINDOW_LABEL = "notes";

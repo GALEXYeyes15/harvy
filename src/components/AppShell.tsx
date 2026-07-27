@@ -11,6 +11,12 @@ import {
   writeStoredThemeMode,
   type ThemeMode,
 } from "../theme/themeMode";
+import {
+  applyAppearanceStyle,
+  readStoredAppearanceStyleId,
+  writeStoredAppearanceStyleId,
+  type AppearanceStyleId,
+} from "../theme/appearanceStyles";
 import { AboutModal } from "./settings/AboutModal";
 import { SettingsModal } from "./settings/SettingsModal";
 import { EncouragementToast } from "./EncouragementToast";
@@ -326,6 +332,9 @@ export function AppShell() {
   /** Display name for the scratch buffer (no tab row); shown in the document header. */
   const [scratchDocumentTitle, setScratchDocumentTitle] = useState("Untitled");
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredThemeMode());
+  const [appearanceStyleId, setAppearanceStyleId] = useState<AppearanceStyleId>(
+    () => readStoredAppearanceStyleId(),
+  );
   const [systemPrefersDark, setSystemPrefersDark] = useState(() =>
     typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)").matches : false,
   );
@@ -649,11 +658,16 @@ export function AppShell() {
 
   useEffect(() => {
     applyResolvedTheme(resolvedTheme);
-  }, [resolvedTheme]);
+    applyAppearanceStyle(appearanceStyleId, resolvedTheme);
+  }, [resolvedTheme, appearanceStyleId]);
 
   useEffect(() => {
     writeStoredThemeMode(themeMode);
   }, [themeMode]);
+
+  useEffect(() => {
+    writeStoredAppearanceStyleId(appearanceStyleId);
+  }, [appearanceStyleId]);
 
   const reloadWorkspaceTree = useCallback(async (): Promise<FileNode | null> => {
     if (!isTauriRuntime()) {
@@ -2481,6 +2495,9 @@ export function AppShell() {
         onClose={closeSettings}
         themeMode={themeMode}
         onThemeModeChange={setThemeMode}
+        appearanceStyleId={appearanceStyleId}
+        onAppearanceStyleIdChange={setAppearanceStyleId}
+        resolvedTheme={resolvedTheme}
         readabilityPanelOpen={readabilityPanelOpen}
         onReadabilityPanelChange={(open) => {
           if (focusModeActive) return;
