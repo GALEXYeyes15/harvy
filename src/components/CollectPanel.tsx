@@ -135,6 +135,8 @@ type CollectPanelProps = {
   onAddPreviewToNotes?: (preview: string) => void;
   showOutliersView?: boolean;
   showCollectView?: boolean;
+  workspaceSidebarOpen?: boolean;
+  toolsSidebarOpen?: boolean;
 };
 
 export function CollectPanel({
@@ -143,6 +145,8 @@ export function CollectPanel({
   onAddPreviewToNotes,
   showOutliersView = true,
   showCollectView = true,
+  workspaceSidebarOpen = true,
+  toolsSidebarOpen = true,
 }: CollectPanelProps) {
   const [activeCollectView, setActiveCollectView] = useState<CollectSubView>(() =>
     showCollectView ? "collect" : "outliers",
@@ -395,7 +399,11 @@ export function CollectPanel({
             </button>
         </div>
         ) : showOutliersView ? (
-          <OutliersView onAddToNotes={onAddPreviewToNotes} />
+          <OutliersView
+            onAddToNotes={onAddPreviewToNotes}
+            workspaceSidebarOpen={workspaceSidebarOpen}
+            toolsSidebarOpen={toolsSidebarOpen}
+          />
         ) : null}
       </WorkspaceSectionMainContent>
 

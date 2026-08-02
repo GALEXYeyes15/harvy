@@ -60,6 +60,10 @@ import {
   readWorkspaceSettings,
   writeWorkspaceSettings,
 } from "../features/workspace/workspaceSettings";
+import {
+  readQuickLinksSettings,
+  writeQuickLinksSettings,
+} from "../features/quick-links/quickLinksSettings";
 import { SaveAsModal, type SaveAsOrganizeMode } from "./SaveAsModal";
 import type { EditorCommand } from "../features/editor/commands";
 import { documentTextForStats, ingestTextFileContent } from "../features/editor/documentMarkdown";
@@ -323,6 +327,9 @@ export function AppShell() {
   const [saveAsSubmitting, setSaveAsSubmitting] = useState(false);
   const [isTopChromeHidden, setIsTopChromeHidden] = useState(false);
   const [readabilityPanelOpen, setReadabilityPanelOpen] = useState(true);
+  const [showQuickLinks, setShowQuickLinks] = useState(
+    () => readQuickLinksSettings().showQuickLinks,
+  );
   /** In-memory buffer when no tabs open — not a saved file until persistence exists. */
   const [scratchDraftContent, setScratchDraftContent] = useState("");
   /** When set, scratch buffer last wrote to this path. */
@@ -436,6 +443,11 @@ export function AppShell() {
     const next = writeWorkspaceSettings({ showCollectView: enabled });
     setShowOutliersView(next.showOutliersView);
     setShowCollectView(next.showCollectView);
+  }, []);
+
+  const handleShowQuickLinksChange = useCallback((enabled: boolean) => {
+    const next = writeQuickLinksSettings({ showQuickLinks: enabled });
+    setShowQuickLinks(next.showQuickLinks);
   }, []);
 
   const showWorkspaceNavigation = enableCollect;
@@ -2147,6 +2159,7 @@ export function AppShell() {
       }}
       proofreadIssues={proofreadIssues}
       workspaceSection={activeWorkspaceSection}
+      showQuickLinks={showQuickLinks}
     />
   );
 
@@ -2243,6 +2256,8 @@ export function AppShell() {
               onAddPreviewToNotes={handleAddCollectPreviewToNotes}
               showOutliersView={showOutliersView}
               showCollectView={showCollectView}
+              workspaceSidebarOpen={isWorkspaceSidebarOpen}
+              toolsSidebarOpen={readabilityPanelOpen}
             />
           </div>
         ) : null}
@@ -2504,6 +2519,8 @@ export function AppShell() {
           if (focusModeActive) return;
           setReadabilityPanelOpen(open);
         }}
+        showQuickLinks={showQuickLinks}
+        onShowQuickLinksChange={handleShowQuickLinksChange}
         spellcheckEnabled={writingAssistancePrefs.spellcheck}
         grammarChecksEnabled={writingAssistancePrefs.grammarChecks}
         onSpellcheckChange={handleSpellcheckPref}

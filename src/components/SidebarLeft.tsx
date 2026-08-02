@@ -156,7 +156,7 @@ export function SidebarLeft({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search…"
-          className="mt-3 w-full rounded-md border-0 bg-mist px-2.5 py-2 text-[12px] text-ink placeholder:text-muted/65"
+          className="mt-3 w-full rounded-md border-0 bg-mist px-2.5 py-2 text-[12px] text-ink"
           aria-label="Search documents"
         />
       </div>

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, SquareArrowOutUpRight, SquarePen } from "lucide-react";
+import { Check, ChevronDown, Minus, Plus, SquareArrowOutUpRight, SquarePen } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
 import type { DocumentHeaderPrefs } from "../../features/editor/documentHeaderSettings";
 import type { FocusVisibilityPrefs } from "../../features/editor/focusVisibilitySettings";
@@ -42,8 +42,10 @@ import {
   readCustomAppearanceStyles,
   resetCyberAppearanceStyle,
   resolveStyleBodyFont,
+  resolveStyleTypography,
   seedsFromStyle,
   setLiveAppearancePreview,
+  STYLE_TYPOGRAPHY_LIMITS,
   styleWithSeeds,
   upsertCustomAppearanceStyle,
   writeCyberAppearanceStyle,
@@ -59,6 +61,17 @@ import {
   readOutliersSettings,
   writeOutliersSettings,
 } from "../../features/outliers/outliersSettings";
+import {
+  createQuickLink,
+  normalizeQuickLink,
+  normalizeQuickLinkUrl,
+  type QuickLink,
+} from "../../features/quick-links/quickLinks";
+import {
+  loadPersistedQuickLinks,
+  QUICK_LINKS_CHANGED_EVENT,
+  savePersistedQuickLinks,
+} from "../../features/quick-links/quickLinksPersistence";
 import { CenteredOverlayModal } from "../overlay/CenteredOverlayModal";
 import { CanvaColorPicker } from "./CanvaColorPicker";
 import { PhrasesCsvTable } from "./PhrasesCsvTable";
@@ -86,6 +99,8 @@ type SettingsModalProps = {
   systemPrefersDark: boolean;
   readabilityPanelOpen: boolean;
   onReadabilityPanelChange: (open: boolean) => void;
+  showQuickLinks: boolean;
+  onShowQuickLinksChange: (enabled: boolean) => void;
   spellcheckEnabled: boolean;
   grammarChecksEnabled: boolean;
   onSpellcheckChange: (enabled: boolean) => void;
@@ -120,6 +135,8 @@ export function SettingsModal({
   systemPrefersDark,
   readabilityPanelOpen,
   onReadabilityPanelChange,
+  showQuickLinks,
+  onShowQuickLinksChange,
   spellcheckEnabled,
   grammarChecksEnabled,
   onSpellcheckChange,
@@ -189,7 +206,6 @@ export function SettingsModal({
                 onEnableCollectChange={onEnableCollectChange}
                 showOutliersView={showOutliersView}
                 showCollectView={showCollectView}
-                onShowOutliersViewChange={onShowOutliersViewChange}
                 onShowCollectViewChange={onShowCollectViewChange}
               />
             ) : null}
@@ -219,6 +235,20 @@ export function SettingsModal({
                 onFocusModeChange={setFocusMode}
                 typewriterScroll={typewriterScroll}
                 onTypewriterChange={setTypewriterScroll}
+              />
+            ) : null}
+            {activeSection === "quickLinks" ? (
+              <QuickLinksPanel
+                showQuickLinks={showQuickLinks}
+                onShowQuickLinksChange={onShowQuickLinksChange}
+              />
+            ) : null}
+            {activeSection === "outliers" ? (
+              <OutliersPanel
+                enableCollect={enableCollect}
+                showOutliersView={showOutliersView}
+                showCollectView={showCollectView}
+                onShowOutliersViewChange={onShowOutliersViewChange}
               />
             ) : null}
             {activeSection === "parameters" ? (
@@ -289,20 +319,14 @@ function GeneralPanel({
   onEnableCollectChange,
   showOutliersView,
   showCollectView,
-  onShowOutliersViewChange,
   onShowCollectViewChange,
 }: {
   enableCollect: boolean;
   onEnableCollectChange: (enabled: boolean) => void;
   showOutliersView: boolean;
   showCollectView: boolean;
-  onShowOutliersViewChange: (enabled: boolean) => void;
   onShowCollectViewChange: (enabled: boolean) => void;
 }) {
-  const [fetchIntervalMinutes, setFetchIntervalMinutes] = useState(
-    () => readOutliersSettings().fetchIntervalMinutes,
-  );
-
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
@@ -321,16 +345,8 @@ function GeneralPanel({
       {enableCollect ? (
         <SettingsGroup
           label="Collect views"
-          hint="Keep at least one view on."
+          hint="Keep at least one Collect view on (Saved items or Outliers)."
         >
-          <ToggleRow
-            id="show-outliers-view"
-            label="Outliers"
-            description="Creator posts and Notes scored against your average."
-            checked={showOutliersView}
-            onChange={onShowOutliersViewChange}
-            disabled={showOutliersView && !showCollectView}
-          />
           <ToggleRow
             id="show-collect-view"
             label="Saved items"
@@ -341,31 +357,194 @@ function GeneralPanel({
           />
         </SettingsGroup>
       ) : null}
-      {enableCollect && showOutliersView ? (
-        <label className="flex items-start justify-between gap-4 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-medium text-ink">Outliers fetch interval</p>
-            <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-              Minutes between refreshes after you click Fetch posts. Default{" "}
-              {DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES}.
-            </p>
-          </div>
+    </div>
+  );
+}
+
+function QuickLinksPanel({
+  showQuickLinks,
+  onShowQuickLinksChange,
+}: {
+  showQuickLinks: boolean;
+  onShowQuickLinksChange: (enabled: boolean) => void;
+}) {
+  const [links, setLinks] = useState<QuickLink[]>(() => loadPersistedQuickLinks());
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftUrl, setDraftUrl] = useState("");
+  const [draftError, setDraftError] = useState<string | null>(null);
+
+  useEffect(() => {
+    savePersistedQuickLinks(links);
+  }, [links]);
+
+  useEffect(() => {
+    const sync = () => {
+      const next = loadPersistedQuickLinks();
+      setLinks((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+    };
+    window.addEventListener(QUICK_LINKS_CHANGED_EVENT, sync);
+    return () => window.removeEventListener(QUICK_LINKS_CHANGED_EVENT, sync);
+  }, []);
+
+  function handleAdd() {
+    const url = normalizeQuickLinkUrl(draftUrl);
+    if (!url) {
+      setDraftError("Enter a valid http, https, or mailto link.");
+      return;
+    }
+    const next = normalizeQuickLink(createQuickLink({ title: draftTitle, url }));
+    setLinks((prev) => [...prev, next]);
+    setDraftTitle("");
+    setDraftUrl("");
+    setDraftError(null);
+  }
+
+  return (
+    <div className="space-y-5">
+      <SettingsSectionHeader
+        title="Quick Links"
+        description="Save links you use often and show them below Notes."
+      />
+      <SettingsGroup label="Sidebar">
+        <ToggleRow
+          id="quick-links"
+          label="Show Quick Links"
+          description="Appear below Notes in the right sidebar."
+          checked={showQuickLinks}
+          onChange={onShowQuickLinksChange}
+        />
+      </SettingsGroup>
+
+      <div className="space-y-2 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
+        <p className="text-[13px] font-medium text-ink">Saved links</p>
+        <p className="text-[11px] leading-snug text-muted/75">
+          Add a title and URL. Links open in your browser.
+        </p>
+        <form
+          className="mt-2 space-y-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            handleAdd();
+          }}
+        >
           <input
-            type="number"
-            min={OUTLIERS_FETCH_INTERVAL_MIN_MINUTES}
-            max={OUTLIERS_FETCH_INTERVAL_MAX_MINUTES}
-            step={1}
-            value={fetchIntervalMinutes}
-            onChange={(e) => {
-              const next = clampOutliersFetchIntervalMinutes(Number(e.target.value));
-              setFetchIntervalMinutes(next);
-              writeOutliersSettings({ fetchIntervalMinutes: next });
-            }}
-            aria-label="Outliers fetch interval in minutes"
-            className="w-[4.5rem] shrink-0 rounded-md border-0 bg-canvas/45 px-2 py-1.5 text-right text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
+            type="text"
+            value={draftTitle}
+            onChange={(event) => setDraftTitle(event.target.value)}
+            placeholder="Title"
+            className="w-full rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
           />
-        </label>
-      ) : null}
+          <div className="flex items-center gap-2">
+            <input
+              type="url"
+              value={draftUrl}
+              onChange={(event) => {
+                setDraftUrl(event.target.value);
+                if (draftError) setDraftError(null);
+              }}
+              placeholder="https://…"
+              required
+              className="min-w-0 flex-1 rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
+            />
+            <button
+              type="submit"
+              className="shrink-0 rounded-md bg-ink px-2.5 py-2 text-[12px] font-medium text-page"
+            >
+              Add
+            </button>
+          </div>
+          {draftError ? (
+            <p className="text-[11px] leading-snug text-[#ff5a5a]">{draftError}</p>
+          ) : null}
+        </form>
+
+        {links.length === 0 ? (
+          <p className="pt-1 text-[12px] text-muted/65">No links yet.</p>
+        ) : (
+          <ul className={`${SETTINGS_DIVIDE_Y} mt-2 overflow-hidden rounded-md bg-canvas/35 dark:bg-canvas/25`}>
+            {links.map((link) => (
+              <li key={link.id} className="flex items-center gap-2 px-2.5 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] text-ink">{link.title}</p>
+                  <p className="truncate text-[11px] text-muted/65">{link.url}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLinks((prev) => prev.filter((row) => row.id !== link.id))}
+                  className="shrink-0 rounded-md px-2 py-1 text-[11px] text-muted/75 hover:text-ink"
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OutliersPanel({
+  enableCollect,
+  showOutliersView,
+  showCollectView,
+  onShowOutliersViewChange,
+}: {
+  enableCollect: boolean;
+  showOutliersView: boolean;
+  showCollectView: boolean;
+  onShowOutliersViewChange: (enabled: boolean) => void;
+}) {
+  const [fetchIntervalMinutes, setFetchIntervalMinutes] = useState(
+    () => readOutliersSettings().fetchIntervalMinutes,
+  );
+
+  return (
+    <div className="space-y-5">
+      <SettingsSectionHeader
+        title="Outliers"
+        description="Creator posts and Notes scored against your average."
+      />
+      <SettingsGroup
+        label="Collect"
+        hint={
+          enableCollect
+            ? "Keep at least one Collect view on (Outliers or Saved items)."
+            : "Turn on Collect in General to use Outliers in the workspace."
+        }
+      >
+        <ToggleRow
+          id="show-outliers-view"
+          label="Show Outliers"
+          description="Outliers view inside Collect."
+          checked={showOutliersView}
+          onChange={onShowOutliersViewChange}
+          disabled={!enableCollect || (showOutliersView && !showCollectView)}
+        />
+      </SettingsGroup>
+      <label className="flex items-start justify-between gap-4 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium text-ink">Fetch interval</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+            Minutes between refreshes after you click Fetch posts. Default{" "}
+            {DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES}.
+          </p>
+        </div>
+        <input
+          type="number"
+          min={OUTLIERS_FETCH_INTERVAL_MIN_MINUTES}
+          max={OUTLIERS_FETCH_INTERVAL_MAX_MINUTES}
+          step={1}
+          value={fetchIntervalMinutes}
+          onChange={(e) => {
+            const next = clampOutliersFetchIntervalMinutes(Number(e.target.value));
+            setFetchIntervalMinutes(next);
+            writeOutliersSettings({ fetchIntervalMinutes: next });
+          }}
+          aria-label="Outliers fetch interval in minutes"
+          className="w-[4.5rem] shrink-0 rounded-md border-0 bg-canvas/45 px-2 py-1.5 text-right text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
+        />
+      </label>
     </div>
   );
 }
@@ -807,6 +986,143 @@ function BodyFontPicker({
   );
 }
 
+type StyleTypographyTool = "letterSpacing" | "lineHeight";
+
+function formatTypographyValue(value: number, step: number): string {
+  const decimals = String(step).includes(".") ? String(step).split(".")[1]!.length : 0;
+  return value.toFixed(decimals);
+}
+
+function TypographyStepper({
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  ariaLabel,
+  tone = "panel",
+}: {
+  value: number;
+  onChange: (next: number) => void;
+  min: number;
+  max: number;
+  step: number;
+  ariaLabel: string;
+  tone?: "panel" | "popover";
+}) {
+  const display = formatTypographyValue(value, step);
+  const isPopover = tone === "popover";
+  return (
+    <div
+      className={
+        isPopover
+          ? "inline-flex h-9 items-center rounded-xl bg-white/[0.06] ring-1 ring-white/10"
+          : "inline-flex h-9 items-center rounded-xl bg-canvas/55 ring-1 ring-line/20 dark:bg-black/35 dark:ring-white/10"
+      }
+      role="group"
+      aria-label={ariaLabel}
+    >
+      <button
+        type="button"
+        aria-label={`Decrease ${ariaLabel.toLowerCase()}`}
+        disabled={value <= min}
+        onClick={() => onChange(Math.max(min, Number((value - step).toFixed(4))))}
+        className={
+          isPopover
+            ? "flex h-9 w-8 items-center justify-center rounded-l-xl text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-35"
+            : "flex h-9 w-8 items-center justify-center rounded-l-xl text-ink/75 transition-colors hover:bg-ink/[0.05] hover:text-ink disabled:opacity-35 dark:hover:bg-white/[0.06]"
+        }
+      >
+        <Minus size={14} strokeWidth={2} aria-hidden />
+      </button>
+      <input
+        type="text"
+        inputMode="decimal"
+        aria-label={ariaLabel}
+        value={display}
+        onChange={(event) => {
+          const raw = event.target.value.trim();
+          if (raw === "" || raw === "-" || raw === ".") return;
+          const parsed = Number(raw);
+          if (!Number.isFinite(parsed)) return;
+          onChange(parsed);
+        }}
+        onBlur={() => onChange(value)}
+        className={
+          isPopover
+            ? "h-9 w-12 border-0 bg-transparent text-center text-[13px] tabular-nums text-white outline-none"
+            : "h-9 w-12 border-0 bg-transparent text-center text-[13px] tabular-nums text-ink outline-none"
+        }
+      />
+      <button
+        type="button"
+        aria-label={`Increase ${ariaLabel.toLowerCase()}`}
+        disabled={value >= max}
+        onClick={() => onChange(Math.min(max, Number((value + step).toFixed(4))))}
+        className={
+          isPopover
+            ? "flex h-9 w-8 items-center justify-center rounded-r-xl text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-35"
+            : "flex h-9 w-8 items-center justify-center rounded-r-xl text-ink/75 transition-colors hover:bg-ink/[0.05] hover:text-ink disabled:opacity-35 dark:hover:bg-white/[0.06]"
+        }
+      >
+        <Plus size={14} strokeWidth={2} aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+function TextColorToolIcon({ color }: { color: string }) {
+  return (
+    <span className="relative flex h-[1.35rem] w-[1.15rem] items-end justify-center" aria-hidden>
+      <span className="pb-1 text-[15px] font-semibold leading-none" style={{ color }}>
+        A
+      </span>
+      <span
+        className="absolute inset-x-0 bottom-0 h-[3px] rounded-full"
+        style={{ backgroundColor: color }}
+      />
+    </span>
+  );
+}
+
+function LetterSpacingToolIcon() {
+  return (
+    <svg width="20" height="18" viewBox="0 0 20 18" fill="none" aria-hidden className="text-current">
+      <path
+        d="M6.2 13.5L9.1 4.5h1.8l2.9 9h-1.55l-.62-2.05H8.35L7.73 13.5H6.2Zm2.45-3.35h2.7L10.05 6.2h-.1L8.65 10.15Z"
+        fill="currentColor"
+      />
+      <path
+        d="M2.25 15.25H17.75M3.6 15.25l1.35 1.35M3.6 15.25l1.35-1.35M16.4 15.25l-1.35 1.35M16.4 15.25l-1.35-1.35"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function LineHeightToolIcon() {
+  return (
+    <svg width="20" height="18" viewBox="0 0 20 18" fill="none" aria-hidden className="text-current">
+      <path
+        d="M3.25 2.75v12.5M3.25 2.75L1.9 4.2M3.25 2.75L4.6 4.2M3.25 15.25L1.9 13.8M3.25 15.25L4.6 13.8"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.5 4.25h9M7.5 7.5h9M7.5 10.75h9M7.5 14h9"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function StyleEditorForm({
   style,
   onChange,
@@ -825,13 +1141,27 @@ function StyleEditorForm({
   nameLocked?: boolean;
 }) {
   const seeds = seedsFromStyle(style);
+  const typography = resolveStyleTypography(style);
   const [activeSeed, setActiveSeed] = useState<keyof StyleBasics | null>(null);
+  const [activeTypographyTool, setActiveTypographyTool] = useState<StyleTypographyTool | null>(
+    null,
+  );
   const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
+  const [toolPos, setToolPos] = useState<{ top: number; left: number } | null>(null);
   const swatchRefs = useRef<Partial<Record<keyof StyleBasics, HTMLButtonElement | null>>>({});
+  const typographyToolRefs = useRef<Partial<Record<StyleTypographyTool, HTMLButtonElement | null>>>(
+    {},
+  );
   const pickerRootRef = useRef<HTMLDivElement>(null);
+  const toolPopoverRef = useRef<HTMLDivElement>(null);
 
   function setSeed(key: keyof StyleBasics, value: string) {
     onChange(styleWithSeeds(style, { ...seeds, [key]: value }));
+  }
+
+  function setTypography<K extends keyof typeof typography>(key: K, value: number) {
+    const next = resolveStyleTypography({ ...typography, [key]: value });
+    onChange({ ...style, ...next });
   }
 
   useLayoutEffect(() => {
@@ -839,9 +1169,6 @@ function StyleEditorForm({
       setPickerPos(null);
       return;
     }
-    const swatch = swatchRefs.current[activeSeed];
-    if (!swatch) return;
-
     function place() {
       const el = activeSeed ? swatchRefs.current[activeSeed] : null;
       if (!el) return;
@@ -869,21 +1196,64 @@ function StyleEditorForm({
     };
   }, [activeSeed]);
 
+  useLayoutEffect(() => {
+    if (!activeTypographyTool) {
+      setToolPos(null);
+      return;
+    }
+    function place() {
+      const el = activeTypographyTool
+        ? typographyToolRefs.current[activeTypographyTool]
+        : null;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const popoverWidth = 148;
+      const popoverHeight = 52;
+      const gap = 8;
+      const left = Math.min(
+        Math.max(8, rect.left + rect.width / 2 - popoverWidth / 2),
+        window.innerWidth - popoverWidth - 8,
+      );
+      let top = rect.bottom + gap;
+      if (top + popoverHeight > window.innerHeight - 8) {
+        top = Math.max(8, rect.top - popoverHeight - gap);
+      }
+      setToolPos({ top, left });
+    }
+
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [activeTypographyTool]);
+
   useEffect(() => {
-    if (!activeSeed) return;
+    if (!activeSeed && !activeTypographyTool) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
       if (pickerRootRef.current?.contains(target)) return;
-      const swatch = swatchRefs.current[activeSeed];
-      if (swatch?.contains(target)) return;
-      setActiveSeed(null);
+      if (toolPopoverRef.current?.contains(target)) return;
+      if (activeSeed) {
+        const swatch = swatchRefs.current[activeSeed];
+        if (swatch?.contains(target)) return;
+        setActiveSeed(null);
+      }
+      if (activeTypographyTool) {
+        const toolBtn = typographyToolRefs.current[activeTypographyTool];
+        if (toolBtn?.contains(target)) return;
+        setActiveTypographyTool(null);
+      }
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopImmediatePropagation();
       setActiveSeed(null);
+      setActiveTypographyTool(null);
     };
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("keydown", onKeyDown, true);
@@ -891,17 +1261,19 @@ function StyleEditorForm({
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown, true);
     };
-  }, [activeSeed]);
+  }, [activeSeed, activeTypographyTool]);
 
-  const fields: Array<{
-    key: keyof StyleBasics;
+  const surfaceFields: Array<{
+    key: "canvas" | "muted" | "accent";
     label: string;
   }> = [
     { key: "canvas", label: "Canvas" },
-    { key: "ink", label: "Ink" },
-    { key: "muted", label: "Muted" },
-    { key: "accent", label: "Accent" },
+    { key: "muted", label: "Boxes" },
+    { key: "accent", label: "Icons" },
   ];
+
+  const inkOpen = activeSeed === "ink";
+  const inkColor = normalizeHexColor(seeds.ink);
 
   return (
     <div className="space-y-4 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
@@ -959,42 +1331,130 @@ function StyleEditorForm({
         />
       </div>
 
-      <div className="space-y-2 rounded-md bg-page/60 px-3 py-2.5 dark:bg-page/35">
-        <p className="text-[11px] leading-snug text-muted/75">
-          Muted colors the notes, search, and tab bar; accent colors chrome icons. Click a
-          swatch to pick a color.
-        </p>
-      </div>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <TypographyStepper
+            value={typography.fontSizePx}
+            min={STYLE_TYPOGRAPHY_LIMITS.fontSizePx.min}
+            max={STYLE_TYPOGRAPHY_LIMITS.fontSizePx.max}
+            step={STYLE_TYPOGRAPHY_LIMITS.fontSizePx.step}
+            ariaLabel="Font size"
+            onChange={(fontSizePx) => setTypography("fontSizePx", fontSizePx)}
+          />
 
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-        {fields.map((field) => {
-          const color = normalizeHexColor(seeds[field.key]);
-          const open = activeSeed === field.key;
-          return (
-            <div key={field.key} className="relative flex items-center gap-2.5">
-              <button
-                ref={(el) => {
-                  swatchRefs.current[field.key] = el;
-                }}
-                type="button"
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={() => setActiveSeed(open ? null : field.key)}
-                aria-expanded={open}
-                aria-haspopup="dialog"
-                aria-label={`${field.label} color`}
-                title={`${field.label}: ${color}`}
-                className={`relative h-8 w-11 shrink-0 overflow-hidden rounded-lg ring-2 transition-[box-shadow] ${
-                  open
-                    ? "ring-[var(--color-focus-ring,#5f6a7a)]"
-                    : "ring-[var(--color-focus-ring,#5f6a7a)]/55 hover:ring-[var(--color-focus-ring,#5f6a7a)]"
-                }`}
-              >
-                <span className="absolute inset-0" style={{ backgroundColor: color }} />
-              </button>
-              <span className="text-[13px] text-ink/90">{field.label}</span>
-            </div>
-          );
-        })}
+          <button
+            ref={(el) => {
+              swatchRefs.current.ink = el;
+            }}
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => {
+              setActiveTypographyTool(null);
+              setActiveSeed(inkOpen ? null : "ink");
+            }}
+            aria-expanded={inkOpen}
+            aria-haspopup="dialog"
+            aria-label="Text color"
+            title={`Text color: ${inkColor}`}
+            className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
+              inkOpen
+                ? "bg-ink/[0.08] text-ink dark:bg-white/[0.08]"
+                : "text-ink/80 hover:bg-ink/[0.05] hover:text-ink dark:hover:bg-white/[0.06]"
+            }`}
+          >
+            <TextColorToolIcon color={inkColor} />
+          </button>
+
+          <button
+            ref={(el) => {
+              typographyToolRefs.current.letterSpacing = el;
+            }}
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => {
+              setActiveSeed(null);
+              setActiveTypographyTool(
+                activeTypographyTool === "letterSpacing" ? null : "letterSpacing",
+              );
+            }}
+            aria-expanded={activeTypographyTool === "letterSpacing"}
+            aria-haspopup="dialog"
+            aria-label="Letter spacing"
+            title={`Letter spacing: ${formatTypographyValue(
+              typography.letterSpacingPx,
+              STYLE_TYPOGRAPHY_LIMITS.letterSpacingPx.step,
+            )}px`}
+            className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
+              activeTypographyTool === "letterSpacing"
+                ? "bg-ink/[0.08] text-ink dark:bg-white/[0.08]"
+                : "text-ink/80 hover:bg-ink/[0.05] hover:text-ink dark:hover:bg-white/[0.06]"
+            }`}
+          >
+            <LetterSpacingToolIcon />
+          </button>
+
+          <button
+            ref={(el) => {
+              typographyToolRefs.current.lineHeight = el;
+            }}
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => {
+              setActiveSeed(null);
+              setActiveTypographyTool(
+                activeTypographyTool === "lineHeight" ? null : "lineHeight",
+              );
+            }}
+            aria-expanded={activeTypographyTool === "lineHeight"}
+            aria-haspopup="dialog"
+            aria-label="Line height"
+            title={`Line height: ${formatTypographyValue(
+              typography.lineHeight,
+              STYLE_TYPOGRAPHY_LIMITS.lineHeight.step,
+            )}`}
+            className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
+              activeTypographyTool === "lineHeight"
+                ? "bg-ink/[0.08] text-ink dark:bg-white/[0.08]"
+                : "text-ink/80 hover:bg-ink/[0.05] hover:text-ink dark:hover:bg-white/[0.06]"
+            }`}
+          >
+            <LineHeightToolIcon />
+          </button>
+        </div>
+
+        <div className="flex flex-nowrap items-center gap-x-3.5">
+          {surfaceFields.map((field) => {
+            const color = normalizeHexColor(seeds[field.key]);
+            const open = activeSeed === field.key;
+            return (
+              <div key={field.key} className="relative flex min-w-0 items-center gap-2">
+                <button
+                  ref={(el) => {
+                    swatchRefs.current[field.key] = el;
+                  }}
+                  type="button"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => {
+                    setActiveTypographyTool(null);
+                    setActiveSeed(open ? null : field.key);
+                  }}
+                  aria-expanded={open}
+                  aria-haspopup="dialog"
+                  aria-label={`${field.label} color`}
+                  title={`${field.label}: ${color}`}
+                  className={`relative h-6 w-8 shrink-0 overflow-hidden rounded-md ring-2 transition-[box-shadow] ${
+                    open
+                      ? "ring-[var(--color-focus-ring,#5f6a7a)]"
+                      : "ring-[var(--color-focus-ring,#5f6a7a)]/55 hover:ring-[var(--color-focus-ring,#5f6a7a)]"
+                  }`}
+                >
+                  <span className="absolute inset-0" style={{ backgroundColor: color }} />
+                </button>
+                <span className="text-[12px] text-ink/90">{field.label}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {activeSeed && pickerPos
@@ -1002,7 +1462,11 @@ function StyleEditorForm({
             <div
               ref={pickerRootRef}
               role="dialog"
-              aria-label={`${fields.find((f) => f.key === activeSeed)?.label ?? "Color"} color picker`}
+              aria-label={`${
+                activeSeed === "ink"
+                  ? "Text"
+                  : surfaceFields.find((f) => f.key === activeSeed)?.label ?? "Color"
+              } color picker`}
               className="fixed z-[400]"
               style={{ top: pickerPos.top, left: pickerPos.left }}
               onPointerDown={(event) => event.stopPropagation()}
@@ -1011,6 +1475,44 @@ function StyleEditorForm({
                 value={normalizeHexColor(seeds[activeSeed])}
                 onChange={(hex) => setSeed(activeSeed, hex)}
               />
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {activeTypographyTool && toolPos
+        ? createPortal(
+            <div
+              ref={toolPopoverRef}
+              role="dialog"
+              aria-label={
+                activeTypographyTool === "letterSpacing" ? "Letter spacing" : "Line height"
+              }
+              className="fixed z-[400] rounded-xl bg-[#1a1a1a] p-2 shadow-[0_12px_40px_rgba(0,0,0,0.45)] ring-1 ring-white/10"
+              style={{ top: toolPos.top, left: toolPos.left }}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {activeTypographyTool === "letterSpacing" ? (
+                <TypographyStepper
+                  tone="popover"
+                  value={typography.letterSpacingPx}
+                  min={STYLE_TYPOGRAPHY_LIMITS.letterSpacingPx.min}
+                  max={STYLE_TYPOGRAPHY_LIMITS.letterSpacingPx.max}
+                  step={STYLE_TYPOGRAPHY_LIMITS.letterSpacingPx.step}
+                  ariaLabel="Letter spacing"
+                  onChange={(letterSpacingPx) => setTypography("letterSpacingPx", letterSpacingPx)}
+                />
+              ) : (
+                <TypographyStepper
+                  tone="popover"
+                  value={typography.lineHeight}
+                  min={STYLE_TYPOGRAPHY_LIMITS.lineHeight.min}
+                  max={STYLE_TYPOGRAPHY_LIMITS.lineHeight.max}
+                  step={STYLE_TYPOGRAPHY_LIMITS.lineHeight.step}
+                  ariaLabel="Line height"
+                  onChange={(lineHeight) => setTypography("lineHeight", lineHeight)}
+                />
+              )}
             </div>,
             document.body,
           )

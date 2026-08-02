@@ -19,7 +19,7 @@ const COMPACT_SECTION_GAP = "my-6";
 const COMPACT_ROWS_GAP = "space-y-3";
 
 const TAB_LABELS: Record<SidebarToolsMode, string> = {
-  notes: "Note",
+  notes: "Notes",
   edit: "Edit",
 };
 
@@ -37,6 +37,8 @@ export type SidebarRightProps = {
   onNotesChange: (value: string) => void;
   /** Toggle the separate Notes pop-out window. */
   onToggleNotesPopout?: () => void;
+  /** When on, Quick Links appears below Notes. */
+  showQuickLinks?: boolean;
   proofreadIssues?: ProofreadIssue[];
   workspaceSection?: WorkspaceSection;
 };
@@ -218,6 +220,7 @@ export function SidebarRight({
   notes,
   onNotesChange,
   onToggleNotesPopout,
+  showQuickLinks = false,
   proofreadIssues = [],
   workspaceSection = "write",
 }: SidebarRightProps) {
@@ -232,6 +235,7 @@ export function SidebarRight({
             notes={notes}
             onNotesChange={onNotesChange}
             onTogglePopout={onToggleNotesPopout}
+            showQuickLinks={showQuickLinks}
           />
         </div>
       </div>
@@ -262,6 +266,7 @@ export function SidebarRight({
             notes={notes}
             onNotesChange={onNotesChange}
             onTogglePopout={onToggleNotesPopout}
+            showQuickLinks={showQuickLinks}
           />
         ) : (
           <EditSidebarView

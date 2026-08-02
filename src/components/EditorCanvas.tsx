@@ -216,7 +216,7 @@ export function EditorCanvas({
           "aria-multiline": "true",
           spellcheck: spellcheckEnabled ? "true" : "false",
           class:
-            "editor-content ProseMirror-harvy block min-h-full w-full max-w-none resize-none bg-transparent pb-10 pt-1 text-[18px] font-normal text-ink caret-muted outline-none focus:outline-none placeholder:text-muted/45 sm:pb-11 sm:pt-1.5 " +
+            "editor-content ProseMirror-harvy block min-h-full w-full max-w-none resize-none bg-transparent pb-10 pt-1 font-normal text-ink caret-muted outline-none focus:outline-none placeholder:text-ink/45 sm:pb-11 sm:pt-1.5 " +
             (isEditable ? "cursor-text" : "cursor-default select-text opacity-75"),
         },
         handleKeyDown: (view, event) => {

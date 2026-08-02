@@ -42,6 +42,25 @@ export type StylePalette = {
   focusRing: string;
 };
 
+/** Editor body typography stored on custom / cyber styles. */
+export type StyleTypography = {
+  fontSizePx: number;
+  letterSpacingPx: number;
+  lineHeight: number;
+};
+
+export const DEFAULT_STYLE_TYPOGRAPHY: StyleTypography = {
+  fontSizePx: 18,
+  letterSpacingPx: 0.2,
+  lineHeight: 1.75,
+};
+
+export const STYLE_TYPOGRAPHY_LIMITS = {
+  fontSizePx: { min: 12, max: 48, step: 0.5 },
+  letterSpacingPx: { min: -1.5, max: 6, step: 0.1 },
+  lineHeight: { min: 1.1, max: 2.8, step: 0.05 },
+} as const;
+
 export type CustomAppearanceStyle = {
   id: string;
   name: string;
@@ -53,7 +72,52 @@ export type CustomAppearanceStyle = {
   bodyFont?: AppearanceBodyFontId;
   /** @deprecated Prefer `bodyFont`. */
   monoContent?: boolean;
+  /** Editor body size in CSS pixels. */
+  fontSizePx?: number;
+  /** Editor body letter-spacing in CSS pixels. */
+  letterSpacingPx?: number;
+  /** Editor body unitless line-height. */
+  lineHeight?: number;
 };
+
+function clampTypographyValue(value: number, min: number, max: number, step: number): number {
+  const clamped = Math.min(max, Math.max(min, value));
+  const decimals = String(step).includes(".") ? String(step).split(".")[1]!.length : 0;
+  const snapped = Math.round(clamped / step) * step;
+  return Number(snapped.toFixed(decimals));
+}
+
+export function resolveStyleTypography(style: Pick<
+  CustomAppearanceStyle,
+  "fontSizePx" | "letterSpacingPx" | "lineHeight"
+>): StyleTypography {
+  return {
+    fontSizePx: clampTypographyValue(
+      typeof style.fontSizePx === "number" && Number.isFinite(style.fontSizePx)
+        ? style.fontSizePx
+        : DEFAULT_STYLE_TYPOGRAPHY.fontSizePx,
+      STYLE_TYPOGRAPHY_LIMITS.fontSizePx.min,
+      STYLE_TYPOGRAPHY_LIMITS.fontSizePx.max,
+      STYLE_TYPOGRAPHY_LIMITS.fontSizePx.step,
+    ),
+    letterSpacingPx: clampTypographyValue(
+      typeof style.letterSpacingPx === "number" && Number.isFinite(style.letterSpacingPx)
+        ? style.letterSpacingPx
+        : DEFAULT_STYLE_TYPOGRAPHY.letterSpacingPx,
+      STYLE_TYPOGRAPHY_LIMITS.letterSpacingPx.min,
+      STYLE_TYPOGRAPHY_LIMITS.letterSpacingPx.max,
+      STYLE_TYPOGRAPHY_LIMITS.letterSpacingPx.step,
+    ),
+    lineHeight: clampTypographyValue(
+      typeof style.lineHeight === "number" && Number.isFinite(style.lineHeight)
+        ? style.lineHeight
+        : DEFAULT_STYLE_TYPOGRAPHY.lineHeight,
+      STYLE_TYPOGRAPHY_LIMITS.lineHeight.min,
+      STYLE_TYPOGRAPHY_LIMITS.lineHeight.max,
+      STYLE_TYPOGRAPHY_LIMITS.lineHeight.step,
+    ),
+  };
+}
 
 export function resolveStyleBodyFont(style: CustomAppearanceStyle): AppearanceBodyFontId {
   if (isAppearanceBodyFontId(style.bodyFont)) return style.bodyFont;
@@ -216,6 +280,7 @@ export function readCyberAppearanceStyle(): CustomAppearanceStyle {
     if (!raw) return defaults;
     const parsed = JSON.parse(raw) as Partial<CustomAppearanceStyle>;
     if (isStyleBasics(parsed.seeds)) {
+      const typography = resolveStyleTypography(parsed);
       return styleWithSeeds(
         {
           ...defaults,
@@ -226,6 +291,7 @@ export function readCyberAppearanceStyle(): CustomAppearanceStyle {
           bodyFont: isAppearanceBodyFontId(parsed.bodyFont)
             ? parsed.bodyFont
             : bodyFontFromLegacyMono(parsed.monoContent),
+          ...typography,
         },
         parsed.seeds,
       );
@@ -233,6 +299,7 @@ export function readCyberAppearanceStyle(): CustomAppearanceStyle {
     if (!isStylePalette(parsed.light) || !isStylePalette(parsed.dark)) return defaults;
     const light = normalizeStylePalette(parsed.light)!;
     const dark = normalizeStylePalette(parsed.dark)!;
+    const typography = resolveStyleTypography(parsed);
     return {
       id: CYBER_STYLE_ID,
       name:
@@ -250,6 +317,7 @@ export function readCyberAppearanceStyle(): CustomAppearanceStyle {
       bodyFont: isAppearanceBodyFontId(parsed.bodyFont)
         ? parsed.bodyFont
         : bodyFontFromLegacyMono(parsed.monoContent),
+      ...typography,
     };
   } catch {
     return defaults;
@@ -260,6 +328,7 @@ export function writeCyberAppearanceStyle(style: CustomAppearanceStyle) {
   if (typeof window === "undefined") return;
   const seeds = seedsFromStyle(style);
   const next = styleWithSeeds(style, seeds);
+  const typography = resolveStyleTypography(next);
   localStorage.setItem(
     CYBER_STYLE_KEY,
     JSON.stringify({
@@ -268,6 +337,7 @@ export function writeCyberAppearanceStyle(style: CustomAppearanceStyle) {
       light: next.light,
       dark: next.dark,
       bodyFont: resolveStyleBodyFont(next),
+      ...typography,
     }),
   );
 }
@@ -333,7 +403,8 @@ export function readCustomAppearanceStyles(): CustomAppearanceStyle[] {
       const light = normalizeStylePalette(row.light);
       const dark = normalizeStylePalette(row.dark);
       if (!light || !dark) return [];
-      const base = { ...row, light, dark };
+      const typography = resolveStyleTypography(row);
+      const base = { ...row, light, dark, ...typography };
       if (base.seeds && isStyleBasics(base.seeds)) {
         return [styleWithSeeds(base, base.seeds)];
       }
@@ -437,17 +508,28 @@ function clearInlineStyleTokens(root: HTMLElement) {
     root.style.removeProperty(cssVar);
   }
   root.style.removeProperty("--font-content");
+  root.style.removeProperty("--editor-font-size");
+  root.style.removeProperty("--editor-letter-spacing");
+  root.style.removeProperty("--editor-line-height");
+}
+
+function applyInlineTypography(root: HTMLElement, typography: StyleTypography) {
+  root.style.setProperty("--editor-font-size", `${typography.fontSizePx}px`);
+  root.style.setProperty("--editor-letter-spacing", `${typography.letterSpacingPx}px`);
+  root.style.setProperty("--editor-line-height", String(typography.lineHeight));
 }
 
 function applyInlinePalette(
   root: HTMLElement,
   palette: StylePalette,
   bodyFont: AppearanceBodyFontId,
+  typography: StyleTypography,
 ) {
   for (const [key, cssVar] of TOKEN_VARS) {
     root.style.setProperty(cssVar, palette[key]);
   }
   root.style.setProperty("--font-content", appearanceBodyFontStack(bodyFont));
+  applyInlineTypography(root, typography);
 }
 
 /** In-editor draft; when set, `applyAppearanceStyle` keeps showing this instead of disk. */
@@ -489,7 +571,7 @@ function paintAppearanceStyle(style: CustomAppearanceStyle, resolvedTheme: Resol
 
   // Draft / custom / edited cyber: always paint the in-memory palette + body font.
   const palette = resolvedTheme === "dark" ? style.dark : style.light;
-  applyInlinePalette(root, palette, bodyFont);
+  applyInlinePalette(root, palette, bodyFont, resolveStyleTypography(style));
 }
 
 /**
@@ -525,7 +607,7 @@ export function applyAppearanceStyle(styleId: AppearanceStyleId, resolvedTheme: 
     ensureAppearanceBodyFontLoaded(bodyFont);
     if (hasCyberAppearanceOverrides()) {
       const palette = resolvedTheme === "dark" ? cyber.dark : cyber.light;
-      applyInlinePalette(root, palette, bodyFont);
+      applyInlinePalette(root, palette, bodyFont, resolveStyleTypography(cyber));
     } else {
       clearInlineStyleTokens(root);
       root.style.setProperty("--font-content", appearanceBodyFontStack(bodyFont));
@@ -546,7 +628,7 @@ export function applyAppearanceStyle(styleId: AppearanceStyleId, resolvedTheme: 
   const bodyFont = resolveStyleBodyFont(custom);
   ensureAppearanceBodyFontLoaded(bodyFont);
   const palette = resolvedTheme === "dark" ? custom.dark : custom.light;
-  applyInlinePalette(root, palette, bodyFont);
+  applyInlinePalette(root, palette, bodyFont, resolveStyleTypography(custom));
 }
 
 /** Stage RGB for native Notes window chrome. */

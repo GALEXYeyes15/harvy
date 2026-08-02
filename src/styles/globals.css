@@ -23,6 +23,10 @@
     --font-content:
       "Libre Baskerville", "Baskerville", "Baskerville Old Face", "Palatino", "Palatino Linotype",
       "Book Antiqua", Georgia, serif;
+    /* Editor body typography (overridden by custom / cyber style tokens). */
+    --editor-font-size: 18px;
+    --editor-letter-spacing: 0.2px;
+    --editor-line-height: 1.75;
     /* Light: unified warm paper canvas (editor, tabs, sidebars share one surface). */
     --color-canvas: #faf7f2;
     --color-panel: #faf7f2;
@@ -113,7 +117,7 @@
     font-family: var(--font-content);
   }
 
-  /* Solid wells for Notes + Search use mist (muted seed). */
+  /* Solid wells for Notes + Search use mist (Boxes seed). */
   html.cyber:not(.dark) #harvy-document-notes,
   html.cyber:not(.dark) #harvy-notes-popout,
   html.cyber:not(.dark) #harvy-workspace-search {
@@ -171,8 +175,9 @@
   /* Main writing surface — Baskerville / Libre Baskerville stack */
   .editor-content {
     font-family: var(--font-content);
-    line-height: 1.75;
-    letter-spacing: 0.2px;
+    font-size: var(--editor-font-size);
+    line-height: var(--editor-line-height);
+    letter-spacing: var(--editor-letter-spacing);
   }
 
   .harvy-doc-header {
@@ -221,12 +226,25 @@
 
   .harvy-doc-title::placeholder,
   .harvy-doc-subtitle::placeholder {
-    color: color-mix(in oklab, var(--color-muted) 72%, transparent);
+    color: color-mix(in oklab, var(--color-ink) 72%, transparent);
   }
 
   html.dark .harvy-doc-title::placeholder,
   html.dark .harvy-doc-subtitle::placeholder {
-    color: rgba(255, 255, 255, 0.32);
+    color: color-mix(in oklab, var(--color-ink) 32%, transparent);
+  }
+
+  /* Notes + workspace search — Tailwind opacity modifiers don't work on CSS-var colors. */
+  #harvy-document-notes::placeholder,
+  #harvy-notes-popout::placeholder,
+  #harvy-workspace-search::placeholder {
+    color: color-mix(in oklab, var(--color-ink) 65%, transparent);
+  }
+
+  html.dark #harvy-document-notes::placeholder,
+  html.dark #harvy-notes-popout::placeholder,
+  html.dark #harvy-workspace-search::placeholder {
+    color: color-mix(in oklab, var(--color-ink) 32%, transparent);
   }
 
   .harvy-doc-title:disabled,
@@ -234,19 +252,19 @@
     opacity: 0.85;
   }
 
-  /* Empty-document body placeholder (“Start writing…”) — Substack-style muted hint. */
+  /* Empty-document body placeholder (“Start writing…”) — same ink hue, low opacity. */
   .ProseMirror-harvy p.is-empty[data-placeholder]:not([data-placeholder=""])::before {
     content: attr(data-placeholder);
     float: left;
     height: 0;
     pointer-events: none;
-    color: color-mix(in oklab, var(--color-muted) 72%, transparent);
+    color: color-mix(in oklab, var(--color-ink) 72%, transparent);
     font-style: normal;
     font-weight: 400;
   }
 
   html.dark .ProseMirror-harvy p.is-empty[data-placeholder]:not([data-placeholder=""])::before {
-    color: rgba(255, 255, 255, 0.32);
+    color: color-mix(in oklab, var(--color-ink) 32%, transparent);
   }
 
   /* TipTap / ProseMirror rich text (matches former textarea rhythm) */
@@ -853,14 +871,14 @@
     color: var(--color-ink);
   }
 
-  /* Shared editor context menus — double-click menu + highlight formatting toolbar */
+  /* Shared editor context menus — double-click menu + highlight formatting toolbar (Boxes / mist). */
   .harvy-context-menu {
     position: absolute;
     z-index: 9999;
     min-width: 10.5rem;
     border: 1px solid color-mix(in oklab, var(--color-line) 90%, transparent);
     border-radius: 0.5rem;
-    background: var(--color-page);
+    background: var(--color-mist);
     padding: 0.125rem 0;
     font-family: var(--font-ui);
     font-size: 12px;
@@ -872,7 +890,7 @@
 
   html.dark .harvy-context-menu {
     border-color: color-mix(in oklab, white 12%, transparent);
-    background: #252525;
+    background: var(--color-mist);
     color: color-mix(in oklab, var(--color-ink) 88%, transparent);
   }
 
@@ -1031,7 +1049,7 @@
     width: 100%;
     border: 1px solid color-mix(in oklab, var(--color-line) 50%, transparent);
     border-radius: 0.25rem;
-    background: color-mix(in oklab, var(--color-ink) 4%, var(--color-page));
+    background: color-mix(in oklab, var(--color-ink) 4%, var(--color-mist));
     padding: 0.25rem 0.5rem;
     font-size: 12px;
     color: color-mix(in oklab, var(--color-ink) 90%, transparent);
@@ -1040,7 +1058,7 @@
 
   html.dark .harvy-context-menu__link-input {
     border-color: color-mix(in oklab, white 14%, transparent);
-    background: #222222;
+    background: color-mix(in oklab, var(--color-ink) 6%, var(--color-mist));
   }
 
   .harvy-context-menu__link-input:focus {
@@ -1873,11 +1891,11 @@
   }
 
   .harvy-outlier-search-input::placeholder {
-    color: color-mix(in oklab, var(--color-muted) 72%, transparent);
+    color: color-mix(in oklab, var(--color-ink) 72%, transparent);
   }
 
   html.dark .harvy-outlier-search-input::placeholder {
-    color: color-mix(in oklab, var(--color-muted) 80%, transparent);
+    color: color-mix(in oklab, var(--color-ink) 32%, transparent);
   }
 
   .harvy-outlier-search-actions {
@@ -1890,6 +1908,21 @@
 
   html.dark .harvy-outlier-search-actions {
     border-left-color: color-mix(in oklab, var(--color-line) 45%, transparent);
+  }
+
+  .harvy-outlier-masonry {
+    transition: opacity 140ms ease;
+  }
+
+  .harvy-outlier-masonry[data-reflowing="true"] {
+    opacity: 0.28;
+    transition-duration: 120ms;
+  }
+
+  .harvy-outlier-masonry-col {
+    transition:
+      flex-grow 500ms ease-in-out,
+      opacity 140ms ease;
   }
 
   .harvy-outlier-card {

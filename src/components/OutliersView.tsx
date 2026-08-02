@@ -613,8 +613,12 @@ function OutlierCard({
 
 export function OutliersView({
   onAddToNotes,
+  workspaceSidebarOpen = true,
+  toolsSidebarOpen = true,
 }: {
   onAddToNotes?: (text: string) => void;
+  workspaceSidebarOpen?: boolean;
+  toolsSidebarOpen?: boolean;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [accountLink, setAccountLink] = useState(() => readOutliersSettings().accountLink);
@@ -639,7 +643,10 @@ export function OutliersView({
     const { accountLink: savedAccount } = readOutliersSettings();
     return readSubstackOutliersCache(savedAccount)?.fetchedAt ?? null;
   });
-  const columnCount = useOutlierColumnCount();
+  const { columnCount, isReflowing } = useOutlierColumnCount({
+    workspaceSidebarOpen,
+    toolsSidebarOpen,
+  });
   const refreshTimerRef = useRef<number | null>(null);
   const refreshArmedRef = useRef(false);
   const accountLinkRef = useRef(accountLink);
@@ -859,9 +866,12 @@ export function OutliersView({
         </p>
       ) : null}
 
-      <div className="mt-5 flex gap-4">
+      <div
+        className="harvy-outlier-masonry mt-5 flex gap-4"
+        data-reflowing={isReflowing ? "true" : undefined}
+      >
         {masonryColumns.map((column, columnIndex) => (
-          <div key={columnIndex} className="flex min-w-0 flex-1 flex-col gap-4">
+          <div key={columnIndex} className="harvy-outlier-masonry-col flex min-w-0 flex-1 flex-col gap-4">
             {column.map((post) => (
               <OutlierCard
                 key={post.id}
