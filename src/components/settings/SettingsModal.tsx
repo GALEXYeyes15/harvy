@@ -926,19 +926,19 @@ function BodyFontPicker({
         aria-label="Body font"
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-left text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
+        className="flex w-full items-center justify-between gap-2 rounded-md border-0 bg-mist px-2.5 py-2 text-left text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-[var(--color-focus-ring)]/45"
         style={{ fontFamily: selected.stack }}
       >
         <span className="min-w-0 truncate">{selected.label}</span>
         <ChevronDown
           size={14}
           strokeWidth={2}
-          className={`shrink-0 text-muted/70 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`shrink-0 text-ink/55 transition-transform ${open ? "rotate-180" : ""}`}
           aria-hidden
         />
       </button>
       {open ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-md bg-page shadow-[0_12px_40px_rgba(0,0,0,0.28)] ring-1 ring-line/40 dark:bg-[#1e1e1e] dark:ring-white/10">
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-md bg-mist shadow-[0_12px_40px_rgba(0,0,0,0.28)] ring-1 ring-line/30">
           <ul role="listbox" aria-label="Body font" className="max-h-56 overflow-y-auto py-1">
             {fonts.map((font) => {
               const isSelected = font.id === value;
@@ -952,8 +952,8 @@ function BodyFontPicker({
                       onChange(font.id);
                       setOpen(false);
                     }}
-                    className={`flex w-full items-center gap-2 px-2.5 py-2 text-left text-[13px] text-ink hover:bg-mist/80 dark:hover:bg-white/[0.06] ${
-                      isSelected ? "bg-mist/55 dark:bg-white/[0.04]" : ""
+                    className={`flex w-full items-center gap-2 px-2.5 py-2 text-left text-[13px] text-ink hover:bg-ink/[0.06] ${
+                      isSelected ? "bg-ink/[0.08]" : ""
                     }`}
                     style={{ fontFamily: font.stack }}
                   >
@@ -975,7 +975,7 @@ function BodyFontPicker({
                 setOpen(false);
                 void openAddFontsWindow();
               }}
-              className="w-full rounded-md px-2.5 py-2 text-left text-[13px] font-medium text-ink hover:bg-mist/80 dark:hover:bg-white/[0.06]"
+              className="w-full rounded-md px-2.5 py-2 text-left text-[13px] font-medium text-ink hover:bg-ink/[0.06]"
             >
               Add Fonts
             </button>
@@ -1276,7 +1276,7 @@ function StyleEditorForm({
   const inkColor = normalizeHexColor(seeds.ink);
 
   return (
-    <div className="space-y-4 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
+    <div className="space-y-4 rounded-lg bg-stage/80 px-3.5 py-3 ring-1 ring-line/15 dark:bg-ink/[0.02]">
       <div className="flex items-center justify-between gap-3">
         <p className="text-[13px] font-semibold text-ink">Edit theme</p>
         <div className="flex items-center gap-2">
@@ -1313,7 +1313,7 @@ function StyleEditorForm({
           value={style.name}
           disabled={nameLocked}
           onChange={(e) => onChange({ ...style, name: e.target.value })}
-          className="mt-1 w-full rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-canvas/35"
+          className="mt-1 w-full rounded-md border-0 bg-mist px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-[var(--color-focus-ring)]/45 disabled:cursor-not-allowed disabled:opacity-60"
         />
       </label>
 
