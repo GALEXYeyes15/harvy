@@ -100,6 +100,7 @@ pub fn run() {
             commands::substack::fetch_substack_posts,
             commands::substack::fetch_substack_comments,
             commands::google_fonts::fetch_google_fonts_catalog,
+            commands::color_picker::pick_screen_color,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1198,7 +1198,8 @@ function StyleEditorForm({
   const toolPopoverRef = useRef<HTMLDivElement>(null);
 
   function setSeed(key: keyof StyleBasics, value: string) {
-    onChange(styleWithSeeds(style, { ...seeds, [key]: value }));
+    const currentSeeds = seedsFromStyle(style);
+    onChange(styleWithSeeds(style, { ...currentSeeds, [key]: value }));
   }
 
   function setTypography<K extends keyof typeof typography>(key: K, value: number) {
@@ -1518,6 +1519,7 @@ function StyleEditorForm({
               onPointerDown={(event) => event.stopPropagation()}
             >
               <CanvaColorPicker
+                key={activeSeed}
                 value={normalizeHexColor(seeds[activeSeed])}
                 onChange={(hex) => setSeed(activeSeed, hex)}
               />

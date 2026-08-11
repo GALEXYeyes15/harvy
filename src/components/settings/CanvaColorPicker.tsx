@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Pipette } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   looksLikeHexTyping,
   resolveColorInput,
 } from "../../theme/resolveColorInput";
+import { isTauriRuntime } from "../../features/save/saveRuntime";
 
 type Hsv = { h: number; s: number; v: number };
 
@@ -84,6 +86,37 @@ function hsvToHex(hsv: Hsv): string {
   return toHex(hsvToRgb(hsv.h, hsv.s, hsv.v));
 }
 
+/** Hue stops before wrapping back to red at the right edge of the slider. */
+const HUE_SLIDER_MAX = 300;
+
+function hexesNearlyEqual(a: string, b: string): boolean {
+  const aa = parseHex(a);
+  const bb = parseHex(b);
+  if (!aa || !bb) return a.toLowerCase() === b.toLowerCase();
+  return (
+    Math.abs(aa[0] - bb[0]) <= 1 &&
+    Math.abs(aa[1] - bb[1]) <= 1 &&
+    Math.abs(aa[2] - bb[2]) <= 1
+  );
+}
+
+/** Prefer the live hue when hex round-trips would snap across the red seam or gray out hue. */
+function hexToHsvPreserving(hex: string, previous: Hsv): Hsv {
+  const next = hexToHsv(hex);
+  if (next.s < 0.002 || next.v < 0.002) {
+    return { h: previous.h, s: next.s, v: next.v };
+  }
+  if (hexesNearlyEqual(hsvToHex(previous), hex)) {
+    return { h: previous.h, s: next.s, v: next.v };
+  }
+  // Near-red colors decode near h=0; keep a high hue if we were already on that side.
+  if (previous.h > HUE_SLIDER_MAX - 20 && next.h < 40) {
+    const kept = { h: previous.h, s: next.s, v: next.v };
+    if (hexesNearlyEqual(hsvToHex(kept), hex)) return kept;
+  }
+  return next;
+}
+
 /** Only accept a full 6-digit hex while typing (never expand 3-digit mid-edit). */
 function normalizeHexInputStrict(value: string): string | null {
   const trimmed = value.trim();
@@ -126,19 +159,22 @@ export function CanvaColorPicker({ value, onChange, className = "" }: CanvaColor
   const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(value));
   const [hexText, setHexText] = useState(() => hsvToHex(hexToHsv(value)).toUpperCase());
   const hsvRef = useRef(hsv);
+  const onChangeRef = useRef(onChange);
   const hexFocusedRef = useRef(false);
   const svRef = useRef<HTMLDivElement>(null);
   const hueRef = useRef<HTMLDivElement>(null);
   const dragging = useRef<"sv" | "hue" | null>(null);
+
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     hsvRef.current = hsv;
   }, [hsv]);
 
   useEffect(() => {
-    // Don't clobber the field while the user is typing.
-    if (hexFocusedRef.current) return;
-    const next = hexToHsv(value);
+    // Don't clobber while typing or dragging (hex round-trips can snap hue to red).
+    if (hexFocusedRef.current || dragging.current) return;
+    const next = hexToHsvPreserving(value, hsvRef.current);
     setHsv(next);
     hsvRef.current = next;
     setHexText(hsvToHex(next).toUpperCase());
@@ -151,15 +187,15 @@ export function CanvaColorPicker({ value, onChange, className = "" }: CanvaColor
     if (!hexFocusedRef.current) {
       setHexText(hex.toUpperCase());
     }
-    onChange(hex);
+    onChangeRef.current(hex);
   }
 
   function commitHex(hex: string) {
-    const next = hexToHsv(hex);
+    const next = hexToHsvPreserving(hex, hsvRef.current);
     hsvRef.current = next;
     setHsv(next);
     setHexText(hex.toUpperCase());
-    onChange(hex);
+    onChangeRef.current(hex);
   }
 
   function pointerToSv(event: { clientX: number; clientY: number }) {
@@ -175,7 +211,8 @@ export function CanvaColorPicker({ value, onChange, className = "" }: CanvaColor
     const el = hueRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const h = clamp(((event.clientX - rect.left) / rect.width) * 360, 0, 359.99);
+    // Stop at magenta — don't wrap back to red on the far right.
+    const h = clamp(((event.clientX - rect.left) / rect.width) * HUE_SLIDER_MAX, 0, HUE_SLIDER_MAX);
     commit({ ...hsvRef.current, h });
   }
 
@@ -203,19 +240,33 @@ export function CanvaColorPicker({ value, onChange, className = "" }: CanvaColor
         EyeDropper?: new () => { open: () => Promise<{ sRGBHex: string }> };
       }
     ).EyeDropper;
-    if (!EyeDropperCtor) return;
+    if (EyeDropperCtor) {
+      try {
+        const result = await new EyeDropperCtor().open();
+        const hex = resolveColorInput(result.sRGBHex);
+        if (!hex) return;
+        commitHex(hex);
+      } catch {
+        // User cancelled.
+      }
+      return;
+    }
+
+    if (!isTauriRuntime()) return;
     try {
-      const result = await new EyeDropperCtor().open();
-      const hex = resolveColorInput(result.sRGBHex);
+      const hex = await invoke<string | null>("pick_screen_color");
       if (!hex) return;
-      commitHex(hex);
+      const normalized = resolveColorInput(hex);
+      if (normalized) commitHex(normalized);
     } catch {
-      // User cancelled.
+      // Unavailable or cancelled.
     }
   }
 
   const currentHex = hsvToHex(hsv);
-  const eyeDropperSupported = typeof window !== "undefined" && "EyeDropper" in window;
+  const eyeDropperSupported =
+    typeof window !== "undefined" &&
+    ("EyeDropper" in window || isTauriRuntime());
 
   return (
     <div
@@ -262,7 +313,7 @@ export function CanvaColorPicker({ value, onChange, className = "" }: CanvaColor
         className="relative mt-3 h-3 w-full cursor-ew-resize rounded-full"
         style={{
           background:
-            "linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)",
+            "linear-gradient(to right, #f00 0%, #ff0 20%, #0f0 40%, #0ff 60%, #00f 80%, #f0f 100%)",
         }}
         onPointerDown={(event: ReactPointerEvent<HTMLDivElement>) => {
           event.preventDefault();
@@ -284,7 +335,7 @@ export function CanvaColorPicker({ value, onChange, className = "" }: CanvaColor
         <span
           className="pointer-events-none absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
           style={{
-            left: `${(hsv.h / 360) * 100}%`,
+            left: `${(clamp(hsv.h, 0, HUE_SLIDER_MAX) / HUE_SLIDER_MAX) * 100}%`,
             backgroundColor: hueCss(hsv.h),
           }}
         />
@@ -341,7 +392,7 @@ export function CanvaColorPicker({ value, onChange, className = "" }: CanvaColor
           title={
             eyeDropperSupported
               ? "Pick color from screen"
-              : "Eyedropper isn’t supported in this browser"
+              : "Eyedropper isn’t available here"
           }
           aria-label="Eyedropper"
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#111] text-white/85 ring-1 ring-white/10 transition-colors hover:bg-[#222] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
