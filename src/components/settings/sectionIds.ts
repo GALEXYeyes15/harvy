@@ -1,24 +1,18 @@
 export type SettingsSectionId =
-  | "general"
-  | "appearance"
   | "editor"
-  | "quickLinks"
-  | "outliers"
-  | "parameters"
-  | "shortcuts"
+  | "sidebars"
+  | "collect"
+  | "appearance"
   | "encouragement"
-  | "files"
+  | "shortcuts"
   | "about";
 
 export const SETTINGS_NAV: { id: SettingsSectionId; label: string }[] = [
-  { id: "general", label: "General" },
   { id: "editor", label: "Editor" },
-  { id: "quickLinks", label: "Quick Links" },
-  { id: "outliers", label: "Outliers" },
+  { id: "sidebars", label: "Sidebars" },
+  { id: "collect", label: "Collect" },
   { id: "appearance", label: "Appearance" },
-  { id: "parameters", label: "Parameters" },
   { id: "encouragement", label: "Encouragement" },
   { id: "shortcuts", label: "Shortcuts" },
-  { id: "files", label: "Files" },
   { id: "about", label: "About" },
 ];

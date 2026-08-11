@@ -3,6 +3,7 @@ import {
   InputRule,
   nodeInputRule,
   textblockTypeInputRule,
+  textInputRule,
   wrappingInputRule,
 } from "@tiptap/core";
 import type { EditorState } from "@tiptap/pm/state";
@@ -33,7 +34,8 @@ function guardInputRule(rule: InputRule, guard: (state: EditorState) => boolean)
 }
 
 /**
- * Notion-style markdown shortcuts at block start (`- `, `* `, `1. `, `# `, `---`, etc.).
+ * Notion-style markdown shortcuts at block start (`- `, `* `, `1. `, `# `, `---`, etc.),
+ * plus inline `--` → em dash.
  * Uses real BulletList / OrderedList / Heading / HorizontalRule nodes (StarterKit).
  */
 export const HarvyMarkdownShortcuts = Extension.create({
@@ -45,6 +47,13 @@ export const HarvyMarkdownShortcuts = Extension.create({
     if (!bulletList || !orderedList || !heading) return [];
 
     const rules: InputRule[] = [
+      guardInputRule(
+        textInputRule({
+          find: /--$/,
+          replace: "—",
+        }),
+        isEligibleTextblock,
+      ),
       guardInputRule(
         wrappingInputRule({
           find: /^\s*([-+*])\s$/,
@@ -89,7 +98,7 @@ export const HarvyMarkdownShortcuts = Extension.create({
     }
 
     if (horizontalRule) {
-      // Third dash inserts a divider (TipTap default); ___ / *** need a trailing space.
+      // Third dash inserts a divider. `--` becomes an em dash first, so `—-` also matches.
       rules.push(
         guardInputRule(
           nodeInputRule({

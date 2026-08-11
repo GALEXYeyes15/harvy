@@ -19,6 +19,7 @@ export type { AppearanceBodyFontId };
 const STYLE_ID_KEY = "harvy-style";
 const CUSTOM_STYLES_KEY = "harvy:appearance-styles:v1";
 const CYBER_STYLE_KEY = "harvy:cyber-style:v1";
+const CLASSIC_TYPOGRAPHY_KEY = "harvy:classic-typography:v1";
 const LEGACY_THEME_KEY = "harvy-theme";
 
 /** Built-in default style (warm paper / charcoal). */
@@ -211,6 +212,45 @@ export function builtInCyberAppearanceStyle(): CustomAppearanceStyle {
     dark: { ...CYBER_DARK_PALETTE },
     bodyFont: CYBER_BODY_FONT_ID,
   };
+}
+
+/** Classic shell for the typography editor (colors stay on CSS theme tokens). */
+export function builtInClassicAppearanceStyle(): CustomAppearanceStyle {
+  return {
+    id: CLASSIC_STYLE_ID,
+    name: "Classic",
+    light: { ...DEFAULT_LIGHT_PALETTE },
+    dark: { ...DEFAULT_DARK_PALETTE },
+    bodyFont: DEFAULT_BODY_FONT_ID,
+    ...readClassicTypography(),
+  };
+}
+
+export function readClassicTypography(): StyleTypography {
+  if (typeof window === "undefined") return { ...DEFAULT_STYLE_TYPOGRAPHY };
+  try {
+    const raw = window.localStorage.getItem(CLASSIC_TYPOGRAPHY_KEY);
+    if (!raw) return { ...DEFAULT_STYLE_TYPOGRAPHY };
+    const parsed = JSON.parse(raw) as Partial<StyleTypography>;
+    return resolveStyleTypography(parsed);
+  } catch {
+    return { ...DEFAULT_STYLE_TYPOGRAPHY };
+  }
+}
+
+export function writeClassicTypography(partial: Partial<StyleTypography>): StyleTypography {
+  const next = resolveStyleTypography({ ...readClassicTypography(), ...partial });
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(CLASSIC_TYPOGRAPHY_KEY, JSON.stringify(next));
+  }
+  return next;
+}
+
+export function resetClassicTypography(): StyleTypography {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(CLASSIC_TYPOGRAPHY_KEY);
+  }
+  return { ...DEFAULT_STYLE_TYPOGRAPHY };
 }
 
 function isStyleBasics(value: unknown): value is StyleBasics {
@@ -566,6 +606,7 @@ function paintAppearanceStyle(style: CustomAppearanceStyle, resolvedTheme: Resol
 
   if (id === CLASSIC_STYLE_ID) {
     clearInlineStyleTokens(root);
+    applyInlineTypography(root, resolveStyleTypography(style));
     return;
   }
 
@@ -597,6 +638,7 @@ export function applyAppearanceStyle(styleId: AppearanceStyleId, resolvedTheme: 
   if (id === CLASSIC_STYLE_ID) {
     root.classList.remove("harvy-custom-style", "harvy-mono-content");
     clearInlineStyleTokens(root);
+    applyInlineTypography(root, readClassicTypography());
     return;
   }
 

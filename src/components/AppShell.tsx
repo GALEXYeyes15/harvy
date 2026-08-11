@@ -491,10 +491,6 @@ export function AppShell() {
     setWritingAssistancePrefs(writeWritingAssistancePrefs({ spellcheck }));
   }, []);
 
-  const handleGrammarChecksPref = useCallback((grammarChecks: boolean) => {
-    setWritingAssistancePrefs(writeWritingAssistancePrefs({ grammarChecks }));
-  }, []);
-
   const handleFocusVisibilityPrefChange = useCallback(
     (partial: Parameters<typeof writeFocusVisibilityPrefs>[0]) => {
       setFocusVisibilityPrefs(writeFocusVisibilityPrefs(partial));
@@ -2514,17 +2510,10 @@ export function AppShell() {
         onAppearanceStyleIdChange={setAppearanceStyleId}
         resolvedTheme={resolvedTheme}
         systemPrefersDark={systemPrefersDark}
-        readabilityPanelOpen={readabilityPanelOpen}
-        onReadabilityPanelChange={(open) => {
-          if (focusModeActive) return;
-          setReadabilityPanelOpen(open);
-        }}
         showQuickLinks={showQuickLinks}
         onShowQuickLinksChange={handleShowQuickLinksChange}
         spellcheckEnabled={writingAssistancePrefs.spellcheck}
-        grammarChecksEnabled={writingAssistancePrefs.grammarChecks}
         onSpellcheckChange={handleSpellcheckPref}
-        onGrammarChecksChange={handleGrammarChecksPref}
         focusVisibilityPrefs={focusVisibilityPrefs}
         onFocusVisibilityPrefChange={handleFocusVisibilityPrefChange}
         documentHeaderPrefs={documentHeaderPrefs}

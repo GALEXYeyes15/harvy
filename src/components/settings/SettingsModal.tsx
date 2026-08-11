@@ -38,8 +38,10 @@ import {
   createBlankCustomStyle,
   deleteCustomAppearanceStyle,
   hasCyberAppearanceOverrides,
+  builtInClassicAppearanceStyle,
   readCyberAppearanceStyle,
   readCustomAppearanceStyles,
+  resetClassicTypography,
   resetCyberAppearanceStyle,
   resolveStyleBodyFont,
   resolveStyleTypography,
@@ -48,6 +50,7 @@ import {
   STYLE_TYPOGRAPHY_LIMITS,
   styleWithSeeds,
   upsertCustomAppearanceStyle,
+  writeClassicTypography,
   writeCyberAppearanceStyle,
   type AppearanceStyleId,
   type CustomAppearanceStyle,
@@ -86,7 +89,14 @@ const PHRASES_EXPAND_PANEL_SIZE =
   "h-[min(720px,88vh)] w-[min(960px,92vw)] max-h-[88vh] max-w-[92vw]";
 
 const SETTINGS_DIVIDE_X = "divide-x divide-line/[0.12] dark:divide-[#6f6f6f]";
-const SETTINGS_DIVIDE_Y = "divide-y divide-line/[0.1] dark:divide-[#6f6f6f]";
+const SETTINGS_DIVIDE_Y = "divide-y divide-line/[0.12] dark:divide-white/[0.08]";
+/** Apple System Settings–style group: solid Boxes (mist) surface. */
+const SETTINGS_BOX = `overflow-hidden rounded-xl bg-mist ${SETTINGS_DIVIDE_Y}`;
+const SETTINGS_BOX_PAD = "rounded-xl bg-mist px-3.5 py-3";
+const SETTINGS_INLINE_INPUT =
+  "w-[4.5rem] shrink-0 rounded-md border-0 bg-page px-2 py-1.5 text-right text-[13px] text-ink outline-none ring-1 ring-line/15 focus:ring-[var(--color-focus-ring)]/45";
+const SETTINGS_FIELD_INPUT =
+  "rounded-md border-0 bg-page px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/15 focus:ring-[var(--color-focus-ring)]/45";
 
 type SettingsModalProps = {
   open: boolean;
@@ -97,14 +107,10 @@ type SettingsModalProps = {
   onAppearanceStyleIdChange: (id: AppearanceStyleId) => void;
   resolvedTheme: ResolvedTheme;
   systemPrefersDark: boolean;
-  readabilityPanelOpen: boolean;
-  onReadabilityPanelChange: (open: boolean) => void;
   showQuickLinks: boolean;
   onShowQuickLinksChange: (enabled: boolean) => void;
   spellcheckEnabled: boolean;
-  grammarChecksEnabled: boolean;
   onSpellcheckChange: (enabled: boolean) => void;
-  onGrammarChecksChange: (enabled: boolean) => void;
   focusVisibilityPrefs: FocusVisibilityPrefs;
   onFocusVisibilityPrefChange: (partial: Partial<FocusVisibilityPrefs>) => void;
   documentHeaderPrefs: DocumentHeaderPrefs;
@@ -133,14 +139,10 @@ export function SettingsModal({
   onAppearanceStyleIdChange,
   resolvedTheme,
   systemPrefersDark,
-  readabilityPanelOpen,
-  onReadabilityPanelChange,
   showQuickLinks,
   onShowQuickLinksChange,
   spellcheckEnabled,
-  grammarChecksEnabled,
   onSpellcheckChange,
-  onGrammarChecksChange,
   focusVisibilityPrefs,
   onFocusVisibilityPrefChange,
   documentHeaderPrefs,
@@ -159,9 +161,7 @@ export function SettingsModal({
   workspaceRootPath,
   onChooseWorkspaceFolder,
 }: SettingsModalProps) {
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>("general");
-  const [focusMode, setFocusMode] = useState(false);
-  const [typewriterScroll, setTypewriterScroll] = useState(false);
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>("editor");
 
   return (
     <CenteredOverlayModal
@@ -200,12 +200,33 @@ export function SettingsModal({
           </nav>
 
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-5">
-            {activeSection === "general" ? (
-              <GeneralPanel
+            {activeSection === "editor" ? (
+              <EditorPanel
+                spellcheckEnabled={spellcheckEnabled}
+                onSpellcheckChange={onSpellcheckChange}
+                focusVisibilityPrefs={focusVisibilityPrefs}
+                onFocusVisibilityPrefChange={onFocusVisibilityPrefChange}
+                documentHeaderPrefs={documentHeaderPrefs}
+                onDocumentHeaderPrefChange={onDocumentHeaderPrefChange}
+              />
+            ) : null}
+            {activeSection === "sidebars" ? (
+              <SidebarsPanel
+                workspaceRootPath={workspaceRootPath}
+                onChooseWorkspaceFolder={onChooseWorkspaceFolder}
+                showQuickLinks={showQuickLinks}
+                onShowQuickLinksChange={onShowQuickLinksChange}
+                parametersPrefs={parametersPrefs}
+                onParametersPrefsChange={onParametersPrefsChange}
+              />
+            ) : null}
+            {activeSection === "collect" ? (
+              <CollectSettingsPanel
                 enableCollect={enableCollect}
                 onEnableCollectChange={onEnableCollectChange}
                 showOutliersView={showOutliersView}
                 showCollectView={showCollectView}
+                onShowOutliersViewChange={onShowOutliersViewChange}
                 onShowCollectViewChange={onShowCollectViewChange}
               />
             ) : null}
@@ -219,53 +240,12 @@ export function SettingsModal({
                 systemPrefersDark={systemPrefersDark}
               />
             ) : null}
-            {activeSection === "editor" ? (
-              <EditorPanel
-                showReadabilityPanel={readabilityPanelOpen}
-                onReadabilityChange={onReadabilityPanelChange}
-                spellcheckEnabled={spellcheckEnabled}
-                grammarChecksEnabled={grammarChecksEnabled}
-                onSpellcheckChange={onSpellcheckChange}
-                onGrammarChecksChange={onGrammarChecksChange}
-                focusVisibilityPrefs={focusVisibilityPrefs}
-                onFocusVisibilityPrefChange={onFocusVisibilityPrefChange}
-                documentHeaderPrefs={documentHeaderPrefs}
-                onDocumentHeaderPrefChange={onDocumentHeaderPrefChange}
-                focusMode={focusMode}
-                onFocusModeChange={setFocusMode}
-                typewriterScroll={typewriterScroll}
-                onTypewriterChange={setTypewriterScroll}
-              />
-            ) : null}
-            {activeSection === "quickLinks" ? (
-              <QuickLinksPanel
-                showQuickLinks={showQuickLinks}
-                onShowQuickLinksChange={onShowQuickLinksChange}
-              />
-            ) : null}
-            {activeSection === "outliers" ? (
-              <OutliersPanel
-                enableCollect={enableCollect}
-                showOutliersView={showOutliersView}
-                showCollectView={showCollectView}
-                onShowOutliersViewChange={onShowOutliersViewChange}
-              />
-            ) : null}
-            {activeSection === "parameters" ? (
-              <ParametersPanel prefs={parametersPrefs} onChange={onParametersPrefsChange} />
-            ) : null}
             {activeSection === "shortcuts" ? <HotkeysPanel /> : null}
             {activeSection === "encouragement" ? (
               <EncouragementPanel
                 prefs={encouragementPrefs}
                 onChange={onEncouragementPrefsChange}
                 onTest={onTestEncouragement}
-              />
-            ) : null}
-            {activeSection === "files" ? (
-              <FilesPanel
-                workspaceRootPath={workspaceRootPath}
-                onChooseWorkspaceFolder={onChooseWorkspaceFolder}
               />
             ) : null}
             {activeSection === "about" ? <SettingsAboutSection /> : null}
@@ -295,18 +275,29 @@ function SettingsSectionHeader({
 function SettingsGroup({
   label,
   hint,
+  labelStyle = "caps",
   children,
 }: {
-  label: string;
+  label?: string;
   hint?: string;
+  /** Caps = existing settings group; italic = page subsection titles from the settings outline. */
+  labelStyle?: "caps" | "italic";
   children: ReactNode;
 }) {
   return (
     <div>
-      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-        {label}
-      </p>
-      <ul className={`${SETTINGS_DIVIDE_Y} overflow-hidden rounded-lg bg-mist/80 dark:bg-ink/[0.035]`}>
+      {label ? (
+        <p
+          className={
+            labelStyle === "italic"
+              ? "mb-2 text-[12px] italic leading-snug text-muted/75"
+              : "mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50"
+          }
+        >
+          {label}
+        </p>
+      ) : null}
+      <ul className={SETTINGS_BOX}>
         {children}
       </ul>
       {hint ? <p className="mt-2 text-[11px] leading-snug text-muted/70">{hint}</p> : null}
@@ -314,59 +305,99 @@ function SettingsGroup({
   );
 }
 
-function GeneralPanel({
+function CollectSettingsPanel({
   enableCollect,
   onEnableCollectChange,
   showOutliersView,
   showCollectView,
+  onShowOutliersViewChange,
   onShowCollectViewChange,
 }: {
   enableCollect: boolean;
   onEnableCollectChange: (enabled: boolean) => void;
   showOutliersView: boolean;
   showCollectView: boolean;
+  onShowOutliersViewChange: (enabled: boolean) => void;
   onShowCollectViewChange: (enabled: boolean) => void;
 }) {
+  const [fetchIntervalMinutes, setFetchIntervalMinutes] = useState(
+    () => readOutliersSettings().fetchIntervalMinutes,
+  );
+
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
-        title="General"
-        description="Workspace features and Collect."
+        title="Collect"
+        description="Research views in the workspace rail."
       />
-      <SettingsGroup label="Collect">
+      <SettingsGroup hint="Keep at least one Collect view on (Outliers or Avatar).">
         <ToggleRow
           id="enable-collect"
-          label="Show Collect"
+          label="Enable Collect"
           description="Add Collect to the left workspace rail."
           checked={enableCollect}
           onChange={onEnableCollectChange}
         />
+        <ToggleRow
+          id="show-outliers-view"
+          label="Show Outliers"
+          description="Creator posts and Notes scored against your average."
+          checked={showOutliersView}
+          onChange={onShowOutliersViewChange}
+          disabled={!enableCollect || (showOutliersView && !showCollectView)}
+        />
+        <ToggleRow
+          id="show-collect-view"
+          label="Show Avatar"
+          description="Your Collect table of saved research."
+          checked={showCollectView}
+          onChange={onShowCollectViewChange}
+          disabled={!enableCollect || (showCollectView && !showOutliersView)}
+        />
       </SettingsGroup>
-      {enableCollect ? (
-        <SettingsGroup
-          label="Collect views"
-          hint="Keep at least one Collect view on (Saved items or Outliers)."
-        >
-          <ToggleRow
-            id="show-collect-view"
-            label="Saved items"
-            description="Your Collect table of saved research."
-            checked={showCollectView}
-            onChange={onShowCollectViewChange}
-            disabled={showCollectView && !showOutliersView}
+      {enableCollect && showOutliersView ? (
+        <label className={`flex items-start justify-between gap-4 ${SETTINGS_BOX_PAD}`}>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-ink">Fetch interval</p>
+            <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+              Minutes between Outliers refreshes after you click Fetch posts. Default{" "}
+              {DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES}.
+            </p>
+          </div>
+          <input
+            type="number"
+            min={OUTLIERS_FETCH_INTERVAL_MIN_MINUTES}
+            max={OUTLIERS_FETCH_INTERVAL_MAX_MINUTES}
+            step={1}
+            value={fetchIntervalMinutes}
+            onChange={(e) => {
+              const next = clampOutliersFetchIntervalMinutes(Number(e.target.value));
+              setFetchIntervalMinutes(next);
+              writeOutliersSettings({ fetchIntervalMinutes: next });
+            }}
+            aria-label="Outliers fetch interval in minutes"
+            className={SETTINGS_INLINE_INPUT}
           />
-        </SettingsGroup>
+        </label>
       ) : null}
     </div>
   );
 }
 
-function QuickLinksPanel({
+function SidebarsPanel({
+  workspaceRootPath,
+  onChooseWorkspaceFolder,
   showQuickLinks,
   onShowQuickLinksChange,
+  parametersPrefs,
+  onParametersPrefsChange,
 }: {
+  workspaceRootPath: string | null;
+  onChooseWorkspaceFolder?: () => void | Promise<void>;
   showQuickLinks: boolean;
   onShowQuickLinksChange: (enabled: boolean) => void;
+  parametersPrefs: ParametersPrefs;
+  onParametersPrefsChange: (partial: Partial<ParametersPrefs>) => void;
 }) {
   const [links, setLinks] = useState<QuickLink[]>(() => loadPersistedQuickLinks());
   const [draftTitle, setDraftTitle] = useState("");
@@ -402,149 +433,131 @@ function QuickLinksPanel({
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
-        title="Quick Links"
-        description="Save links you use often and show them below Notes."
+        title="Sidebars"
+        description="Workspace files, Parameters, Quick Links, and upcoming tools."
       />
-      <SettingsGroup label="Sidebar">
-        <ToggleRow
-          id="quick-links"
-          label="Show Quick Links"
-          description="Appear below Notes in the right sidebar."
-          checked={showQuickLinks}
-          onChange={onShowQuickLinksChange}
-        />
-      </SettingsGroup>
 
-      <div className="space-y-2 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
-        <p className="text-[13px] font-medium text-ink">Saved links</p>
-        <p className="text-[11px] leading-snug text-muted/75">
-          Add a title and URL. Links open in your browser.
-        </p>
-        <form
-          className="mt-2 space-y-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            handleAdd();
-          }}
-        >
-          <input
-            type="text"
-            value={draftTitle}
-            onChange={(event) => setDraftTitle(event.target.value)}
-            placeholder="Title"
-            className="w-full rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
-          />
-          <div className="flex items-center gap-2">
-            <input
-              type="url"
-              value={draftUrl}
-              onChange={(event) => {
-                setDraftUrl(event.target.value);
-                if (draftError) setDraftError(null);
-              }}
-              placeholder="https://…"
-              required
-              className="min-w-0 flex-1 rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
-            />
-            <button
-              type="submit"
-              className="shrink-0 rounded-md bg-ink px-2.5 py-2 text-[12px] font-medium text-page"
-            >
-              Add
-            </button>
-          </div>
-          {draftError ? (
-            <p className="text-[11px] leading-snug text-[#ff5a5a]">{draftError}</p>
-          ) : null}
-        </form>
-
-        {links.length === 0 ? (
-          <p className="pt-1 text-[12px] text-muted/65">No links yet.</p>
-        ) : (
-          <ul className={`${SETTINGS_DIVIDE_Y} mt-2 overflow-hidden rounded-md bg-canvas/35 dark:bg-canvas/25`}>
-            {links.map((link) => (
-              <li key={link.id} className="flex items-center gap-2 px-2.5 py-2">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] text-ink">{link.title}</p>
-                  <p className="truncate text-[11px] text-muted/65">{link.url}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setLinks((prev) => prev.filter((row) => row.id !== link.id))}
-                  className="shrink-0 rounded-md px-2 py-1 text-[11px] text-muted/75 hover:text-ink"
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function OutliersPanel({
-  enableCollect,
-  showOutliersView,
-  showCollectView,
-  onShowOutliersViewChange,
-}: {
-  enableCollect: boolean;
-  showOutliersView: boolean;
-  showCollectView: boolean;
-  onShowOutliersViewChange: (enabled: boolean) => void;
-}) {
-  const [fetchIntervalMinutes, setFetchIntervalMinutes] = useState(
-    () => readOutliersSettings().fetchIntervalMinutes,
-  );
-
-  return (
-    <div className="space-y-5">
-      <SettingsSectionHeader
-        title="Outliers"
-        description="Creator posts and Notes scored against your average."
-      />
-      <SettingsGroup
-        label="Collect"
-        hint={
-          enableCollect
-            ? "Keep at least one Collect view on (Outliers or Saved items)."
-            : "Turn on Collect in General to use Outliers in the workspace."
-        }
-      >
-        <ToggleRow
-          id="show-outliers-view"
-          label="Show Outliers"
-          description="Outliers view inside Collect."
-          checked={showOutliersView}
-          onChange={onShowOutliersViewChange}
-          disabled={!enableCollect || (showOutliersView && !showCollectView)}
-        />
-      </SettingsGroup>
-      <label className="flex items-start justify-between gap-4 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-medium text-ink">Fetch interval</p>
-          <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-            Minutes between refreshes after you click Fetch posts. Default{" "}
-            {DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES}.
+      <div>
+        <p className="mb-2 text-[12px] italic leading-snug text-muted/75">Left</p>
+        <div className={SETTINGS_BOX_PAD}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+            Change files
           </p>
+          {workspaceRootPath ? (
+            <p className="mt-1 break-all text-[13px] font-medium tracking-tight text-ink">
+              {workspaceRootPath}
+            </p>
+          ) : (
+            <p className="mt-1 text-[13px] font-medium tracking-tight text-muted/80">
+              No folder selected
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void onChooseWorkspaceFolder?.()}
+            className="mt-3 rounded-md bg-page px-3 py-2 text-[12px] font-medium text-ink ring-1 ring-line/15 transition-colors hover:bg-ink/[0.04]"
+          >
+            {workspaceRootPath ? "Change folder" : "Choose folder"}
+          </button>
         </div>
-        <input
-          type="number"
-          min={OUTLIERS_FETCH_INTERVAL_MIN_MINUTES}
-          max={OUTLIERS_FETCH_INTERVAL_MAX_MINUTES}
-          step={1}
-          value={fetchIntervalMinutes}
-          onChange={(e) => {
-            const next = clampOutliersFetchIntervalMinutes(Number(e.target.value));
-            setFetchIntervalMinutes(next);
-            writeOutliersSettings({ fetchIntervalMinutes: next });
-          }}
-          aria-label="Outliers fetch interval in minutes"
-          className="w-[4.5rem] shrink-0 rounded-md border-0 bg-canvas/45 px-2 py-1.5 text-right text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
-        />
-      </label>
+      </div>
+
+      <div className="space-y-5">
+        <p className="text-[12px] italic leading-snug text-muted/75">Right</p>
+
+        <div>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+            Parameters
+          </p>
+          <ParametersFields prefs={parametersPrefs} onChange={onParametersPrefsChange} />
+        </div>
+
+        <SettingsGroup>
+          <ToggleRow
+            id="enable-ai-check"
+            label="Enable AI check"
+            description="Coming soon."
+            checked={false}
+            onChange={() => {}}
+            disabled
+          />
+          <ToggleRow
+            id="quick-links"
+            label="Quick Links"
+            description="Show saved links below Notes."
+            checked={showQuickLinks}
+            onChange={onShowQuickLinksChange}
+          />
+        </SettingsGroup>
+
+        {showQuickLinks ? (
+          <div className={`space-y-2 ${SETTINGS_BOX_PAD}`}>
+            <p className="text-[13px] font-medium text-ink">Saved links</p>
+            <p className="text-[11px] leading-snug text-muted/75">
+              Add a title and URL. Links open in your browser.
+            </p>
+            <form
+              className="mt-2 space-y-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleAdd();
+              }}
+            >
+              <input
+                type="text"
+                value={draftTitle}
+                onChange={(event) => setDraftTitle(event.target.value)}
+                placeholder="Title"
+                className={`w-full ${SETTINGS_FIELD_INPUT}`}
+              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="url"
+                  value={draftUrl}
+                  onChange={(event) => {
+                    setDraftUrl(event.target.value);
+                    if (draftError) setDraftError(null);
+                  }}
+                  placeholder="https://…"
+                  required
+                  className={`min-w-0 flex-1 ${SETTINGS_FIELD_INPUT}`}
+                />
+                <button
+                  type="submit"
+                  className="shrink-0 rounded-md bg-ink px-2.5 py-2 text-[12px] font-medium text-page"
+                >
+                  Add
+                </button>
+              </div>
+              {draftError ? (
+                <p className="text-[11px] leading-snug text-[#ff5a5a]">{draftError}</p>
+              ) : null}
+            </form>
+
+            {links.length === 0 ? (
+              <p className="pt-1 text-[12px] text-muted/65">No links yet.</p>
+            ) : (
+              <ul className={`${SETTINGS_DIVIDE_Y} mt-2 overflow-hidden rounded-lg bg-page/70`}>
+                {links.map((link) => (
+                  <li key={link.id} className="flex items-center gap-2 px-2.5 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] text-ink">{link.title}</p>
+                      <p className="truncate text-[11px] text-muted/65">{link.url}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setLinks((prev) => prev.filter((row) => row.id !== link.id))}
+                      className="shrink-0 rounded-md px-2 py-1 text-[11px] text-muted/75 hover:text-ink"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -620,8 +633,20 @@ function AppearancePanel({
     beginEditing(current);
   }
 
+  function openEditClassic() {
+    beginEditing(builtInClassicAppearanceStyle());
+  }
+
   function saveEditor() {
     if (!editor) return;
+    if (editor.id === CLASSIC_STYLE_ID) {
+      writeClassicTypography(resolveStyleTypography(editor));
+      setEditor(null);
+      setLiveAppearancePreview(null, resolvedTheme);
+      onAppearanceStyleIdChange(CLASSIC_STYLE_ID);
+      applyAppearanceStyle(CLASSIC_STYLE_ID, resolvedTheme);
+      return;
+    }
     if (editor.id === CYBER_STYLE_ID) {
       writeCyberAppearanceStyle({
         ...editor,
@@ -656,6 +681,13 @@ function AppearancePanel({
 
   function removeEditorStyle() {
     if (!editor) return;
+    if (editor.id === CLASSIC_STYLE_ID) {
+      resetClassicTypography();
+      setEditor(null);
+      setLiveAppearancePreview(null, resolvedTheme);
+      applyAppearanceStyle(appearanceStyleId, resolvedTheme);
+      return;
+    }
     if (editor.id === CYBER_STYLE_ID) {
       resetCyberAppearanceStyle();
       setCyberStyle(readCyberAppearanceStyle());
@@ -717,6 +749,7 @@ function AppearancePanel({
             bodyFontId="libre-baskerville"
             previewStyle={{ backgroundColor: "#faf7f2", color: "#2a2622" }}
             onSelect={selectClassicLight}
+            onEdit={openEditClassic}
           />
           <StylePreviewCard
             label="Classic Dark"
@@ -725,6 +758,7 @@ function AppearancePanel({
             bodyFontId="libre-baskerville"
             previewStyle={{ backgroundColor: "#1d1d1d", color: "#e5e5e5" }}
             onSelect={selectClassicDark}
+            onEdit={openEditClassic}
           />
           <StylePreviewCard
             label={
@@ -766,7 +800,7 @@ function AppearancePanel({
             className="group flex w-[5.25rem] flex-col items-center gap-1.5"
             aria-label="Add new theme"
           >
-            <span className="flex h-[4.75rem] w-[4.75rem] items-center justify-center rounded-xl bg-mist/80 text-[1.75rem] font-light text-ink/70 ring-1 ring-line/35 transition-colors group-hover:bg-mist group-hover:text-ink dark:bg-ink/[0.04] dark:ring-white/10">
+            <span className="flex h-[4.75rem] w-[4.75rem] items-center justify-center rounded-xl bg-mist text-[1.75rem] font-light text-ink/70 transition-colors group-hover:text-ink">
               +
             </span>
             <span className="text-center text-[11px] text-muted/80">Add New</span>
@@ -780,16 +814,21 @@ function AppearancePanel({
           onChange={updateEditor}
           onSave={saveEditor}
           onCancel={cancelEditor}
+          typographyOnly={editor.id === CLASSIC_STYLE_ID}
           onDelete={
-            editor.id === CYBER_STYLE_ID
-              ? hasCyberAppearanceOverrides()
-                ? removeEditorStyle
-                : undefined
-              : customStyles.some((s) => s.id === editor.id)
-                ? removeEditorStyle
-                : undefined
+            editor.id === CLASSIC_STYLE_ID
+              ? removeEditorStyle
+              : editor.id === CYBER_STYLE_ID
+                ? hasCyberAppearanceOverrides()
+                  ? removeEditorStyle
+                  : undefined
+                : customStyles.some((s) => s.id === editor.id)
+                  ? removeEditorStyle
+                  : undefined
           }
-          deleteLabel={editor.id === CYBER_STYLE_ID ? "Reset" : "Delete"}
+          deleteLabel={
+            editor.id === CLASSIC_STYLE_ID || editor.id === CYBER_STYLE_ID ? "Reset" : "Delete"
+          }
         />
       ) : null}
     </div>
@@ -1131,6 +1170,7 @@ function StyleEditorForm({
   onDelete,
   deleteLabel = "Delete",
   nameLocked = false,
+  typographyOnly = false,
 }: {
   style: CustomAppearanceStyle;
   onChange: (next: CustomAppearanceStyle) => void;
@@ -1139,6 +1179,8 @@ function StyleEditorForm({
   onDelete?: () => void;
   deleteLabel?: string;
   nameLocked?: boolean;
+  /** Classic: only font size / letter spacing / line height. */
+  typographyOnly?: boolean;
 }) {
   const seeds = seedsFromStyle(style);
   const typography = resolveStyleTypography(style);
@@ -1165,7 +1207,7 @@ function StyleEditorForm({
   }
 
   useLayoutEffect(() => {
-    if (!activeSeed) {
+    if (!activeSeed || typographyOnly) {
       setPickerPos(null);
       return;
     }
@@ -1194,7 +1236,7 @@ function StyleEditorForm({
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
     };
-  }, [activeSeed]);
+  }, [activeSeed, typographyOnly]);
 
   useLayoutEffect(() => {
     if (!activeTypographyTool) {
@@ -1232,29 +1274,25 @@ function StyleEditorForm({
 
   useEffect(() => {
     if (!activeSeed && !activeTypographyTool) return;
-    const onPointerDown = (event: PointerEvent) => {
+    function onPointerDown(event: PointerEvent) {
       const target = event.target as Node | null;
       if (!target) return;
-      if (pickerRootRef.current?.contains(target)) return;
-      if (toolPopoverRef.current?.contains(target)) return;
       if (activeSeed) {
         const swatch = swatchRefs.current[activeSeed];
-        if (swatch?.contains(target)) return;
+        if (swatch?.contains(target) || pickerRootRef.current?.contains(target)) return;
         setActiveSeed(null);
       }
       if (activeTypographyTool) {
         const toolBtn = typographyToolRefs.current[activeTypographyTool];
-        if (toolBtn?.contains(target)) return;
+        if (toolBtn?.contains(target) || toolPopoverRef.current?.contains(target)) return;
         setActiveTypographyTool(null);
       }
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
+    }
+    function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
       setActiveSeed(null);
       setActiveTypographyTool(null);
-    };
+    }
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("keydown", onKeyDown, true);
     return () => {
@@ -1306,30 +1344,34 @@ function StyleEditorForm({
         </div>
       </div>
 
-      <label className="block">
-        <span className="text-[11px] text-muted/75">Name</span>
-        <input
-          type="text"
-          value={style.name}
-          disabled={nameLocked}
-          onChange={(e) => onChange({ ...style, name: e.target.value })}
-          className="mt-1 w-full rounded-md border-0 bg-mist px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-[var(--color-focus-ring)]/45 disabled:cursor-not-allowed disabled:opacity-60"
-        />
-      </label>
+      {!typographyOnly ? (
+        <>
+          <label className="block">
+            <span className="text-[11px] text-muted/75">Name</span>
+            <input
+              type="text"
+              value={style.name}
+              disabled={nameLocked}
+              onChange={(e) => onChange({ ...style, name: e.target.value })}
+              className="mt-1 w-full rounded-md border-0 bg-mist px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-[var(--color-focus-ring)]/45 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+          </label>
 
-      <div className="block">
-        <span className="text-[11px] text-muted/75">Body font</span>
-        <BodyFontPicker
-          value={resolveStyleBodyFont(style)}
-          onChange={(bodyFont) =>
-            onChange({
-              ...style,
-              bodyFont,
-              monoContent: undefined,
-            })
-          }
-        />
-      </div>
+          <div className="block">
+            <span className="text-[11px] text-muted/75">Body font</span>
+            <BodyFontPicker
+              value={resolveStyleBodyFont(style)}
+              onChange={(bodyFont) =>
+                onChange({
+                  ...style,
+                  bodyFont,
+                  monoContent: undefined,
+                })
+              }
+            />
+          </div>
+        </>
+      ) : null}
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
@@ -1342,28 +1384,30 @@ function StyleEditorForm({
             onChange={(fontSizePx) => setTypography("fontSizePx", fontSizePx)}
           />
 
-          <button
-            ref={(el) => {
-              swatchRefs.current.ink = el;
-            }}
-            type="button"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => {
-              setActiveTypographyTool(null);
-              setActiveSeed(inkOpen ? null : "ink");
-            }}
-            aria-expanded={inkOpen}
-            aria-haspopup="dialog"
-            aria-label="Text color"
-            title={`Text color: ${inkColor}`}
-            className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
-              inkOpen
-                ? "bg-ink/[0.08] text-ink dark:bg-white/[0.08]"
-                : "text-ink/80 hover:bg-ink/[0.05] hover:text-ink dark:hover:bg-white/[0.06]"
-            }`}
-          >
-            <TextColorToolIcon color={inkColor} />
-          </button>
+          {!typographyOnly ? (
+            <button
+              ref={(el) => {
+                swatchRefs.current.ink = el;
+              }}
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => {
+                setActiveTypographyTool(null);
+                setActiveSeed(inkOpen ? null : "ink");
+              }}
+              aria-expanded={inkOpen}
+              aria-haspopup="dialog"
+              aria-label="Text color"
+              title={`Text color: ${inkColor}`}
+              className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
+                inkOpen
+                  ? "bg-ink/[0.08] text-ink dark:bg-white/[0.08]"
+                  : "text-ink/80 hover:bg-ink/[0.05] hover:text-ink dark:hover:bg-white/[0.06]"
+              }`}
+            >
+              <TextColorToolIcon color={inkColor} />
+            </button>
+          ) : null}
 
           <button
             ref={(el) => {
@@ -1422,42 +1466,44 @@ function StyleEditorForm({
           </button>
         </div>
 
-        <div className="flex flex-nowrap items-center gap-x-3.5">
-          {surfaceFields.map((field) => {
-            const color = normalizeHexColor(seeds[field.key]);
-            const open = activeSeed === field.key;
-            return (
-              <div key={field.key} className="relative flex min-w-0 items-center gap-2">
-                <button
-                  ref={(el) => {
-                    swatchRefs.current[field.key] = el;
-                  }}
-                  type="button"
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => {
-                    setActiveTypographyTool(null);
-                    setActiveSeed(open ? null : field.key);
-                  }}
-                  aria-expanded={open}
-                  aria-haspopup="dialog"
-                  aria-label={`${field.label} color`}
-                  title={`${field.label}: ${color}`}
-                  className={`relative h-6 w-8 shrink-0 overflow-hidden rounded-md ring-2 transition-[box-shadow] ${
-                    open
-                      ? "ring-[var(--color-focus-ring,#5f6a7a)]"
-                      : "ring-[var(--color-focus-ring,#5f6a7a)]/55 hover:ring-[var(--color-focus-ring,#5f6a7a)]"
-                  }`}
-                >
-                  <span className="absolute inset-0" style={{ backgroundColor: color }} />
-                </button>
-                <span className="text-[12px] text-ink/90">{field.label}</span>
-              </div>
-            );
-          })}
-        </div>
+        {!typographyOnly ? (
+          <div className="flex flex-nowrap items-center gap-x-3.5">
+            {surfaceFields.map((field) => {
+              const color = normalizeHexColor(seeds[field.key]);
+              const open = activeSeed === field.key;
+              return (
+                <div key={field.key} className="relative flex min-w-0 items-center gap-2">
+                  <button
+                    ref={(el) => {
+                      swatchRefs.current[field.key] = el;
+                    }}
+                    type="button"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => {
+                      setActiveTypographyTool(null);
+                      setActiveSeed(open ? null : field.key);
+                    }}
+                    aria-expanded={open}
+                    aria-haspopup="dialog"
+                    aria-label={`${field.label} color`}
+                    title={`${field.label}: ${color}`}
+                    className={`relative h-6 w-8 shrink-0 overflow-hidden rounded-md ring-2 transition-[box-shadow] ${
+                      open
+                        ? "ring-[var(--color-focus-ring,#5f6a7a)]"
+                        : "ring-[var(--color-focus-ring,#5f6a7a)]/55 hover:ring-[var(--color-focus-ring,#5f6a7a)]"
+                    }`}
+                  >
+                    <span className="absolute inset-0" style={{ backgroundColor: color }} />
+                  </button>
+                  <span className="text-[12px] text-ink/90">{field.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
-      {activeSeed && pickerPos
+      {!typographyOnly && activeSeed && pickerPos
         ? createPortal(
             <div
               ref={pickerRootRef}
@@ -1520,6 +1566,7 @@ function StyleEditorForm({
     </div>
   );
 }
+
 
 function normalizeHexColor(value: string): string {
   const raw = value.trim();
@@ -1610,34 +1657,36 @@ function EncouragementPanel({
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
           Interval (minutes)
         </p>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex min-w-[6.5rem] flex-col gap-1">
-            <span className="text-[11px] text-muted/75">From</span>
-            <input
-              type="number"
-              min={1}
-              max={240}
-              value={prefs.minMinutes}
-              onChange={(e) => updateRange({ minMinutes: Number(e.target.value) })}
-              className="w-full rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
-            />
-          </label>
-          <span className="pb-2 text-[12px] text-muted/55">to</span>
-          <label className="flex min-w-[6.5rem] flex-col gap-1">
-            <span className="text-[11px] text-muted/75">Until</span>
-            <input
-              type="number"
-              min={1}
-              max={240}
-              value={prefs.maxMinutes}
-              onChange={(e) => updateRange({ maxMinutes: Number(e.target.value) })}
-              className="w-full rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
-            />
-          </label>
+        <div className={SETTINGS_BOX_PAD}>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex min-w-[6.5rem] flex-col gap-1">
+              <span className="text-[11px] text-muted/75">From</span>
+              <input
+                type="number"
+                min={1}
+                max={240}
+                value={prefs.minMinutes}
+                onChange={(e) => updateRange({ minMinutes: Number(e.target.value) })}
+                className={`w-full ${SETTINGS_FIELD_INPUT}`}
+              />
+            </label>
+            <span className="pb-2 text-[12px] text-muted/55">to</span>
+            <label className="flex min-w-[6.5rem] flex-col gap-1">
+              <span className="text-[11px] text-muted/75">Until</span>
+              <input
+                type="number"
+                min={1}
+                max={240}
+                value={prefs.maxMinutes}
+                onChange={(e) => updateRange({ maxMinutes: Number(e.target.value) })}
+                className={`w-full ${SETTINGS_FIELD_INPUT}`}
+              />
+            </label>
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-muted/70">
+            Picks a random time in this range (e.g. 15–45).
+          </p>
         </div>
-        <p className="mt-2 text-[11px] leading-relaxed text-muted/70">
-          Picks a random time in this range (e.g. 15–45).
-        </p>
       </div>
 
       <div>
@@ -1711,44 +1760,28 @@ function EncouragementPanel({
 }
 
 function EditorPanel({
-  showReadabilityPanel,
-  onReadabilityChange,
   spellcheckEnabled,
-  grammarChecksEnabled,
   onSpellcheckChange,
-  onGrammarChecksChange,
   focusVisibilityPrefs,
   onFocusVisibilityPrefChange,
   documentHeaderPrefs,
   onDocumentHeaderPrefChange,
-  focusMode,
-  onFocusModeChange,
-  typewriterScroll,
-  onTypewriterChange,
 }: {
-  showReadabilityPanel: boolean;
-  onReadabilityChange: (v: boolean) => void;
   spellcheckEnabled: boolean;
-  grammarChecksEnabled: boolean;
   onSpellcheckChange: (v: boolean) => void;
-  onGrammarChecksChange: (v: boolean) => void;
   focusVisibilityPrefs: FocusVisibilityPrefs;
   onFocusVisibilityPrefChange: (partial: Partial<FocusVisibilityPrefs>) => void;
   documentHeaderPrefs: DocumentHeaderPrefs;
   onDocumentHeaderPrefChange: (partial: Partial<DocumentHeaderPrefs>) => void;
-  focusMode: boolean;
-  onFocusModeChange: (v: boolean) => void;
-  typewriterScroll: boolean;
-  onTypewriterChange: (v: boolean) => void;
 }) {
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
         title="Editor"
-        description="Writing surface, assistance, and chrome while you type."
+        description="Writing surface and chrome while you type."
       />
 
-      <SettingsGroup label="Document">
+      <SettingsGroup label="Document" labelStyle="italic">
         <ToggleRow
           id="show-document-title"
           label="Title"
@@ -1763,9 +1796,6 @@ function EditorPanel({
           checked={documentHeaderPrefs.showSubtitle}
           onChange={(v) => onDocumentHeaderPrefChange({ showSubtitle: v })}
         />
-      </SettingsGroup>
-
-      <SettingsGroup label="Assistance">
         <ToggleRow
           id="spellcheck"
           label="Spellcheck"
@@ -1773,39 +1803,23 @@ function EditorPanel({
           checked={spellcheckEnabled}
           onChange={onSpellcheckChange}
         />
-        <ToggleRow
-          id="grammar-checks"
-          label="Writing hints"
-          description="Light underlines for spacing, repetition, and style."
-          checked={grammarChecksEnabled}
-          onChange={onGrammarChecksChange}
-        />
-      </SettingsGroup>
-
-      <SettingsGroup label="Sidebar">
-        <ToggleRow
-          id="readability-panel"
-          label="Notes & stats"
-          description="Keep the right tools panel open by default."
-          checked={showReadabilityPanel}
-          onChange={onReadabilityChange}
-        />
       </SettingsGroup>
 
       <SettingsGroup
-        label="While typing"
+        label="While Typing"
+        labelStyle="italic"
         hint="Applies when both sidebars are closed."
       >
         <ToggleRow
           id="keep-top-bar-visible-while-typing"
-          label="Top bar"
+          label="Page Tab Bar"
           description="Tabs and sidebar toggles stay visible."
           checked={focusVisibilityPrefs.keepTopBarVisibleWhileTyping}
           onChange={(v) => onFocusVisibilityPrefChange({ keepTopBarVisibleWhileTyping: v })}
         />
         <ToggleRow
           id="keep-document-title-visible-while-typing"
-          label="File name"
+          label="Document Name"
           description="Document title and unsaved indicator."
           checked={focusVisibilityPrefs.keepDocumentTitleVisibleWhileTyping}
           onChange={(v) =>
@@ -1814,85 +1828,84 @@ function EditorPanel({
         />
         <ToggleRow
           id="keep-bottom-tools-visible-while-typing"
-          label="Bottom tools"
+          label="Control Panel"
           description="Sidebar, timer, and copy controls."
           checked={focusVisibilityPrefs.keepBottomToolsVisibleWhileTyping}
           onChange={(v) => onFocusVisibilityPrefChange({ keepBottomToolsVisibleWhileTyping: v })}
-        />
-      </SettingsGroup>
-
-      <SettingsGroup label="Coming soon">
-        <ToggleRow
-          id="focus-mode"
-          label="Focus mode"
-          description="Dim chrome around the editor."
-          checked={focusMode}
-          onChange={onFocusModeChange}
-        />
-        <ToggleRow
-          id="typewriter-scroll"
-          label="Typewriter scrolling"
-          description="Keep the caret at a fixed vertical position."
-          checked={typewriterScroll}
-          onChange={onTypewriterChange}
         />
       </SettingsGroup>
     </div>
   );
 }
 
-function ParametersPanel({
+function ParametersFields({
   prefs,
   onChange,
 }: {
   prefs: ParametersPrefs;
   onChange: (partial: Partial<ParametersPrefs>) => void;
 }) {
-  return (
-    <div className="space-y-5">
-      <SettingsSectionHeader
-        title="Parameters"
-        description="Numbers used for reading stats and Edit highlights."
-      />
+  const [showReadingGradeFormula, setShowReadingGradeFormula] = useState(false);
+  const [showComplexityFormula, setShowComplexityFormula] = useState(false);
 
-      <div className="space-y-2 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
+  return (
+    <ul className={SETTINGS_BOX}>
+      <li className="space-y-2 px-3.5 py-3">
         <div>
           <p className="text-[13px] font-medium text-ink">Reading grade</p>
           <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-            Flesch–Kincaid U.S. grade level for the document.
+            Flesch–Kincaid U.S. grade level for the document.{" "}
+            <button
+              type="button"
+              onClick={() => setShowReadingGradeFormula((v) => !v)}
+              className="font-medium text-ink/80 underline-offset-2 hover:underline"
+            >
+              {showReadingGradeFormula ? "Less" : "More"}
+            </button>
           </p>
         </div>
-        <div className="font-mono text-[11px] leading-relaxed text-muted/80">
-          <p>0.39 × (words ÷ sentences) + 11.8 × (syllables ÷ words) − 15.59</p>
-        </div>
-      </div>
+        {showReadingGradeFormula ? (
+          <div className="font-mono text-[11px] leading-relaxed text-muted/80">
+            <p>0.39 × (words ÷ sentences) + 11.8 × (syllables ÷ words) − 15.59</p>
+          </div>
+        ) : null}
+      </li>
 
-      <label className="flex items-start justify-between gap-4 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-medium text-ink">Words per minute</p>
-          <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-            Reading-time estimate. Suggested {SUGGESTED_READING_WPM_MIN}–
-            {SUGGESTED_READING_WPM_MAX}.
-          </p>
-        </div>
-        <input
-          type="number"
-          min={READING_WPM_MIN}
-          max={READING_WPM_MAX}
-          step={10}
-          value={prefs.readingWordsPerMinute}
-          onChange={(e) => onChange({ readingWordsPerMinute: Number(e.target.value) })}
-          className="w-[4.5rem] shrink-0 rounded-md border-0 bg-canvas/45 px-2 py-1.5 text-right text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
-        />
-      </label>
+      <li>
+        <label className="flex items-start justify-between gap-4 px-3.5 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-ink">Words per minute</p>
+            <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+              Reading-time estimate. Suggested {SUGGESTED_READING_WPM_MIN}–
+              {SUGGESTED_READING_WPM_MAX}.
+            </p>
+          </div>
+          <input
+            type="number"
+            min={READING_WPM_MIN}
+            max={READING_WPM_MAX}
+            step={10}
+            value={prefs.readingWordsPerMinute}
+            onChange={(e) => onChange({ readingWordsPerMinute: Number(e.target.value) })}
+            className={SETTINGS_INLINE_INPUT}
+          />
+        </label>
+      </li>
 
-      <div className="space-y-2 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
-        <label className="flex items-start justify-between gap-4">
+      <li className="space-y-2 px-3.5 py-3">
+        <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium text-ink">Sentence complexity</p>
             <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
               Highlight sentences at or above this F–K density. Suggested{" "}
-              {SUGGESTED_FK_COMPLEXITY_THRESHOLD_MIN}–{SUGGESTED_FK_COMPLEXITY_THRESHOLD_MAX}.
+              {SUGGESTED_FK_COMPLEXITY_THRESHOLD_MIN}–{SUGGESTED_FK_COMPLEXITY_THRESHOLD_MAX}.{" "}
+              <button
+                type="button"
+                onClick={() => setShowComplexityFormula((v) => !v)}
+                className="font-medium text-ink/80 underline-offset-2 hover:underline"
+              >
+                {showComplexityFormula ? "Less" : "More"}
+              </button>
             </p>
           </div>
           <input
@@ -1903,14 +1916,18 @@ function ParametersPanel({
             value={prefs.fkComplexityThreshold}
             onChange={(e) => onChange({ fkComplexityThreshold: Number(e.target.value) })}
             aria-label="Sentence complexity threshold"
-            className="w-[4.5rem] shrink-0 rounded-md border-0 bg-canvas/45 px-2 py-1.5 text-right text-[13px] text-ink outline-none ring-1 ring-line/20 focus:ring-ink/20 dark:bg-canvas/35"
+            className={SETTINGS_INLINE_INPUT}
           />
-        </label>
-        <div className="font-mono text-[11px] leading-relaxed text-muted/80">
-          <p>0.39 × words + 11.8 × (syllables ÷ words) − 15.59 ≥ {prefs.fkComplexityThreshold}</p>
         </div>
-      </div>
-    </div>
+        {showComplexityFormula ? (
+          <div className="font-mono text-[11px] leading-relaxed text-muted/80">
+            <p>
+              0.39 × words + 11.8 × (syllables ÷ words) − 15.59 ≥ {prefs.fkComplexityThreshold}
+            </p>
+          </div>
+        ) : null}
+      </li>
+    </ul>
   );
 }
 
@@ -1927,13 +1944,11 @@ function HotkeysPanel() {
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
             {group.title}
           </p>
-          <ul
-            className={`${SETTINGS_DIVIDE_Y} overflow-hidden rounded-lg bg-mist/80 dark:bg-ink/[0.035]`}
-          >
+          <ul className={SETTINGS_BOX}>
             {group.items.map((item) => (
               <li
                 key={item.id}
-                className="flex items-start justify-between gap-4 px-3 py-2.5"
+                className="flex items-start justify-between gap-4 px-3.5 py-2.5"
               >
                 <div className="min-w-0">
                   <p className="text-[13px] font-medium text-ink">{item.action}</p>
@@ -1976,7 +1991,7 @@ function ToggleRow({
   disabled?: boolean;
 }) {
   return (
-    <li className="flex items-start justify-between gap-4 px-3 py-3">
+    <li className="flex items-start justify-between gap-4 px-3.5 py-3">
       <div className="min-w-0">
         <label htmlFor={id} className="text-[13px] font-medium text-ink">
           {label}
@@ -1997,13 +2012,13 @@ function ToggleRow({
           onChange(!checked);
         }}
         className={`harvy-settings-switch relative mt-0.5 h-6 w-10 shrink-0 rounded-full transition-[background-color,box-shadow,border-color,opacity] duration-200 ${
-          checked ? "harvy-settings-switch--on bg-ink" : "harvy-settings-switch--off"
+          checked ? "harvy-settings-switch--on" : "harvy-settings-switch--off"
         } ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
       >
         <span
           aria-hidden
           className={`harvy-settings-switch-knob pointer-events-none absolute left-0.5 top-0.5 block h-5 w-5 rounded-full transition-[transform,background-color,box-shadow] duration-200 ease-out ${
-            checked ? "translate-x-4 bg-page shadow" : "translate-x-0"
+            checked ? "translate-x-4" : "translate-x-0"
           }`}
         />
       </button>
@@ -2011,49 +2026,11 @@ function ToggleRow({
   );
 }
 
-function FilesPanel({
-  workspaceRootPath,
-  onChooseWorkspaceFolder,
-}: {
-  workspaceRootPath: string | null;
-  onChooseWorkspaceFolder?: () => void | Promise<void>;
-}) {
-  return (
-    <div className="space-y-5">
-      <SettingsSectionHeader
-        title="Files"
-        description="Harvy only reads and writes inside this folder."
-      />
-      <div className="rounded-lg bg-mist/90 px-3.5 py-3 dark:bg-ink/[0.04]">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-          Workspace
-        </p>
-        {workspaceRootPath ? (
-          <p className="mt-1 break-all text-[13px] font-medium tracking-tight text-ink">
-            {workspaceRootPath}
-          </p>
-        ) : (
-          <p className="mt-1 text-[13px] font-medium tracking-tight text-muted/80">
-            No folder selected
-          </p>
-        )}
-        <button
-          type="button"
-          onClick={() => void onChooseWorkspaceFolder?.()}
-          className="mt-3 rounded-md bg-ink/[0.06] px-3 py-2 text-[12px] font-medium text-ink transition-colors hover:bg-ink/[0.1] dark:bg-white/[0.08] dark:hover:bg-white/[0.12]"
-        >
-          {workspaceRootPath ? "Change folder" : "Choose folder"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function SettingsAboutSection() {
   return (
     <div className="space-y-5">
       <SettingsSectionHeader title="About" />
-      <div className="space-y-2 rounded-lg bg-mist/80 px-3.5 py-3 dark:bg-ink/[0.035]">
+      <div className={`space-y-2 ${SETTINGS_BOX_PAD}`}>
         <p className="text-[14px] font-semibold tracking-tight text-ink">
           {APP_NAME} <span className="font-normal text-muted/80">v0.1.0</span>
         </p>

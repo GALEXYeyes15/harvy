@@ -68,6 +68,18 @@ describe("horizontal rule markdown shortcut", () => {
     }
   });
 
+  it("converts -- to an em dash while typing", () => {
+    const ed = createEditor("<p>Hello world</p>");
+    try {
+      ed.commands.focus("end");
+      typeText(ed, "--");
+      expect(ed.getText()).toBe("Hello world—");
+      expect(ed.getHTML()).not.toMatch(/<hr/i);
+    } finally {
+      ed.destroy();
+    }
+  });
+
   it("deletes a selected horizontal rule on Backspace", () => {
     const ed = createEditor("<p>Before</p><hr><p>After</p>");
     try {

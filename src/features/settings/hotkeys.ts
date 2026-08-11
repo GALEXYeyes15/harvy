@@ -81,6 +81,12 @@ export const HOTKEY_GROUPS: HotkeyGroup[] = [
         note: "Also 1) Space",
       },
       {
+        id: "em-dash",
+        action: "Em dash",
+        keys: ["-", "-"],
+        note: "Converts to — while typing",
+      },
+      {
         id: "divider",
         action: "Horizontal divider",
         keys: ["-", "-", "-"],
