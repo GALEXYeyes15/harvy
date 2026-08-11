@@ -8,7 +8,7 @@ import {
 
 const STORAGE_KEY = "harvy:outliers-settings:v1";
 
-/** Fired on `window` after Outliers settings are written (so an active refresh timer can reschedule). */
+/** Fired on `window` after Outliers settings that affect auto-refresh are written. */
 export const OUTLIERS_SETTINGS_CHANGED_EVENT = "harvy:outliers-settings-changed";
 
 export const DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES = 5;
@@ -22,6 +22,11 @@ export type OutliersSettings = {
   postedWithin: PostedWithinFilter;
   /** Minutes between automatic refreshes after an explicit Fetch posts. */
   fetchIntervalMinutes: number;
+  /**
+   * After the user clicks Fetch posts, keep refreshing on the fetch interval
+   * until the account link changes or they turn this off.
+   */
+  autoRefreshArmed: boolean;
 };
 
 const defaultSettings: OutliersSettings = {
@@ -30,6 +35,7 @@ const defaultSettings: OutliersSettings = {
   outlierScore: "any",
   postedWithin: "year",
   fetchIntervalMinutes: DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES,
+  autoRefreshArmed: false,
 };
 
 const SCORE_FILTERS = new Set<OutlierScoreFilter>(["any", "3x", "5x", "10x", "20x"]);
@@ -105,6 +111,7 @@ export function readOutliersSettings(): OutliersSettings {
       outlierScore,
       postedWithin,
       fetchIntervalMinutes: clampOutliersFetchIntervalMinutes(parsed.fetchIntervalMinutes),
+      autoRefreshArmed: parsed.autoRefreshArmed === true,
     };
   } catch {
     return {
@@ -130,6 +137,10 @@ export function writeOutliersSettings(partial: Partial<OutliersSettings>): Outli
       partial.fetchIntervalMinutes !== undefined
         ? clampOutliersFetchIntervalMinutes(partial.fetchIntervalMinutes)
         : current.fetchIntervalMinutes,
+    autoRefreshArmed:
+      partial.autoRefreshArmed !== undefined
+        ? Boolean(partial.autoRefreshArmed)
+        : current.autoRefreshArmed,
   };
 
   if (typeof localStorage !== "undefined") {
@@ -140,10 +151,14 @@ export function writeOutliersSettings(partial: Partial<OutliersSettings>): Outli
     }
   }
 
-  const intervalChanged =
-    partial.fetchIntervalMinutes !== undefined &&
-    next.fetchIntervalMinutes !== current.fetchIntervalMinutes;
-  if (intervalChanged && typeof window !== "undefined") {
+  const refreshScheduleChanged =
+    (partial.fetchIntervalMinutes !== undefined &&
+      next.fetchIntervalMinutes !== current.fetchIntervalMinutes) ||
+    (partial.autoRefreshArmed !== undefined &&
+      next.autoRefreshArmed !== current.autoRefreshArmed) ||
+    (partial.accountLink !== undefined && next.accountLink !== current.accountLink);
+
+  if (refreshScheduleChanged && typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(OUTLIERS_SETTINGS_CHANGED_EVENT));
   }
 

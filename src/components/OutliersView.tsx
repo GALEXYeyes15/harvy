@@ -29,8 +29,10 @@ import {
   type PostedWithinFilter,
 } from "../features/outliers/outlierPosts";
 import {
+  OUTLIERS_CACHE_UPDATED_EVENT,
+} from "../features/outliers/useOutliersAutoRefresh";
+import {
   OUTLIERS_SETTINGS_CHANGED_EVENT,
-  outliersFetchIntervalMs,
   readOutliersSettings,
   writeOutliersSettings,
 } from "../features/outliers/outliersSettings";
@@ -647,8 +649,6 @@ export function OutliersView({
     workspaceSidebarOpen,
     toolsSidebarOpen,
   });
-  const refreshTimerRef = useRef<number | null>(null);
-  const refreshArmedRef = useRef(false);
   const accountLinkRef = useRef(accountLink);
   accountLinkRef.current = accountLink;
 
@@ -660,26 +660,24 @@ export function OutliersView({
     setLastFetchedAt(readSubstackOutliersCache(url)?.fetchedAt ?? null);
   }, []);
 
-  const clearRefreshTimer = useCallback(() => {
-    if (refreshTimerRef.current == null) return;
-    window.clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = null;
-  }, []);
+  const syncPostsFromCache = useCallback((url: string) => {
+    const cached = readCachedSubstackOutlierPosts(url);
+    if (cached) setPosts(cached);
+    syncLastFetchedAt(url);
+  }, [syncLastFetchedAt]);
 
   const handleAccountLinkChange = useCallback(
     (value: string) => {
       setAccountLink(value);
-      persistSettings({ accountLink: value });
       // Show that account’s cache only — never network until Fetch posts.
-      refreshArmedRef.current = false;
-      clearRefreshTimer();
+      persistSettings({ accountLink: value, autoRefreshArmed: false });
       setPosts(readCachedSubstackOutlierPosts(value) ?? []);
       setError(null);
       setIsLoading(false);
       setIsRefreshing(false);
       syncLastFetchedAt(value);
     },
-    [clearRefreshTimer, persistSettings, syncLastFetchedAt],
+    [persistSettings, syncLastFetchedAt],
   );
 
   const handleContentTypeChange = useCallback(
@@ -745,64 +743,30 @@ export function OutliersView({
     [syncLastFetchedAt],
   );
 
-  const scheduleRefreshTimer = useCallback(
-    (url: string) => {
-      clearRefreshTimer();
-      const trimmed = url.trim();
-      if (!trimmed) return;
-      refreshArmedRef.current = true;
-
-      const arm = () => {
-        clearRefreshTimer();
-        if (!refreshArmedRef.current) return;
-        if (accountLinkRef.current.trim() !== trimmed) {
-          refreshArmedRef.current = false;
-          return;
-        }
-        // Recurring refresh only after an explicit Fetch posts; never on view open.
-        // Re-read interval each cycle so Settings changes apply on the next wait.
-        refreshTimerRef.current = window.setTimeout(() => {
-          void (async () => {
-            if (!refreshArmedRef.current) return;
-            if (accountLinkRef.current.trim() !== trimmed) {
-              refreshArmedRef.current = false;
-              return;
-            }
-            await fetchPosts(trimmed);
-            arm();
-          })();
-        }, outliersFetchIntervalMs());
-      };
-
-      arm();
-    },
-    [clearRefreshTimer, fetchPosts],
-  );
-
   const handleFetchPosts = useCallback(() => {
     const url = accountLink.trim();
     if (!url) return;
     persistSettings({ accountLink: url });
     void (async () => {
       await fetchPosts(url);
-      scheduleRefreshTimer(url);
+      // Arm (or re-arm) app-level auto-refresh; always notify so the timer
+      // resets from this fetch even when already armed.
+      writeOutliersSettings({ autoRefreshArmed: true });
+      window.dispatchEvent(new CustomEvent(OUTLIERS_SETTINGS_CHANGED_EVENT));
     })();
-  }, [accountLink, fetchPosts, persistSettings, scheduleRefreshTimer]);
+  }, [accountLink, fetchPosts, persistSettings]);
 
   useEffect(() => {
-    const onSettingsChanged = () => {
-      if (!refreshArmedRef.current) return;
-      const url = accountLinkRef.current.trim();
+    const onCacheUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ accountUrl?: string }>).detail;
+      const url = (detail?.accountUrl ?? accountLinkRef.current).trim();
       if (!url) return;
-      scheduleRefreshTimer(url);
+      if (url.toLowerCase() !== accountLinkRef.current.trim().toLowerCase()) return;
+      syncPostsFromCache(url);
     };
-    window.addEventListener(OUTLIERS_SETTINGS_CHANGED_EVENT, onSettingsChanged);
-    return () => {
-      window.removeEventListener(OUTLIERS_SETTINGS_CHANGED_EVENT, onSettingsChanged);
-      refreshArmedRef.current = false;
-      clearRefreshTimer();
-    };
-  }, [clearRefreshTimer, scheduleRefreshTimer]);
+    window.addEventListener(OUTLIERS_CACHE_UPDATED_EVENT, onCacheUpdated);
+    return () => window.removeEventListener(OUTLIERS_CACHE_UPDATED_EVENT, onCacheUpdated);
+  }, [syncPostsFromCache]);
 
   const filteredPosts = useMemo(() => {
     const byFilters = filterOutlierPosts(posts, {

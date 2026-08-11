@@ -7,6 +7,7 @@ import {
   formatCollectDateCreated,
   type CollectItem,
 } from "../features/collect/collectItems";
+import { AvatarView } from "./AvatarView";
 import { CollectItemModal } from "./CollectItemModal";
 import { OutliersView } from "./OutliersView";
 import { WorkspaceSectionMainContent } from "./WorkspaceSectionMainContent";
@@ -20,7 +21,7 @@ const SELECTION_ACTION_BUTTON =
 const SUB_VIEW_TAB =
   "border-0 bg-transparent p-0 text-[1.375rem] font-semibold leading-none tracking-[-0.02em]";
 
-type CollectSubView = "outliers" | "collect";
+export type CollectSubView = "outliers" | "collect" | "avatar";
 
 const CELL_SELECT =
   "w-full min-w-0 cursor-pointer appearance-none border-0 bg-transparent p-0 text-[12px] text-muted/70 shadow-none outline-none ring-0 focus:outline-none focus:ring-0 dark:text-white/50";
@@ -91,14 +92,16 @@ function CollectSubViewTabs({
   onViewChange,
   showOutliersView,
   showCollectView,
+  showAvatarView,
 }: {
   activeView: CollectSubView;
   onViewChange: (view: CollectSubView) => void;
   showOutliersView: boolean;
   showCollectView: boolean;
+  showAvatarView: boolean;
 }) {
   return (
-    <div className="flex items-baseline gap-7" role="tablist" aria-label="Collect views">
+    <div className="flex items-baseline gap-7" role="tablist" aria-label="Research views">
       {showOutliersView ? (
         <button
           type="button"
@@ -122,11 +125,58 @@ function CollectSubViewTabs({
           }`}
           onClick={() => onViewChange("collect")}
         >
-          Collect
+          Ideas
+        </button>
+      ) : null}
+      {showAvatarView ? (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeView === "avatar"}
+          className={`${SUB_VIEW_TAB} text-ink ${
+            activeView === "avatar" ? "opacity-100" : "opacity-40"
+          }`}
+          onClick={() => onViewChange("avatar")}
+        >
+          Avatar
         </button>
       ) : null}
     </div>
   );
+}
+
+function soleCollectViewTitle(views: {
+  showOutliersView: boolean;
+  showCollectView: boolean;
+  showAvatarView: boolean;
+}): string {
+  if (views.showOutliersView && !views.showCollectView && !views.showAvatarView) return "Outliers";
+  if (views.showCollectView && !views.showOutliersView && !views.showAvatarView) return "Ideas";
+  if (views.showAvatarView && !views.showOutliersView && !views.showCollectView) return "Avatar";
+  return "Research";
+}
+
+function firstEnabledCollectView(views: {
+  showOutliersView: boolean;
+  showCollectView: boolean;
+  showAvatarView: boolean;
+}): CollectSubView {
+  if (views.showCollectView) return "collect";
+  if (views.showOutliersView) return "outliers";
+  return "avatar";
+}
+
+function isCollectViewEnabled(
+  view: CollectSubView,
+  views: {
+    showOutliersView: boolean;
+    showCollectView: boolean;
+    showAvatarView: boolean;
+  },
+): boolean {
+  if (view === "outliers") return views.showOutliersView;
+  if (view === "collect") return views.showCollectView;
+  return views.showAvatarView;
 }
 
 type CollectPanelProps = {
@@ -135,6 +185,7 @@ type CollectPanelProps = {
   onAddPreviewToNotes?: (preview: string) => void;
   showOutliersView?: boolean;
   showCollectView?: boolean;
+  showAvatarView?: boolean;
   workspaceSidebarOpen?: boolean;
   toolsSidebarOpen?: boolean;
 };
@@ -145,24 +196,25 @@ export function CollectPanel({
   onAddPreviewToNotes,
   showOutliersView = true,
   showCollectView = true,
+  showAvatarView = true,
   workspaceSidebarOpen = true,
   toolsSidebarOpen = true,
 }: CollectPanelProps) {
+  const views = { showOutliersView, showCollectView, showAvatarView };
+  const enabledCount =
+    Number(showOutliersView) + Number(showCollectView) + Number(showAvatarView);
+
   const [activeCollectView, setActiveCollectView] = useState<CollectSubView>(() =>
-    showCollectView ? "collect" : "outliers",
+    firstEnabledCollectView(views),
   );
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
-    if (activeCollectView === "outliers" && !showOutliersView && showCollectView) {
-      setActiveCollectView("collect");
-      return;
+    if (!isCollectViewEnabled(activeCollectView, views)) {
+      setActiveCollectView(firstEnabledCollectView(views));
     }
-    if (activeCollectView === "collect" && !showCollectView && showOutliersView) {
-      setActiveCollectView("outliers");
-    }
-  }, [activeCollectView, showOutliersView, showCollectView]);
+  }, [activeCollectView, showOutliersView, showCollectView, showAvatarView]);
 
   const selectedItems = useMemo(
     () => items.filter((item) => selectedIds.has(item.id)),
@@ -235,21 +287,24 @@ export function CollectPanel({
     <>
       <WorkspaceSectionMainContent>
         <header className="shrink-0">
-          {showOutliersView && showCollectView ? (
+          {enabledCount > 1 ? (
             <CollectSubViewTabs
               activeView={activeCollectView}
               onViewChange={setActiveCollectView}
               showOutliersView={showOutliersView}
               showCollectView={showCollectView}
+              showAvatarView={showAvatarView}
             />
           ) : (
             <h2 className="text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-ink">
-              {showOutliersView ? "Outliers" : "Collect"}
+              {soleCollectViewTitle(views)}
             </h2>
           )}
         </header>
 
-        {activeCollectView === "collect" && showCollectView ? (
+        {activeCollectView === "avatar" && showAvatarView ? (
+          <AvatarView />
+        ) : activeCollectView === "collect" && showCollectView ? (
         <div className="harvy-collect-table mt-7">
             <table className="w-full border-collapse text-left">
             <thead className="sticky top-0 z-10 bg-stage">
@@ -264,7 +319,7 @@ export function CollectPanel({
                   Type
                 </th>
                 <th className="w-[7.5rem] pb-3 pr-2 pt-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted/60">
-                  Collected
+                  Added
                 </th>
                 <th className="relative w-9 overflow-visible pb-3 pt-1">
                   {selectedIds.size > 0 ? (
@@ -286,7 +341,7 @@ export function CollectPanel({
                     colSpan={5}
                     className="py-12 text-center text-[13px] text-muted/55 dark:text-white/38"
                   >
-                    No collected items yet.
+                    No ideas yet.
                   </td>
                 </tr>
               ) : (
@@ -317,7 +372,7 @@ export function CollectPanel({
                           <button
                             type="button"
                             className="harvy-collect-open-button absolute right-0 top-1/2 -translate-y-1/2"
-                            aria-label="Open collected item"
+                            aria-label="Open idea"
                             onClick={(event) => {
                               event.stopPropagation();
                               openItem(item.id);
@@ -392,7 +447,7 @@ export function CollectPanel({
             <button
               type="button"
               className={`${ADD_BUTTON} mt-7`}
-              aria-label="Add collected item"
+              aria-label="Add idea"
               onClick={handleAddItem}
             >
               <Plus size={15} strokeWidth={2} aria-hidden />
@@ -404,6 +459,8 @@ export function CollectPanel({
             workspaceSidebarOpen={workspaceSidebarOpen}
             toolsSidebarOpen={toolsSidebarOpen}
           />
+        ) : showAvatarView ? (
+          <AvatarView />
         ) : null}
       </WorkspaceSectionMainContent>
 

@@ -30,8 +30,8 @@ export function CollectItemModal({
       onClose={onClose}
       title={title}
       titleId="harvy-collect-item-title"
-      backdropLabel="Close collected item"
-      closeLabel="Close collected item"
+      backdropLabel="Close idea"
+      closeLabel="Close idea"
       maxWidthClass="max-w-[min(720px,calc(100vw-3rem))]"
       bodyClassName="min-h-0 flex-1 overflow-y-auto px-6 py-5"
     >

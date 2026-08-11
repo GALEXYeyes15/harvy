@@ -12,9 +12,10 @@ type WorkspaceSectionSwitcherProps = {
   activeSection: WorkspaceSection;
   onSectionChange: (section: WorkspaceSection) => void;
   sections: WorkspaceSection[];
-  /** When only Outliers is enabled, the Collect rail label becomes “Outliers”. */
+  /** When only one Research sub-view is enabled, the rail label uses that name. */
   showOutliersView?: boolean;
   showCollectView?: boolean;
+  showAvatarView?: boolean;
   /** Shared with top chrome (tabs, header, ambient controls) during distraction-free writing. */
   chromeHidden?: boolean;
   className?: string;
@@ -27,6 +28,7 @@ export function WorkspaceSectionSwitcher({
   sections,
   showOutliersView = true,
   showCollectView = true,
+  showAvatarView = true,
   chromeHidden = false,
   className,
   style,
@@ -70,7 +72,7 @@ export function WorkspaceSectionSwitcher({
                 active ? "text-ink" : ""
               }`}
             >
-              {workspaceSectionLabel(section, { showOutliersView, showCollectView })}
+              {workspaceSectionLabel(section, { showOutliersView, showCollectView, showAvatarView })}
             </span>
           </button>
         );

@@ -11,6 +11,7 @@ import {
   readSubstackOutliersCache,
   writeSubstackOutliersCache,
 } from "./substackOutliersCache";
+import { outliersFetchIntervalMs } from "./outliersSettings";
 
 export type SubstackPostResult = {
   id: string;
@@ -129,7 +130,9 @@ export async function fetchSubstackOutlierPosts(
 
   const cached = readSubstackOutliersCache(trimmed);
   const canServeCache = Boolean(cached);
-  const cacheFresh = Boolean(cached && isSubstackOutliersCacheFresh(cached));
+  const cacheFresh = Boolean(
+    cached && isSubstackOutliersCacheFresh(cached, Date.now(), outliersFetchIntervalMs()),
+  );
 
   if (!options.forceRefresh && cached && cacheFresh) {
     return {

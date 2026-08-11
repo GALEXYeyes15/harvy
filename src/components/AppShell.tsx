@@ -60,6 +60,7 @@ import {
   readWorkspaceSettings,
   writeWorkspaceSettings,
 } from "../features/workspace/workspaceSettings";
+import { useOutliersAutoRefresh } from "../features/outliers/useOutliersAutoRefresh";
 import {
   readQuickLinksSettings,
   writeQuickLinksSettings,
@@ -297,7 +298,7 @@ export function AppShell() {
   const [searchQuery, setSearchQuery] = useState("");
   const [mode, setMode] = useState<SidebarToolsMode>("notes");
   const [activeWorkspaceSection, setActiveWorkspaceSection] = useState<WorkspaceSection>("write");
-  /** After Collect’s first paint, animate padding with sidebar toggles. */
+  /** After Research’s first paint, animate padding with sidebar toggles. */
   const [collectPaddingAnimated, setCollectPaddingAnimated] = useState(false);
   const [enableCollect, setEnableCollect] = useState(() => readWorkspaceSettings().enableCollect);
   const [showOutliersView, setShowOutliersView] = useState(
@@ -305,6 +306,9 @@ export function AppShell() {
   );
   const [showCollectView, setShowCollectView] = useState(
     () => readWorkspaceSettings().showCollectView,
+  );
+  const [showAvatarView, setShowAvatarView] = useState(
+    () => readWorkspaceSettings().showAvatarView,
   );
   const [collectItems, setCollectItems] = useState<CollectItem[]>(() => loadPersistedCollectItems());
   const [isWorkspaceSidebarOpen, setIsWorkspaceSidebarOpen] = useState(true);
@@ -433,17 +437,36 @@ export function AppShell() {
     }
   }, []);
 
-  const handleShowOutliersViewChange = useCallback((enabled: boolean) => {
-    const next = writeWorkspaceSettings({ showOutliersView: enabled });
+  const applyCollectViewVisibility = useCallback((next: {
+    showOutliersView: boolean;
+    showCollectView: boolean;
+    showAvatarView: boolean;
+  }) => {
     setShowOutliersView(next.showOutliersView);
     setShowCollectView(next.showCollectView);
+    setShowAvatarView(next.showAvatarView);
   }, []);
 
-  const handleShowCollectViewChange = useCallback((enabled: boolean) => {
-    const next = writeWorkspaceSettings({ showCollectView: enabled });
-    setShowOutliersView(next.showOutliersView);
-    setShowCollectView(next.showCollectView);
-  }, []);
+  const handleShowOutliersViewChange = useCallback(
+    (enabled: boolean) => {
+      applyCollectViewVisibility(writeWorkspaceSettings({ showOutliersView: enabled }));
+    },
+    [applyCollectViewVisibility],
+  );
+
+  const handleShowCollectViewChange = useCallback(
+    (enabled: boolean) => {
+      applyCollectViewVisibility(writeWorkspaceSettings({ showCollectView: enabled }));
+    },
+    [applyCollectViewVisibility],
+  );
+
+  const handleShowAvatarViewChange = useCallback(
+    (enabled: boolean) => {
+      applyCollectViewVisibility(writeWorkspaceSettings({ showAvatarView: enabled }));
+    },
+    [applyCollectViewVisibility],
+  );
 
   const handleShowQuickLinksChange = useCallback((enabled: boolean) => {
     const next = writeQuickLinksSettings({ showQuickLinks: enabled });
@@ -451,6 +474,8 @@ export function AppShell() {
   }, []);
 
   const showWorkspaceNavigation = enableCollect;
+
+  useOutliersAutoRefresh(enableCollect && showOutliersView);
 
   const workspaceSections = useMemo(
     () => visibleWorkspaceSections(enableCollect),
@@ -2234,7 +2259,7 @@ export function AppShell() {
         className={`flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-stage ${
           collectUsesFullWidth ? "max-w-none" : "mx-auto max-w-[820px]"
         }`}
-        aria-label={collectUsesFullWidth ? "Collect" : "Editor"}
+        aria-label={collectUsesFullWidth ? "Research" : "Editor"}
         role="tabpanel"
         id="harvy-editor-panel"
         aria-labelledby={activeTabId ? `harvy-tab-${activeTabId}` : undefined}
@@ -2252,6 +2277,7 @@ export function AppShell() {
               onAddPreviewToNotes={handleAddCollectPreviewToNotes}
               showOutliersView={showOutliersView}
               showCollectView={showCollectView}
+              showAvatarView={showAvatarView}
               workspaceSidebarOpen={isWorkspaceSidebarOpen}
               toolsSidebarOpen={readabilityPanelOpen}
             />
@@ -2366,6 +2392,7 @@ export function AppShell() {
               sections={workspaceSections}
               showOutliersView={showOutliersView}
               showCollectView={showCollectView}
+              showAvatarView={showAvatarView}
               chromeHidden={hideWorkspaceSectionRail}
               className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
               style={{
@@ -2415,6 +2442,7 @@ export function AppShell() {
                 sections={workspaceSections}
                 showOutliersView={showOutliersView}
                 showCollectView={showCollectView}
+                showAvatarView={showAvatarView}
                 chromeHidden={hideWorkspaceSectionRail}
                 className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
                 style={{
@@ -2522,8 +2550,10 @@ export function AppShell() {
         onEnableCollectChange={handleEnableCollectChange}
         showOutliersView={showOutliersView}
         showCollectView={showCollectView}
+        showAvatarView={showAvatarView}
         onShowOutliersViewChange={handleShowOutliersViewChange}
         onShowCollectViewChange={handleShowCollectViewChange}
+        onShowAvatarViewChange={handleShowAvatarViewChange}
         encouragementPrefs={encouragementPrefs}
         onEncouragementPrefsChange={handleEncouragementPrefsChange}
         onTestEncouragement={testEncouragement}

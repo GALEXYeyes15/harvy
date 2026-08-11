@@ -119,8 +119,10 @@ type SettingsModalProps = {
   onEnableCollectChange: (enabled: boolean) => void;
   showOutliersView: boolean;
   showCollectView: boolean;
+  showAvatarView: boolean;
   onShowOutliersViewChange: (enabled: boolean) => void;
   onShowCollectViewChange: (enabled: boolean) => void;
+  onShowAvatarViewChange: (enabled: boolean) => void;
   encouragementPrefs: EncouragementPrefs;
   onEncouragementPrefsChange: (partial: Partial<EncouragementPrefs>) => void;
   onTestEncouragement?: () => void;
@@ -151,8 +153,10 @@ export function SettingsModal({
   onEnableCollectChange,
   showOutliersView,
   showCollectView,
+  showAvatarView,
   onShowOutliersViewChange,
   onShowCollectViewChange,
+  onShowAvatarViewChange,
   encouragementPrefs,
   onEncouragementPrefsChange,
   onTestEncouragement,
@@ -226,8 +230,10 @@ export function SettingsModal({
                 onEnableCollectChange={onEnableCollectChange}
                 showOutliersView={showOutliersView}
                 showCollectView={showCollectView}
+                showAvatarView={showAvatarView}
                 onShowOutliersViewChange={onShowOutliersViewChange}
                 onShowCollectViewChange={onShowCollectViewChange}
+                onShowAvatarViewChange={onShowAvatarViewChange}
               />
             ) : null}
             {activeSection === "appearance" ? (
@@ -310,31 +316,38 @@ function CollectSettingsPanel({
   onEnableCollectChange,
   showOutliersView,
   showCollectView,
+  showAvatarView,
   onShowOutliersViewChange,
   onShowCollectViewChange,
+  onShowAvatarViewChange,
 }: {
   enableCollect: boolean;
   onEnableCollectChange: (enabled: boolean) => void;
   showOutliersView: boolean;
   showCollectView: boolean;
+  showAvatarView: boolean;
   onShowOutliersViewChange: (enabled: boolean) => void;
   onShowCollectViewChange: (enabled: boolean) => void;
+  onShowAvatarViewChange: (enabled: boolean) => void;
 }) {
   const [fetchIntervalMinutes, setFetchIntervalMinutes] = useState(
     () => readOutliersSettings().fetchIntervalMinutes,
   );
 
+  const enabledViewCount =
+    Number(showOutliersView) + Number(showCollectView) + Number(showAvatarView);
+
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
-        title="Collect"
-        description="Research views in the workspace rail."
+        title="Research"
+        description="Outliers, Ideas, and Avatar in the workspace rail."
       />
-      <SettingsGroup hint="Keep at least one Collect view on (Outliers or Avatar).">
+      <SettingsGroup hint="Keep at least one Research view on (Outliers, Ideas, or Avatar).">
         <ToggleRow
           id="enable-collect"
-          label="Enable Collect"
-          description="Add Collect to the left workspace rail."
+          label="Enable Research"
+          description="Add Research to the left workspace rail."
           checked={enableCollect}
           onChange={onEnableCollectChange}
         />
@@ -344,15 +357,23 @@ function CollectSettingsPanel({
           description="Creator posts and Notes scored against your average."
           checked={showOutliersView}
           onChange={onShowOutliersViewChange}
-          disabled={!enableCollect || (showOutliersView && !showCollectView)}
+          disabled={!enableCollect || (showOutliersView && enabledViewCount === 1)}
         />
         <ToggleRow
           id="show-collect-view"
-          label="Show Avatar"
-          description="Your Collect table of saved research."
+          label="Show Ideas"
+          description="Your table of saved essay ideas."
           checked={showCollectView}
           onChange={onShowCollectViewChange}
-          disabled={!enableCollect || (showCollectView && !showOutliersView)}
+          disabled={!enableCollect || (showCollectView && enabledViewCount === 1)}
+        />
+        <ToggleRow
+          id="show-avatar-view"
+          label="Show Avatar"
+          description="Target audience description you can refer to while writing."
+          checked={showAvatarView}
+          onChange={onShowAvatarViewChange}
+          disabled={!enableCollect || (showAvatarView && enabledViewCount === 1)}
         />
       </SettingsGroup>
       {enableCollect && showOutliersView ? (
@@ -360,8 +381,8 @@ function CollectSettingsPanel({
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium text-ink">Fetch interval</p>
             <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-              Minutes between Outliers refreshes after you click Fetch posts. Default{" "}
-              {DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES}.
+              Minutes between Outliers refreshes after you click Fetch posts. Keeps
+              running while Harvy is open. Default {DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES}.
             </p>
           </div>
           <input
