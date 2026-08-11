@@ -101,6 +101,21 @@ pub fn run() {
             commands::substack::fetch_substack_comments,
             commands::google_fonts::fetch_google_fonts_catalog,
             commands::color_picker::pick_screen_color,
+            commands::notion::notion_get_ideas_config,
+            commands::notion::notion_save_ideas_config,
+            commands::notion::notion_clear_ideas_config,
+            commands::notion::notion_fetch_database_schema,
+            commands::notion::notion_query_idea_pages,
+            commands::notion::notion_mark_idea_started,
+            commands::notion::notion_test_ideas_connection,
+            commands::ai_check::ai_check_get_config,
+            commands::ai_check::ai_check_save_config,
+            commands::ai_check::ai_check_set_enabled,
+            commands::ai_check::ai_check_clear_config,
+            commands::ai_check::ai_check_detect_provider,
+            commands::ai_check::ai_check_list_models,
+            commands::ai_check::ai_check_test_connection,
+            commands::ai_check::ai_check_run,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

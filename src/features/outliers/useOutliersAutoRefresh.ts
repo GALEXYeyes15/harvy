@@ -61,7 +61,7 @@ export function useOutliersAutoRefresh(enabled: boolean): void {
       if (cancelled) return;
 
       const settings = readOutliersSettings();
-      if (!settings.autoRefreshArmed) return;
+      if (!settings.autoFetchEnabled || !settings.autoRefreshArmed) return;
       const url = settings.accountLink.trim();
       if (!url) return;
 
@@ -73,7 +73,7 @@ export function useOutliersAutoRefresh(enabled: boolean): void {
         void (async () => {
           if (cancelled) return;
           const latest = readOutliersSettings();
-          if (!latest.autoRefreshArmed) return;
+          if (!latest.autoFetchEnabled || !latest.autoRefreshArmed) return;
           const latestUrl = latest.accountLink.trim();
           if (!latestUrl) return;
           await runFetch(latestUrl);

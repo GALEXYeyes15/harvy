@@ -8,6 +8,8 @@ pub mod unsplash;
 pub mod substack;
 pub mod google_fonts;
 pub mod color_picker;
+pub mod notion;
+pub mod ai_check;
 mod pdf_export;
 
 #[derive(Debug, Clone, Serialize)]

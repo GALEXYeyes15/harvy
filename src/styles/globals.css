@@ -1853,6 +1853,373 @@
     border-color: rgba(255, 255, 255, 0.16);
   }
 
+  /* —— Notion-like Ideas database —— */
+  .harvy-notion-db-frame {
+    overflow: hidden;
+    border: 1px solid color-mix(in oklab, var(--color-line) 28%, transparent);
+    border-radius: 0.25rem;
+  }
+
+  html.dark .harvy-notion-db-frame {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .harvy-notion-db-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    text-align: left;
+  }
+
+  .harvy-notion-db-th,
+  .harvy-notion-db-td {
+    border-bottom: 1px solid color-mix(in oklab, var(--color-line) 22%, transparent);
+    border-right: 1px solid color-mix(in oklab, var(--color-line) 18%, transparent);
+    vertical-align: middle;
+  }
+
+  html.dark .harvy-notion-db-th,
+  html.dark .harvy-notion-db-td {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+    border-right-color: rgba(255, 255, 255, 0.07);
+  }
+
+  .harvy-notion-db-th:last-child,
+  .harvy-notion-db-td:last-child {
+    border-right: 0;
+  }
+
+  .harvy-notion-db-row:last-child .harvy-notion-db-td {
+    border-bottom: 0;
+  }
+
+  .harvy-notion-db-th {
+    background: var(--color-stage);
+    padding: 0.4rem 0.65rem;
+    font-size: 12px;
+    font-weight: 500;
+    color: color-mix(in oklab, var(--color-ink) 55%, transparent);
+  }
+
+  html.dark .harvy-notion-db-th {
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .harvy-notion-db-th-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .harvy-notion-db-th--name {
+    width: auto;
+  }
+
+  .harvy-notion-db-th--format,
+  .harvy-notion-db-td--format {
+    width: 7.5rem;
+  }
+
+  .harvy-notion-db-th--type,
+  .harvy-notion-db-td--type {
+    width: 6.5rem;
+  }
+
+  .harvy-notion-db-th--date,
+  .harvy-notion-db-td--date {
+    width: 7rem;
+  }
+
+  .harvy-notion-db-th--check,
+  .harvy-notion-db-td--check {
+    width: 2.5rem;
+    border-right: 0;
+  }
+
+  .harvy-notion-db-td {
+    padding: 0.45rem 0.65rem;
+    cursor: pointer;
+  }
+
+  .harvy-notion-db-td--name {
+    max-width: 0;
+  }
+
+  .harvy-notion-db-row:hover {
+    background: color-mix(in oklab, var(--color-ink) 3.5%, transparent);
+  }
+
+  html.dark .harvy-notion-db-row:hover {
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .harvy-notion-db-row.is-selected {
+    background: color-mix(in oklab, var(--color-ink) 6%, transparent);
+  }
+
+  html.dark .harvy-notion-db-row.is-selected {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .harvy-notion-page-icon {
+    color: color-mix(in oklab, var(--color-ink) 40%, transparent);
+  }
+
+  html.dark .harvy-notion-page-icon {
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  .harvy-notion-db-empty {
+    padding: 2.5rem 1rem;
+    text-align: center;
+    font-size: 13px;
+    color: color-mix(in oklab, var(--color-ink) 45%, transparent);
+  }
+
+  .harvy-notion-db-new {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.4rem;
+    border: 0;
+    border-top: 1px solid color-mix(in oklab, var(--color-line) 22%, transparent);
+    background: transparent;
+    padding: 0.55rem 0.75rem;
+    font-size: 13px;
+    color: color-mix(in oklab, var(--color-ink) 45%, transparent);
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  html.dark .harvy-notion-db-new {
+    border-top-color: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .harvy-notion-db-new:hover {
+    background: color-mix(in oklab, var(--color-ink) 3.5%, transparent);
+    color: var(--color-ink);
+  }
+
+  html.dark .harvy-notion-db-new:hover {
+    background: rgba(255, 255, 255, 0.035);
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .harvy-notion-row-action {
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
+    padding: 0.15rem 0.4rem;
+    font-size: 11px;
+    font-weight: 500;
+    color: color-mix(in oklab, var(--color-ink) 55%, transparent);
+  }
+
+  .harvy-notion-row-action:hover {
+    background: color-mix(in oklab, var(--color-ink) 8%, transparent);
+    color: var(--color-ink);
+  }
+
+  html.dark .harvy-notion-row-action {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  html.dark .harvy-notion-row-action:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .harvy-notion-pill {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-radius: 999px;
+    padding: 0.15rem 0.5rem;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+
+  .harvy-notion-pill--format {
+    background: color-mix(in oklab, var(--color-ink) 8%, var(--color-mist));
+    color: color-mix(in oklab, var(--color-ink) 78%, transparent);
+  }
+
+  html.dark .harvy-notion-pill--format {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.82);
+  }
+
+  .harvy-notion-pill--type {
+    background: color-mix(in oklab, #8b5a3c 55%, var(--color-mist));
+    color: #f4ebe4;
+  }
+
+  html.dark .harvy-notion-pill--type {
+    background: #6b3f2e;
+    color: #f3e6dc;
+  }
+
+  .harvy-notion-pill--status {
+    background: color-mix(in oklab, #8b5a3c 55%, var(--color-mist));
+    color: #f4ebe4;
+  }
+
+  html.dark .harvy-notion-pill--status {
+    background: #6b3f2e;
+    color: #f3e6dc;
+  }
+
+  .harvy-notion-select-wrap {
+    position: relative;
+    display: inline-flex;
+    max-width: 100%;
+    min-height: 1.5rem;
+    align-items: center;
+  }
+
+  .harvy-notion-select-overlay {
+    position: absolute;
+    inset: 0;
+    cursor: pointer;
+    opacity: 0;
+  }
+
+  /* —— Notion-like idea peek —— */
+  .harvy-notion-peek {
+    background: var(--color-page);
+  }
+
+  .harvy-notion-peek-title {
+    width: 100%;
+    resize: none;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    color: var(--color-ink);
+    outline: none;
+  }
+
+  .harvy-notion-peek-title::placeholder {
+    color: color-mix(in oklab, var(--color-ink) 28%, transparent);
+  }
+
+  html.dark .harvy-notion-peek-title::placeholder {
+    color: rgba(255, 255, 255, 0.28);
+  }
+
+  .harvy-notion-prop-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 2.1rem;
+    padding: 0.15rem 0;
+    border-radius: 0.25rem;
+  }
+
+  .harvy-notion-prop-row:hover {
+    background: color-mix(in oklab, var(--color-ink) 2.5%, transparent);
+  }
+
+  html.dark .harvy-notion-prop-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .harvy-notion-prop-label {
+    display: inline-flex;
+    width: 9.5rem;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 13px;
+    color: color-mix(in oklab, var(--color-ink) 48%, transparent);
+  }
+
+  html.dark .harvy-notion-prop-label {
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .harvy-notion-prop-icon {
+    display: inline-flex;
+    color: color-mix(in oklab, var(--color-ink) 40%, transparent);
+  }
+
+  html.dark .harvy-notion-prop-icon {
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  .harvy-notion-prop-plain {
+    font-size: 13px;
+    color: var(--color-ink);
+  }
+
+  html.dark .harvy-notion-prop-plain {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .harvy-notion-peek-divider {
+    margin: 1.25rem 0 1rem;
+    border-top: 1px solid color-mix(in oklab, var(--color-line) 22%, transparent);
+  }
+
+  html.dark .harvy-notion-peek-divider {
+    border-top-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .harvy-notion-peek-body {
+    width: 100%;
+    resize: none;
+    border: 0;
+    background: transparent;
+    padding: 0.35rem 0 0 1.35rem;
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--color-ink);
+    outline: none;
+  }
+
+  .harvy-notion-peek-body--empty,
+  .harvy-notion-peek-body::placeholder {
+    color: color-mix(in oklab, var(--color-ink) 35%, transparent);
+  }
+
+  html.dark .harvy-notion-peek-body--empty,
+  html.dark .harvy-notion-peek-body::placeholder {
+    color: rgba(255, 255, 255, 0.32);
+  }
+
+  .harvy-notion-start-writing {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 0.375rem;
+    border: 1px solid color-mix(in oklab, var(--color-line) 35%, transparent);
+    background: transparent;
+    padding: 0.4rem 0.75rem;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-accent);
+    transition: background-color 120ms ease;
+  }
+
+  .harvy-notion-start-writing:hover {
+    background: color-mix(in oklab, var(--color-ink) 4%, transparent);
+  }
+
+  html.dark .harvy-notion-start-writing {
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+
+  html.dark .harvy-notion-start-writing:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
   /* Outliers cards + search bar use mist (muted seed wells). */
   .harvy-outlier-search-bar {
     display: flex;

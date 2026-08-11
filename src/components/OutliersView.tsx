@@ -749,10 +749,11 @@ export function OutliersView({
     persistSettings({ accountLink: url });
     void (async () => {
       await fetchPosts(url);
-      // Arm (or re-arm) app-level auto-refresh; always notify so the timer
-      // resets from this fetch even when already armed.
-      writeOutliersSettings({ autoRefreshArmed: true });
-      window.dispatchEvent(new CustomEvent(OUTLIERS_SETTINGS_CHANGED_EVENT));
+      // Arm app-level auto-refresh only when the master switch allows it.
+      if (readOutliersSettings().autoFetchEnabled) {
+        writeOutliersSettings({ autoRefreshArmed: true });
+        window.dispatchEvent(new CustomEvent(OUTLIERS_SETTINGS_CHANGED_EVENT));
+      }
     })();
   }, [accountLink, fetchPosts, persistSettings]);
 

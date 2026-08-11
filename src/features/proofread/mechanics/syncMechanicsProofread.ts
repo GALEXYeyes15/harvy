@@ -17,10 +17,12 @@ function countByType(issues: ProofreadIssue[]): Record<ProofreadIssue["type"], n
 
 /**
  * Run the local mechanics engine, update React state, and paint overlay underlines.
+ * `getExtraIssues` merges on-demand AI check hits so they survive local re-syncs.
  */
 export async function syncMechanicsProofread(
   editor: Editor,
   setProofreadIssues: (issues: ProofreadIssue[]) => void,
+  getExtraIssues?: () => ProofreadIssue[],
 ): Promise<ProofreadIssue[]> {
   try {
     await ensureHunspellLoaded();
@@ -35,19 +37,21 @@ export async function syncMechanicsProofread(
   }
 
   const issues = filterIgnoredMechanicsSuggestions(runMechanicsProofread(snapshot.text));
+  const extra = getExtraIssues?.() ?? [];
+  const merged = extra.length > 0 ? [...issues, ...extra] : issues;
 
   if (import.meta.env.DEV) {
     console.log("[HarvyMechanics] raw results", issues);
-    console.log("[HarvyMechanics] sidebar counts", countByType(issues));
+    console.log("[HarvyMechanics] sidebar counts", countByType(merged));
   }
 
-  setProofreadIssues(issues);
+  setProofreadIssues(merged);
 
-  const ranges = proofreadIssuesToPmRanges(issues, snapshot.charToPmPos, snapshot.text);
+  const ranges = proofreadIssuesToPmRanges(merged, snapshot.charToPmPos, snapshot.text);
 
   if (import.meta.env.DEV) {
     console.log("[HarvyMechanics] overlay underline ranges", {
-      issueCount: issues.length,
+      issueCount: merged.length,
       rangeCount: ranges.length,
       ranges,
     });
@@ -55,5 +59,5 @@ export async function syncMechanicsProofread(
 
   dispatchProofreadDecorations(editor.view, ranges);
 
-  return issues;
+  return merged;
 }

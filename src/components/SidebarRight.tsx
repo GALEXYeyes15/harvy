@@ -41,6 +41,13 @@ export type SidebarRightProps = {
   showQuickLinks?: boolean;
   proofreadIssues?: ProofreadIssue[];
   workspaceSection?: WorkspaceSection;
+  /** When AI check is configured + enabled in Settings. */
+  aiCheckEnabled?: boolean;
+  aiCheckModelLabel?: string | null;
+  aiCheckRunning?: boolean;
+  aiCheckStatus?: string | null;
+  onRunAiCheck?: () => void;
+  onClearAiCheck?: () => void;
 };
 
 function SidebarToolsTab({
@@ -137,10 +144,22 @@ function EditSidebarView({
   stats,
   selectedWordCount,
   proofreadIssues = [],
+  aiCheckEnabled = false,
+  aiCheckModelLabel = null,
+  aiCheckRunning = false,
+  aiCheckStatus = null,
+  onRunAiCheck,
+  onClearAiCheck,
 }: {
   stats: EditorStats;
   selectedWordCount: number | null;
   proofreadIssues?: ProofreadIssue[];
+  aiCheckEnabled?: boolean;
+  aiCheckModelLabel?: string | null;
+  aiCheckRunning?: boolean;
+  aiCheckStatus?: string | null;
+  onRunAiCheck?: () => void;
+  onClearAiCheck?: () => void;
 }) {
   const spellings = proofreadIssues.filter((i) => i.type === "spelling").length;
   const grammar = proofreadIssues.filter((i) => i.type === "grammar").length;
@@ -154,7 +173,7 @@ function EditSidebarView({
 
       <div className={`${DIVIDER} my-6`} aria-hidden />
 
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <SectionLabel text="Document" />
 
         <div className={COMPACT_ROWS_GAP}>
@@ -207,6 +226,43 @@ function EditSidebarView({
             value={suggestions}
           />
         </div>
+
+        {aiCheckEnabled ? (
+          <>
+            <div className={`${DIVIDER} ${COMPACT_SECTION_GAP}`} aria-hidden />
+            <SectionLabel text="AI check" />
+            <div className="space-y-2.5">
+              {aiCheckModelLabel ? (
+                <p className="text-[12px] leading-snug text-muted/75">
+                  Model: <span className="font-medium text-ink">{aiCheckModelLabel}</span>
+                </p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={aiCheckRunning || !onRunAiCheck}
+                  onClick={() => onRunAiCheck?.()}
+                  className="rounded-md bg-page px-2.5 py-1.5 text-[12px] font-medium text-ink ring-1 ring-line/15 transition-colors hover:bg-ink/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {aiCheckRunning ? "Checking…" : "Run AI check"}
+                </button>
+                {onClearAiCheck ? (
+                  <button
+                    type="button"
+                    disabled={aiCheckRunning}
+                    onClick={() => onClearAiCheck()}
+                    className="rounded-md bg-page px-2.5 py-1.5 text-[12px] font-medium text-ink ring-1 ring-line/15 transition-colors hover:bg-ink/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+              {aiCheckStatus ? (
+                <p className="text-[12px] leading-snug text-muted/75">{aiCheckStatus}</p>
+              ) : null}
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -223,6 +279,12 @@ export function SidebarRight({
   showQuickLinks = false,
   proofreadIssues = [],
   workspaceSection = "write",
+  aiCheckEnabled = false,
+  aiCheckModelLabel = null,
+  aiCheckRunning = false,
+  aiCheckStatus = null,
+  onRunAiCheck,
+  onClearAiCheck,
 }: SidebarRightProps) {
   if (workspaceSection === "collect") {
     return (
@@ -273,6 +335,12 @@ export function SidebarRight({
             stats={stats}
             selectedWordCount={selectedWordCount}
             proofreadIssues={proofreadIssues}
+            aiCheckEnabled={aiCheckEnabled}
+            aiCheckModelLabel={aiCheckModelLabel}
+            aiCheckRunning={aiCheckRunning}
+            aiCheckStatus={aiCheckStatus}
+            onRunAiCheck={onRunAiCheck}
+            onClearAiCheck={onClearAiCheck}
           />
         )}
       </div>

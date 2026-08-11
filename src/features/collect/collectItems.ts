@@ -1,29 +1,15 @@
-export type CollectItemType = "Idea" | "Craft";
-
 export type CollectItem = {
   id: string;
+  /** Essay title (Notion Name / title property). */
   preview: string;
-  format: string;
-  type: CollectItemType;
   dateCreated: string;
+  /** Longer notes (e.g. from Notion). */
   body?: string;
+  /** Notion page id when synced from the Ideas database. */
+  notionPageId?: string;
+  /** Notion Status value when synced (e.g. "Idea"). */
+  status?: string;
 };
-
-export const COLLECT_FORMAT_OPTIONS = [
-  "Notes",
-  "Article",
-  "Tweet",
-  "Video",
-  "Quote",
-  "Thread",
-] as const;
-
-export const COLLECT_TYPE_OPTIONS: CollectItemType[] = ["Idea", "Craft"];
-
-export function collectItemFormatLabel(format: string): string {
-  const trimmed = format.trim();
-  return trimmed || "Note";
-}
 
 export function formatCollectDateCreated(isoDate: string): string {
   const date = new Date(isoDate);
@@ -39,21 +25,6 @@ export function todayCollectDateCreated(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function isCollectItemType(value: string): value is CollectItemType {
-  return value === "Idea" || value === "Craft";
-}
-
-function readCollectItemFormat(record: Record<string, unknown>): string {
-  if (typeof record.format === "string") return record.format;
-  if (typeof record.type === "string" && !isCollectItemType(record.type)) return record.type;
-  return "Note";
-}
-
-function readCollectItemType(record: Record<string, unknown>): CollectItemType {
-  if (typeof record.type === "string" && isCollectItemType(record.type)) return record.type;
-  return "Idea";
-}
-
 export function createCollectItem(): CollectItem {
   const id =
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -63,8 +34,6 @@ export function createCollectItem(): CollectItem {
   return {
     id,
     preview: "",
-    format: "Note",
-    type: "Idea",
     dateCreated: todayCollectDateCreated(),
   };
 }
@@ -78,10 +47,16 @@ function parseCollectItemRecord(value: unknown): CollectItem | null {
   return normalizeCollectItem({
     id: record.id,
     preview: record.preview,
-    format: readCollectItemFormat(record),
-    type: readCollectItemType(record),
     dateCreated: record.dateCreated,
     body: typeof record.body === "string" ? record.body : undefined,
+    notionPageId:
+      typeof record.notionPageId === "string" && record.notionPageId.trim()
+        ? record.notionPageId.trim()
+        : undefined,
+    status:
+      typeof record.status === "string" && record.status.trim()
+        ? record.status.trim()
+        : undefined,
   });
 }
 
@@ -89,10 +64,16 @@ export function normalizeCollectItem(item: CollectItem): CollectItem {
   return {
     id: item.id,
     preview: item.preview,
-    format: item.format.trim() || "Note",
-    type: isCollectItemType(item.type) ? item.type : "Idea",
     dateCreated: item.dateCreated || todayCollectDateCreated(),
     body: typeof item.body === "string" ? item.body : undefined,
+    notionPageId:
+      typeof item.notionPageId === "string" && item.notionPageId.trim()
+        ? item.notionPageId.trim()
+        : undefined,
+    status:
+      typeof item.status === "string" && item.status.trim()
+        ? item.status.trim()
+        : undefined,
   };
 }
 

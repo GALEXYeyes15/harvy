@@ -78,7 +78,15 @@ import {
 import { CenteredOverlayModal } from "../overlay/CenteredOverlayModal";
 import { CanvaColorPicker } from "./CanvaColorPicker";
 import { PhrasesCsvTable } from "./PhrasesCsvTable";
+import { NotionIdeasSettingsSection } from "./NotionIdeasSettingsSection";
+import { AiCheckSettingsSection } from "./AiCheckSettingsSection";
 import { SETTINGS_NAV, type SettingsSectionId } from "./sectionIds";
+import {
+  getAiCheckConfig,
+  setAiCheckEnabled,
+  type AiCheckConfigPublic,
+} from "../../features/aiCheck/aiCheck";
+import { isTauriRuntime } from "../../features/save/saveRuntime";
 
 
 /** macOS System Settings–like window: ~1150×800, capped at 90vw / 90vh. */
@@ -333,6 +341,9 @@ function CollectSettingsPanel({
   const [fetchIntervalMinutes, setFetchIntervalMinutes] = useState(
     () => readOutliersSettings().fetchIntervalMinutes,
   );
+  const [autoFetchEnabled, setAutoFetchEnabled] = useState(
+    () => readOutliersSettings().autoFetchEnabled,
+  );
 
   const enabledViewCount =
     Number(showOutliersView) + Number(showCollectView) + Number(showAvatarView);
@@ -377,30 +388,50 @@ function CollectSettingsPanel({
         />
       </SettingsGroup>
       {enableCollect && showOutliersView ? (
-        <label className={`flex items-start justify-between gap-4 ${SETTINGS_BOX_PAD}`}>
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-medium text-ink">Fetch interval</p>
-            <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-              Minutes between Outliers refreshes after you click Fetch posts. Keeps
-              running while Harvy is open. Default {DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES}.
-            </p>
-          </div>
-          <input
-            type="number"
-            min={OUTLIERS_FETCH_INTERVAL_MIN_MINUTES}
-            max={OUTLIERS_FETCH_INTERVAL_MAX_MINUTES}
-            step={1}
-            value={fetchIntervalMinutes}
-            onChange={(e) => {
-              const next = clampOutliersFetchIntervalMinutes(Number(e.target.value));
-              setFetchIntervalMinutes(next);
-              writeOutliersSettings({ fetchIntervalMinutes: next });
-            }}
-            aria-label="Outliers fetch interval in minutes"
-            className={SETTINGS_INLINE_INPUT}
-          />
-        </label>
+        <div className="space-y-3">
+          <SettingsGroup>
+            <ToggleRow
+              id="outliers-auto-fetch"
+              label="Auto-fetch Outliers"
+              description="After Fetch posts, refresh on the interval below while Harvy is open."
+              checked={autoFetchEnabled}
+              onChange={(enabled) => {
+                setAutoFetchEnabled(enabled);
+                writeOutliersSettings({ autoFetchEnabled: enabled });
+              }}
+            />
+          </SettingsGroup>
+          <label
+            className={`flex items-start justify-between gap-4 ${SETTINGS_BOX_PAD} ${
+              autoFetchEnabled ? "" : "opacity-55"
+            }`}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium text-ink">Fetch interval</p>
+              <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+                Minutes between refreshes when auto-fetch is on. Default{" "}
+                {DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES}.
+              </p>
+            </div>
+            <input
+              type="number"
+              min={OUTLIERS_FETCH_INTERVAL_MIN_MINUTES}
+              max={OUTLIERS_FETCH_INTERVAL_MAX_MINUTES}
+              step={1}
+              value={fetchIntervalMinutes}
+              disabled={!autoFetchEnabled}
+              onChange={(e) => {
+                const next = clampOutliersFetchIntervalMinutes(Number(e.target.value));
+                setFetchIntervalMinutes(next);
+                writeOutliersSettings({ fetchIntervalMinutes: next });
+              }}
+              aria-label="Outliers fetch interval in minutes"
+              className={SETTINGS_INLINE_INPUT}
+            />
+          </label>
+        </div>
       ) : null}
+      {enableCollect && showCollectView ? <NotionIdeasSettingsSection /> : null}
     </div>
   );
 }
@@ -424,6 +455,8 @@ function SidebarsPanel({
   const [draftTitle, setDraftTitle] = useState("");
   const [draftUrl, setDraftUrl] = useState("");
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [aiConfig, setAiConfig] = useState<AiCheckConfigPublic | null>(null);
+  const [aiToggleError, setAiToggleError] = useState<string | null>(null);
 
   useEffect(() => {
     savePersistedQuickLinks(links);
@@ -436,6 +469,13 @@ function SidebarsPanel({
     };
     window.addEventListener(QUICK_LINKS_CHANGED_EVENT, sync);
     return () => window.removeEventListener(QUICK_LINKS_CHANGED_EVENT, sync);
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void getAiCheckConfig()
+      .then(setAiConfig)
+      .catch(() => setAiConfig(null));
   }, []);
 
   function handleAdd() {
@@ -451,11 +491,32 @@ function SidebarsPanel({
     setDraftError(null);
   }
 
+  const handleAiEnabledChange = (nextEnabled: boolean) => {
+    setAiToggleError(null);
+    if (!isTauriRuntime()) {
+      setAiToggleError("AI check requires the Harvy desktop app.");
+      return;
+    }
+    if (nextEnabled && !aiConfig?.hasApiKey) {
+      setAiToggleError("Save an API key below first.");
+      return;
+    }
+    void (async () => {
+      try {
+        const next = await setAiCheckEnabled(nextEnabled);
+        setAiConfig(next);
+        window.dispatchEvent(new CustomEvent("harvy:ai-check-config-changed"));
+      } catch (e) {
+        setAiToggleError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+  };
+
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
         title="Sidebars"
-        description="Workspace files, Parameters, Quick Links, and upcoming tools."
+        description="Workspace files, Parameters, AI check, and Quick Links."
       />
 
       <div>
@@ -497,10 +558,10 @@ function SidebarsPanel({
           <ToggleRow
             id="enable-ai-check"
             label="Enable AI check"
-            description="Coming soon."
-            checked={false}
-            onChange={() => {}}
-            disabled
+            description="On-demand model review from the Edit sidebar (not live as you type)."
+            checked={Boolean(aiConfig?.enabled)}
+            onChange={handleAiEnabledChange}
+            disabled={!isTauriRuntime()}
           />
           <ToggleRow
             id="quick-links"
@@ -510,6 +571,17 @@ function SidebarsPanel({
             onChange={onShowQuickLinksChange}
           />
         </SettingsGroup>
+
+        {aiToggleError ? (
+          <p className="text-[12px] text-red-600/90 dark:text-red-400/90">{aiToggleError}</p>
+        ) : null}
+
+        <AiCheckSettingsSection
+          onConfigChange={(next) => {
+            setAiConfig(next);
+            window.dispatchEvent(new CustomEvent("harvy:ai-check-config-changed"));
+          }}
+        />
 
         {showQuickLinks ? (
           <div className={`space-y-2 ${SETTINGS_BOX_PAD}`}>

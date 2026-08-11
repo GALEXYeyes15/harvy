@@ -47,6 +47,7 @@ import {
   loadPersistedCollectItems,
   savePersistedCollectItems,
 } from "../features/collect/collectItemsPersistence";
+import { markNotionIdeaStarted } from "../features/notion/notionIdeas";
 import { WorkspaceSectionSwitcher } from "./WorkspaceSectionSwitcher";
 import { useWindowFullscreen } from "../features/window/useWindowFullscreen";
 import {
@@ -179,6 +180,14 @@ import {
 import { ensureHunspellLoaded } from "../features/proofread/mechanics/hunspellDictionary";
 import { syncMechanicsProofread } from "../features/proofread/mechanics/syncMechanicsProofread";
 import type { ProofreadIssue } from "../features/proofread/types";
+import { proofreadPlainTextAndPositions } from "../features/proofread/proofreadPlainMap";
+import {
+  getAiCheckConfig,
+  locateAiIssuesInText,
+  providerLabel,
+  runAiCheck,
+  type AiCheckConfigPublic,
+} from "../features/aiCheck/aiCheck";
 import { ensureUserRulesFile, loadEditorRules } from "../features/writing-assistance/editorRules";
 
 /** Formatting toolbar (Bold, H1, etc.): hidden for distraction-free writing; set true to restore for Edit chrome. */
@@ -361,6 +370,11 @@ export function AppShell() {
   const [tiptapEditor, setTiptapEditor] = useState<Editor | null>(null);
   const [selectedWordCount, setSelectedWordCount] = useState<number | null>(null);
   const [proofreadIssues, setProofreadIssues] = useState<ProofreadIssue[]>([]);
+  const [aiCheckConfig, setAiCheckConfig] = useState<AiCheckConfigPublic | null>(null);
+  const [aiProofreadIssues, setAiProofreadIssues] = useState<ProofreadIssue[]>([]);
+  const [aiCheckRunning, setAiCheckRunning] = useState(false);
+  const [aiCheckStatus, setAiCheckStatus] = useState<string | null>(null);
+  const aiProofreadIssuesRef = useRef<ProofreadIssue[]>([]);
   /** Sidebar inline rename for a newly created (or future: any) folder. */
   const [folderRename, setFolderRename] = useState<{
     path: string;
@@ -1764,6 +1778,61 @@ export function AppShell() {
   }
   handleCreateMarkdownFileRef.current = handleCreateMarkdownFile;
 
+  async function handleStartWritingFromIdea(item: CollectItem) {
+    if (!isTauriRuntime()) {
+      window.alert("Starting a draft requires the Harvy desktop app.");
+      return;
+    }
+    if (!hasWorkspaceFolder || !supportedTree || !workspaceRootPath) {
+      window.alert("Choose a workspace folder before starting a draft.");
+      return;
+    }
+
+    const folder = workspaceBrowsePath ?? supportedTree.path;
+    const title = item.preview.trim() || "Untitled";
+    const notes = (item.body ?? "").trim();
+    const seed = notes ? `# ${title}\n\n${notes}\n` : `# ${title}\n\n`;
+    const base =
+      title
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "untitled";
+
+    let outPath = normalizeMarkdownSavePath(joinPath(folder, `${base}.md`));
+    let suffix = 2;
+    while (await invoke<boolean>("path_exists", { path: outPath })) {
+      outPath = normalizeMarkdownSavePath(joinPath(folder, `${base}-${suffix}.md`));
+      suffix += 1;
+    }
+
+    try {
+      await invoke("write_text_file", { path: outPath, contents: seed });
+      if (item.notionPageId) {
+        try {
+          await markNotionIdeaStarted(item.notionPageId);
+        } catch (e) {
+          window.alert(
+            `Draft created, but Notion Status wasn’t updated: ${
+              e instanceof Error ? e.message : String(e)
+            }`,
+          );
+        }
+      }
+      setCollectItems((prev) => prev.filter((row) => row.id !== item.id));
+      await reloadWorkspaceTree();
+      setActiveWorkspaceSection("write");
+      await selectNode({
+        name: fileNameFromPath(outPath),
+        path: outPath,
+        kind: "file",
+      });
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   const updateFolderRenameDraft = useCallback((draft: string) => {
     setFolderRename((prev) => {
       if (!prev) return prev;
@@ -1952,6 +2021,31 @@ export function AppShell() {
     void ensureHunspellLoaded();
   }, []);
 
+  useEffect(() => {
+    aiProofreadIssuesRef.current = aiProofreadIssues;
+  }, [aiProofreadIssues]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    const refresh = () => {
+      void getAiCheckConfig()
+        .then(setAiCheckConfig)
+        .catch(() => setAiCheckConfig(null));
+    };
+    refresh();
+    window.addEventListener("harvy:ai-check-config-changed", refresh);
+    return () => window.removeEventListener("harvy:ai-check-config-changed", refresh);
+  }, []);
+
+  /** TipTap Placeholder extension only renders when the doc is empty; no real document text. */
+  const editorPlaceholder = editorEditable ? "Start writing..." : undefined;
+  const editorInstanceKey = activeTabId ?? (openTabIds.length === 0 ? "scratch" : "browse");
+
+  useEffect(() => {
+    setAiProofreadIssues([]);
+    setAiCheckStatus(null);
+  }, [editorInstanceKey]);
+
   /** Live rule-based mechanics (Spelling / Grammar / Suggestions) — runs in Edit mode regardless of sidebar. */
   useEffect(() => {
     if (!tiptapEditor || mode !== "edit" || !editorEditable) {
@@ -1959,7 +2053,7 @@ export function AppShell() {
     }
 
     const runSync = () => {
-      void syncMechanicsProofread(tiptapEditor, setProofreadIssues);
+      void syncMechanicsProofread(tiptapEditor, setProofreadIssues, () => aiProofreadIssuesRef.current);
     };
 
     runSync();
@@ -1976,13 +2070,40 @@ export function AppShell() {
       if (debounceId) clearTimeout(debounceId);
     };
   }, [tiptapEditor, mode, editorEditable]);
-  /** TipTap Placeholder extension only renders when the doc is empty; no real document text. */
-  const editorPlaceholder = editorEditable ? "Start writing..." : undefined;
-  const editorInstanceKey = activeTabId ?? (openTabIds.length === 0 ? "scratch" : "browse");
 
   const refreshMechanicsProofread = useCallback(() => {
     if (!tiptapEditor) return;
-    void syncMechanicsProofread(tiptapEditor, setProofreadIssues);
+    void syncMechanicsProofread(tiptapEditor, setProofreadIssues, () => aiProofreadIssuesRef.current);
+  }, [tiptapEditor]);
+
+  const handleRunAiCheck = useCallback(async () => {
+    if (!tiptapEditor || !isTauriRuntime()) return;
+    setAiCheckRunning(true);
+    setAiCheckStatus("Running…");
+    try {
+      const { text } = proofreadPlainTextAndPositions(tiptapEditor.state.doc);
+      const result = await runAiCheck(text);
+      const located = locateAiIssuesInText(text, result.issues);
+      setAiProofreadIssues(located);
+      aiProofreadIssuesRef.current = located;
+      setAiCheckStatus(
+        `${located.length} issue${located.length === 1 ? "" : "s"} from ${providerLabel(result.provider)} · ${result.model}`,
+      );
+      await syncMechanicsProofread(tiptapEditor, setProofreadIssues, () => located);
+    } catch (e) {
+      setAiCheckStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAiCheckRunning(false);
+    }
+  }, [tiptapEditor]);
+
+  const handleClearAiCheck = useCallback(() => {
+    setAiProofreadIssues([]);
+    aiProofreadIssuesRef.current = [];
+    setAiCheckStatus(null);
+    if (tiptapEditor) {
+      void syncMechanicsProofread(tiptapEditor, setProofreadIssues, () => []);
+    }
   }, [tiptapEditor]);
 
   useEffect(() => {
@@ -2181,6 +2302,16 @@ export function AppShell() {
       proofreadIssues={proofreadIssues}
       workspaceSection={activeWorkspaceSection}
       showQuickLinks={showQuickLinks}
+      aiCheckEnabled={Boolean(aiCheckConfig?.enabled && aiCheckConfig.hasApiKey)}
+      aiCheckModelLabel={
+        aiCheckConfig?.model
+          ? `${providerLabel(aiCheckConfig.provider)} · ${aiCheckConfig.model}`
+          : null
+      }
+      aiCheckRunning={aiCheckRunning}
+      aiCheckStatus={aiCheckStatus}
+      onRunAiCheck={() => void handleRunAiCheck()}
+      onClearAiCheck={handleClearAiCheck}
     />
   );
 
@@ -2275,6 +2406,7 @@ export function AppShell() {
               items={collectItems}
               onItemsChange={setCollectItems}
               onAddPreviewToNotes={handleAddCollectPreviewToNotes}
+              onStartWriting={handleStartWritingFromIdea}
               showOutliersView={showOutliersView}
               showCollectView={showCollectView}
               showAvatarView={showAvatarView}

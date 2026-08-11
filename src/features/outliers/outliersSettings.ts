@@ -23,8 +23,13 @@ export type OutliersSettings = {
   /** Minutes between automatic refreshes after an explicit Fetch posts. */
   fetchIntervalMinutes: number;
   /**
-   * After the user clicks Fetch posts, keep refreshing on the fetch interval
-   * until the account link changes or they turn this off.
+   * Master switch: when false, never schedule background refreshes
+   * (and clear any armed schedule).
+   */
+  autoFetchEnabled: boolean;
+  /**
+   * After the user clicks Fetch posts (and auto-fetch is enabled), keep refreshing
+   * on the fetch interval until the account link changes or they turn auto-fetch off.
    */
   autoRefreshArmed: boolean;
 };
@@ -35,6 +40,7 @@ const defaultSettings: OutliersSettings = {
   outlierScore: "any",
   postedWithin: "year",
   fetchIntervalMinutes: DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES,
+  autoFetchEnabled: true,
   autoRefreshArmed: false,
 };
 
@@ -111,6 +117,7 @@ export function readOutliersSettings(): OutliersSettings {
       outlierScore,
       postedWithin,
       fetchIntervalMinutes: clampOutliersFetchIntervalMinutes(parsed.fetchIntervalMinutes),
+      autoFetchEnabled: parsed.autoFetchEnabled !== false,
       autoRefreshArmed: parsed.autoRefreshArmed === true,
     };
   } catch {
@@ -123,6 +130,19 @@ export function readOutliersSettings(): OutliersSettings {
 
 export function writeOutliersSettings(partial: Partial<OutliersSettings>): OutliersSettings {
   const current = readOutliersSettings();
+  const autoFetchEnabled =
+    partial.autoFetchEnabled !== undefined
+      ? Boolean(partial.autoFetchEnabled)
+      : current.autoFetchEnabled;
+  let autoRefreshArmed =
+    partial.autoRefreshArmed !== undefined
+      ? Boolean(partial.autoRefreshArmed)
+      : current.autoRefreshArmed;
+  // Turning off the master switch always disarms the schedule.
+  if (!autoFetchEnabled) {
+    autoRefreshArmed = false;
+  }
+
   const next: OutliersSettings = {
     ...current,
     ...partial,
@@ -137,10 +157,8 @@ export function writeOutliersSettings(partial: Partial<OutliersSettings>): Outli
       partial.fetchIntervalMinutes !== undefined
         ? clampOutliersFetchIntervalMinutes(partial.fetchIntervalMinutes)
         : current.fetchIntervalMinutes,
-    autoRefreshArmed:
-      partial.autoRefreshArmed !== undefined
-        ? Boolean(partial.autoRefreshArmed)
-        : current.autoRefreshArmed,
+    autoFetchEnabled,
+    autoRefreshArmed,
   };
 
   if (typeof localStorage !== "undefined") {
@@ -154,8 +172,11 @@ export function writeOutliersSettings(partial: Partial<OutliersSettings>): Outli
   const refreshScheduleChanged =
     (partial.fetchIntervalMinutes !== undefined &&
       next.fetchIntervalMinutes !== current.fetchIntervalMinutes) ||
+    (partial.autoFetchEnabled !== undefined &&
+      next.autoFetchEnabled !== current.autoFetchEnabled) ||
     (partial.autoRefreshArmed !== undefined &&
       next.autoRefreshArmed !== current.autoRefreshArmed) ||
+    (!autoFetchEnabled && current.autoRefreshArmed) ||
     (partial.accountLink !== undefined && next.accountLink !== current.accountLink);
 
   if (refreshScheduleChanged && typeof window !== "undefined") {
