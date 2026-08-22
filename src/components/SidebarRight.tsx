@@ -1,5 +1,5 @@
-import { Info } from "lucide-react";
-import type { CSSProperties, ReactNode } from "react";
+import { ChevronRight, Info, Zap } from "lucide-react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import type { EditorStats } from "../features/editor/stats";
 import { SIDEBAR_TOOLS_MODES, type SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
 import type { ProofreadIssue } from "../features/proofread/types";
@@ -43,11 +43,14 @@ export type SidebarRightProps = {
   workspaceSection?: WorkspaceSection;
   /** When AI check is configured + enabled in Settings. */
   aiCheckEnabled?: boolean;
+  /** Friendly model name for Info (e.g. "Claude Fable 5"). */
   aiCheckModelLabel?: string | null;
   aiCheckRunning?: boolean;
-  aiCheckStatus?: string | null;
-  onRunAiCheck?: () => void;
-  onClearAiCheck?: () => void;
+  /** Estimated or actual cost line for Info (e.g. "~$0.02"). */
+  aiCheckCostLabel?: string | null;
+  /** Error message from the last run, if any. */
+  aiCheckError?: string | null;
+  onRunAiCheck?: () => void | Promise<void>;
 };
 
 function SidebarToolsTab({
@@ -94,11 +97,18 @@ function LabelAccent({ text, colorHex }: { text: string; colorHex: string }) {
   );
 }
 
-function ProofreadLabelAccent({ text, type }: { text: string; type: "spelling" | "grammar" | "suggestion" }) {
+function ProofreadLabelAccent({
+  text,
+  type,
+}: {
+  text: string;
+  type: "spelling" | "grammar" | "suggestion" | "ai";
+}) {
   const dotColorByType: Record<typeof type, string> = {
     spelling: "#e5484d",
     grammar: "#3a7bd5",
     suggestion: "#2fbf71",
+    ai: "#22d3ee",
   };
   const style = {
     "--proofread-dot-color": dotColorByType[type],
@@ -147,9 +157,9 @@ function EditSidebarView({
   aiCheckEnabled = false,
   aiCheckModelLabel = null,
   aiCheckRunning = false,
-  aiCheckStatus = null,
+  aiCheckCostLabel = null,
+  aiCheckError = null,
   onRunAiCheck,
-  onClearAiCheck,
 }: {
   stats: EditorStats;
   selectedWordCount: number | null;
@@ -157,13 +167,14 @@ function EditSidebarView({
   aiCheckEnabled?: boolean;
   aiCheckModelLabel?: string | null;
   aiCheckRunning?: boolean;
-  aiCheckStatus?: string | null;
-  onRunAiCheck?: () => void;
-  onClearAiCheck?: () => void;
+  aiCheckCostLabel?: string | null;
+  aiCheckError?: string | null;
+  onRunAiCheck?: () => void | Promise<void>;
 }) {
   const spellings = proofreadIssues.filter((i) => i.type === "spelling").length;
   const grammar = proofreadIssues.filter((i) => i.type === "grammar").length;
   const suggestions = proofreadIssues.filter((i) => i.type === "suggestion").length;
+  const aiIssues = proofreadIssues.filter((i) => i.type === "ai").length;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -225,45 +236,95 @@ function EditSidebarView({
             label={<ProofreadLabelAccent text="Suggestions" type="suggestion" />}
             value={suggestions}
           />
+          {aiCheckEnabled || aiIssues > 0 ? (
+            <StatRow label={<ProofreadLabelAccent text="AI check" type="ai" />} value={aiIssues} />
+          ) : null}
         </div>
 
         {aiCheckEnabled ? (
-          <>
-            <div className={`${DIVIDER} ${COMPACT_SECTION_GAP}`} aria-hidden />
-            <SectionLabel text="AI check" />
-            <div className="space-y-2.5">
-              {aiCheckModelLabel ? (
-                <p className="text-[12px] leading-snug text-muted/75">
-                  Model: <span className="font-medium text-ink">{aiCheckModelLabel}</span>
-                </p>
-              ) : null}
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={aiCheckRunning || !onRunAiCheck}
-                  onClick={() => onRunAiCheck?.()}
-                  className="rounded-md bg-page px-2.5 py-1.5 text-[12px] font-medium text-ink ring-1 ring-line/15 transition-colors hover:bg-ink/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {aiCheckRunning ? "Checking…" : "Run AI check"}
-                </button>
-                {onClearAiCheck ? (
-                  <button
-                    type="button"
-                    disabled={aiCheckRunning}
-                    onClick={() => onClearAiCheck()}
-                    className="rounded-md bg-page px-2.5 py-1.5 text-[12px] font-medium text-ink ring-1 ring-line/15 transition-colors hover:bg-ink/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Clear
-                  </button>
-                ) : null}
-              </div>
-              {aiCheckStatus ? (
-                <p className="text-[12px] leading-snug text-muted/75">{aiCheckStatus}</p>
-              ) : null}
-            </div>
-          </>
+          <AiCheckRunControls
+            modelLabel={aiCheckModelLabel}
+            running={aiCheckRunning}
+            costLabel={aiCheckCostLabel}
+            error={aiCheckError}
+            onRun={onRunAiCheck}
+          />
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function AiCheckRunControls({
+  modelLabel,
+  running,
+  costLabel,
+  error,
+  onRun,
+}: {
+  modelLabel: string | null;
+  running: boolean;
+  costLabel: string | null;
+  error: string | null;
+  onRun?: () => void | Promise<void>;
+}) {
+  const [infoOpen, setInfoOpen] = useState(false);
+  /** Local busy flag so the label updates on click without waiting for AppShell to re-render. */
+  const [pending, setPending] = useState(false);
+  const busy = running || pending;
+  const hasInfo = Boolean(modelLabel || costLabel || error);
+
+  return (
+    <div className="mt-5 space-y-2.5">
+      <button
+        type="button"
+        disabled={busy || !onRun}
+        onClick={() => {
+          if (!onRun || busy) return;
+          setPending(true);
+          void Promise.resolve(onRun()).finally(() => setPending(false));
+        }}
+        className="flex w-full items-center justify-center gap-2 rounded-md border border-ink bg-transparent px-3 py-2.5 text-[13px] font-medium text-ink transition-colors hover:bg-ink/[0.06] disabled:cursor-not-allowed disabled:opacity-45"
+      >
+        <Zap size={14} strokeWidth={2} aria-hidden className="shrink-0" />
+        <span>{busy ? "Running..." : "Run AI Check"}</span>
+      </button>
+
+      {hasInfo ? (
+        <div>
+          <button
+            type="button"
+            onClick={() => setInfoOpen((open) => !open)}
+            className="inline-flex items-center gap-1 text-[12px] text-muted/70 transition-colors hover:text-muted"
+            aria-expanded={infoOpen}
+          >
+            <ChevronRight
+              size={12}
+              strokeWidth={2}
+              aria-hidden
+              className={`shrink-0 transition-transform ${infoOpen ? "rotate-90" : ""}`}
+            />
+            Info
+          </button>
+          {infoOpen ? (
+            <div className="mt-1.5 space-y-1.5 pl-4">
+              {modelLabel ? (
+                <p className="text-[12px] leading-snug text-muted/75">
+                  Model: <span className="font-medium text-ink">{modelLabel}</span>
+                </p>
+              ) : null}
+              {costLabel ? (
+                <p className="text-[12px] leading-snug text-muted/75">
+                  Cost: <span className="font-medium text-ink">{costLabel}</span>
+                </p>
+              ) : null}
+              {error ? (
+                <p className="text-[12px] leading-snug text-red-600/90 dark:text-red-400/90">{error}</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -282,9 +343,9 @@ export function SidebarRight({
   aiCheckEnabled = false,
   aiCheckModelLabel = null,
   aiCheckRunning = false,
-  aiCheckStatus = null,
+  aiCheckCostLabel = null,
+  aiCheckError = null,
   onRunAiCheck,
-  onClearAiCheck,
 }: SidebarRightProps) {
   if (workspaceSection === "collect") {
     return (
@@ -338,9 +399,9 @@ export function SidebarRight({
             aiCheckEnabled={aiCheckEnabled}
             aiCheckModelLabel={aiCheckModelLabel}
             aiCheckRunning={aiCheckRunning}
-            aiCheckStatus={aiCheckStatus}
+            aiCheckCostLabel={aiCheckCostLabel}
+            aiCheckError={aiCheckError}
             onRunAiCheck={onRunAiCheck}
-            onClearAiCheck={onClearAiCheck}
           />
         )}
       </div>

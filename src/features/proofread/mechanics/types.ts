@@ -1,7 +1,7 @@
-import type { ProofreadIssueType } from "../types";
+import type { MechanicsIssueType } from "../types";
 
-/** Category for a local mechanics rule hit (maps 1:1 to `ProofreadIssueType`). */
-export type MechanicsRuleCategory = ProofreadIssueType;
+/** Category for a local mechanics rule hit. */
+export type MechanicsRuleCategory = MechanicsIssueType;
 
 /**
  * Result from a single rule. Offsets are UTF-16 indices into the full document plain text

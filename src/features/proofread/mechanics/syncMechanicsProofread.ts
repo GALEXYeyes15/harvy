@@ -1,4 +1,5 @@
 import type { Editor } from "@tiptap/core";
+import { reconcileAiIssuesInText } from "../../aiCheck/aiCheck";
 import { dispatchProofreadDecorations } from "../mechanicsUnderlineLayer";
 import { proofreadIssuesToPmRanges } from "../mechanicsUnderlineRanges";
 import { proofreadPlainTextAndPositions } from "../proofreadPlainMap";
@@ -12,17 +13,20 @@ function countByType(issues: ProofreadIssue[]): Record<ProofreadIssue["type"], n
     spelling: issues.filter((i) => i.type === "spelling").length,
     grammar: issues.filter((i) => i.type === "grammar").length,
     suggestion: issues.filter((i) => i.type === "suggestion").length,
+    ai: issues.filter((i) => i.type === "ai").length,
   };
 }
 
 /**
  * Run the local mechanics engine, update React state, and paint overlay underlines.
  * `getExtraIssues` merges on-demand AI check hits so they survive local re-syncs.
+ * `setExtraIssues` persists reconciled AI hits after Ignore / Replace / edits.
  */
 export async function syncMechanicsProofread(
   editor: Editor,
   setProofreadIssues: (issues: ProofreadIssue[]) => void,
   getExtraIssues?: () => ProofreadIssue[],
+  setExtraIssues?: (issues: ProofreadIssue[]) => void,
 ): Promise<ProofreadIssue[]> {
   try {
     await ensureHunspellLoaded();
@@ -37,8 +41,13 @@ export async function syncMechanicsProofread(
   }
 
   const issues = filterIgnoredMechanicsSuggestions(runMechanicsProofread(snapshot.text));
-  const extra = getExtraIssues?.() ?? [];
-  const merged = extra.length > 0 ? [...issues, ...extra] : issues;
+  const reconciledExtra = reconcileAiIssuesInText(snapshot.text, getExtraIssues?.() ?? []);
+  const extra = filterIgnoredMechanicsSuggestions(reconciledExtra);
+  if (setExtraIssues) {
+    const remainingAi = extra.filter((issue) => issue.type === "ai");
+    setExtraIssues(remainingAi);
+  }
+  const merged = extra.length > 0 ? [...extra, ...issues] : issues;
 
   if (import.meta.env.DEV) {
     console.log("[HarvyMechanics] raw results", issues);

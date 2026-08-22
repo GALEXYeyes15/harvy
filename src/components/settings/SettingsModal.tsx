@@ -84,8 +84,10 @@ import { SETTINGS_NAV, type SettingsSectionId } from "./sectionIds";
 import {
   getAiCheckConfig,
   setAiCheckEnabled,
+  setAiCheckShowReplaceSuggestions,
   type AiCheckConfigPublic,
 } from "../../features/aiCheck/aiCheck";
+import { syncAiCheckPopoverPrefs } from "../../features/aiCheck/aiCheckPopoverPrefs";
 import { isTauriRuntime } from "../../features/save/saveRuntime";
 
 
@@ -474,7 +476,10 @@ function SidebarsPanel({
   useEffect(() => {
     if (!isTauriRuntime()) return;
     void getAiCheckConfig()
-      .then(setAiConfig)
+      .then((next) => {
+        setAiConfig(next);
+        syncAiCheckPopoverPrefs(next);
+      })
       .catch(() => setAiConfig(null));
   }, []);
 
@@ -505,6 +510,29 @@ function SidebarsPanel({
       try {
         const next = await setAiCheckEnabled(nextEnabled);
         setAiConfig(next);
+        syncAiCheckPopoverPrefs(next);
+        window.dispatchEvent(new CustomEvent("harvy:ai-check-config-changed"));
+      } catch (e) {
+        setAiToggleError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+  };
+
+  const handleAiShowReplaceChange = (showReplaceSuggestions: boolean) => {
+    setAiToggleError(null);
+    if (!isTauriRuntime()) {
+      setAiToggleError("AI check requires the Harvy desktop app.");
+      return;
+    }
+    if (!aiConfig?.hasApiKey) {
+      setAiToggleError("Save an API key below first.");
+      return;
+    }
+    void (async () => {
+      try {
+        const next = await setAiCheckShowReplaceSuggestions(showReplaceSuggestions);
+        setAiConfig(next);
+        syncAiCheckPopoverPrefs(next);
         window.dispatchEvent(new CustomEvent("harvy:ai-check-config-changed"));
       } catch (e) {
         setAiToggleError(e instanceof Error ? e.message : String(e));
@@ -563,6 +591,16 @@ function SidebarsPanel({
             onChange={handleAiEnabledChange}
             disabled={!isTauriRuntime()}
           />
+          {aiConfig?.enabled ? (
+            <ToggleRow
+              id="ai-check-show-replace"
+              label="Show replace suggestions"
+              description="Offer “Replace with…” in the AI check popup."
+              checked={aiConfig.showReplaceSuggestions !== false}
+              onChange={handleAiShowReplaceChange}
+              disabled={!isTauriRuntime() || !aiConfig.hasApiKey}
+            />
+          ) : null}
           <ToggleRow
             id="quick-links"
             label="Quick Links"
@@ -576,12 +614,16 @@ function SidebarsPanel({
           <p className="text-[12px] text-red-600/90 dark:text-red-400/90">{aiToggleError}</p>
         ) : null}
 
-        <AiCheckSettingsSection
-          onConfigChange={(next) => {
-            setAiConfig(next);
-            window.dispatchEvent(new CustomEvent("harvy:ai-check-config-changed"));
-          }}
-        />
+        {/* Show API setup when enabled, or before a key exists so first-time setup isn’t blocked. */}
+        {aiConfig?.enabled || !aiConfig?.hasApiKey ? (
+          <AiCheckSettingsSection
+            onConfigChange={(next) => {
+              setAiConfig(next);
+              syncAiCheckPopoverPrefs(next);
+              window.dispatchEvent(new CustomEvent("harvy:ai-check-config-changed"));
+            }}
+          />
+        ) : null}
 
         {showQuickLinks ? (
           <div className={`space-y-2 ${SETTINGS_BOX_PAD}`}>

@@ -1,4 +1,4 @@
-export type ProofreadIssueType = "spelling" | "grammar" | "suggestion";
+export type ProofreadIssueType = "spelling" | "grammar" | "suggestion" | "ai";
 
 export type ProofreadIssue = {
   type: ProofreadIssueType;
@@ -14,3 +14,13 @@ export type ProofreadIssue = {
 export type ProofreadIssuesResponse = {
   issues: ProofreadIssue[];
 };
+
+/** Local mechanics categories (excludes on-demand AI check). */
+export type MechanicsIssueType = Exclude<ProofreadIssueType, "ai">;
+
+/** Types that open the green suggestion-style popover. */
+export function isSuggestionStyleIssueType(
+  type: ProofreadIssueType,
+): type is "suggestion" | "ai" {
+  return type === "suggestion" || type === "ai";
+}

@@ -38,7 +38,8 @@ export function filterIgnoredMechanicsSuggestions(
   documentKey?: string,
 ): ProofreadIssue[] {
   const docKey = documentKey ?? getSpellingDocumentKey();
-  return issues.filter(
-    (issue) => issue.type !== "suggestion" || !isMechanicsSuggestionIgnored(issue, docKey),
-  );
+  return issues.filter((issue) => {
+    if (issue.type !== "suggestion" && issue.type !== "ai") return true;
+    return !isMechanicsSuggestionIgnored(issue, docKey);
+  });
 }

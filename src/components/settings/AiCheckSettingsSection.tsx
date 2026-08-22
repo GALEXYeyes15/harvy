@@ -83,10 +83,12 @@ export function AiCheckSettingsSection({ onConfigChange }: Props) {
     setMessage(null);
     try {
       const keepExistingKey = Boolean(config?.hasApiKey && !apiKey.trim());
+      // First-time connect turns AI check on so API settings stay visible after save.
+      const enabled = config?.hasApiKey ? Boolean(config.enabled) : true;
       const next = await saveAiCheckConfig({
         apiKey,
         model: model || undefined,
-        enabled: config?.enabled ?? false,
+        enabled,
         keepExistingKey,
       });
       applyConfig(next);

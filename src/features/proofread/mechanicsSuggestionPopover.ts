@@ -3,13 +3,14 @@ import {
   appendHarvyContextMenuSections,
   closeHarvyContextMenu,
   HARVY_CONTEXT_MENU_DIVIDER_CLASS,
-  openHarvyContextMenuPanel,
+  openHarvyContextMenuAt,
   type HarvyContextMenuSection,
 } from "../editor/harvyContextMenu";
 import type { MechanicsSuggestionPopoverAnchor } from "./mechanicsIssueAtClick";
 import { ignoreMechanicsSuggestionForDocument } from "./mechanics/mechanicsSuggestionIgnore";
 import { spellingContextMenuRef } from "./spellingContextMenuRef";
 import type { ProofreadIssue } from "./types";
+import { aiCheckPopoverPrefsRef } from "../aiCheck/aiCheckPopoverPrefs";
 
 export function closeMechanicsSuggestionPopover(): void {
   closeHarvyContextMenu();
@@ -35,15 +36,19 @@ export function openMechanicsSuggestionPopover(opts: {
   const message = displayMessage(issue);
   const replacement = replacementText(issue);
 
-  openHarvyContextMenuPanel({
+  openHarvyContextMenuAt({
     view,
     anchor: { from: pmFrom, to: pmTo },
     placement: "below-start",
+    alignToUnderlineMount: true,
     className: "harvy-mechanics-suggestion-popover",
     populate: (menuEl, runAction) => {
       const header = document.createElement("p");
-      header.className = "harvy-context-menu__title";
-      header.textContent = "Suggestion";
+      header.className =
+        issue.type === "ai"
+          ? "harvy-context-menu__title harvy-context-menu__title--ai"
+          : "harvy-context-menu__title";
+      header.textContent = issue.type === "ai" ? "AI check" : "Suggestion";
       menuEl.appendChild(header);
 
       const note = document.createElement("p");
@@ -53,7 +58,10 @@ export function openMechanicsSuggestionPopover(opts: {
 
       const sections: HarvyContextMenuSection[] = [];
 
-      if (replacement) {
+      const showReplace =
+        issue.type !== "ai" || aiCheckPopoverPrefsRef.showReplaceSuggestions;
+
+      if (replacement && showReplace) {
         sections.push([
           {
             label: `Replace with “${replacement}”`,
@@ -77,7 +85,7 @@ export function openMechanicsSuggestionPopover(opts: {
         },
       ]);
 
-      if (replacement) {
+      if (replacement && showReplace) {
         const divider = document.createElement("div");
         divider.className = HARVY_CONTEXT_MENU_DIVIDER_CLASS;
         divider.setAttribute("aria-hidden", "true");

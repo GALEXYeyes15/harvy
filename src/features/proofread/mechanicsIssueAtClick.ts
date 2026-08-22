@@ -1,7 +1,7 @@
 import type { EditorView } from "@tiptap/pm/view";
 import { mechanicsUnderlineLayerKey } from "./mechanicsUnderlineLayer";
 import { proofreadPlainTextAndPositions } from "./proofreadPlainMap";
-import type { ProofreadIssue } from "./types";
+import { isSuggestionStyleIssueType, type ProofreadIssue } from "./types";
 
 function pmRangeForPlainRange(
   charToPmPos: number[],
@@ -32,7 +32,7 @@ function findIssueForPmRange(
   let bestLen = Infinity;
 
   for (const issue of issues) {
-    if (issue.type !== "suggestion") continue;
+    if (!isSuggestionStyleIssueType(issue.type)) continue;
     const pm = pmRangeForPlainRange(charToPmPos, issue.start, issue.end);
     if (!pm) continue;
     if (pm.from <= from && pm.to >= to) {
@@ -67,7 +67,7 @@ function issueFromOverlayRange(
   };
 }
 
-/** Smallest suggestion underline range containing `pmPos`. */
+/** Smallest suggestion / AI underline range containing `pmPos`. */
 function findSuggestionRangeContainingPm(
   view: EditorView,
   pmPos: number,
@@ -77,7 +77,7 @@ function findSuggestionRangeContainingPm(
   let best: { from: number; to: number } | null = null;
 
   for (const range of layerState?.ranges ?? []) {
-    if (range.type !== "suggestion") continue;
+    if (!isSuggestionStyleIssueType(range.type)) continue;
     if (range.from >= range.to) continue;
     if (range.from <= pmPos && range.to >= pmPos) {
       const len = range.to - range.from;
@@ -89,7 +89,7 @@ function findSuggestionRangeContainingPm(
 
   const { charToPmPos } = proofreadPlainTextAndPositions(view.state.doc);
   for (const issue of issues) {
-    if (issue.type !== "suggestion") continue;
+    if (!isSuggestionStyleIssueType(issue.type)) continue;
     const pm = pmRangeForPlainRange(charToPmPos, issue.start, issue.end);
     if (!pm) continue;
     if (pm.from <= pmPos && pm.to >= pmPos) {

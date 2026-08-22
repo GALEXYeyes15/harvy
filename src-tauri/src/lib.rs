@@ -111,6 +111,7 @@ pub fn run() {
             commands::ai_check::ai_check_get_config,
             commands::ai_check::ai_check_save_config,
             commands::ai_check::ai_check_set_enabled,
+            commands::ai_check::ai_check_set_show_replace_suggestions,
             commands::ai_check::ai_check_clear_config,
             commands::ai_check::ai_check_detect_provider,
             commands::ai_check::ai_check_list_models,

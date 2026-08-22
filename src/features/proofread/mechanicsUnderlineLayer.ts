@@ -343,7 +343,7 @@ class MechanicsUnderlineLayerView implements PluginViewLike {
         el.style.left = `${local.left}px`;
         el.style.top = `${local.top}px`;
         el.style.width = `${Math.max(0, local.width)}px`;
-        el.style.height = `${UNDERLINE_HEIGHT_PX}px`;
+        el.style.height = `${range.type === "ai" ? 2 : UNDERLINE_HEIGHT_PX}px`;
         this.layerEl.appendChild(el);
       }
     }

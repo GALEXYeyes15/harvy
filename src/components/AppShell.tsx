@@ -182,12 +182,16 @@ import { syncMechanicsProofread } from "../features/proofread/mechanics/syncMech
 import type { ProofreadIssue } from "../features/proofread/types";
 import { proofreadPlainTextAndPositions } from "../features/proofread/proofreadPlainMap";
 import {
+  estimateAiCheckCostFromEssay,
+  estimateCostUsd,
+  formatAiCheckCostUsd,
+  formatAiModelDisplayName,
   getAiCheckConfig,
   locateAiIssuesInText,
-  providerLabel,
   runAiCheck,
   type AiCheckConfigPublic,
 } from "../features/aiCheck/aiCheck";
+import { syncAiCheckPopoverPrefs } from "../features/aiCheck/aiCheckPopoverPrefs";
 import { ensureUserRulesFile, loadEditorRules } from "../features/writing-assistance/editorRules";
 
 /** Formatting toolbar (Bold, H1, etc.): hidden for distraction-free writing; set true to restore for Edit chrome. */
@@ -373,7 +377,8 @@ export function AppShell() {
   const [aiCheckConfig, setAiCheckConfig] = useState<AiCheckConfigPublic | null>(null);
   const [aiProofreadIssues, setAiProofreadIssues] = useState<ProofreadIssue[]>([]);
   const [aiCheckRunning, setAiCheckRunning] = useState(false);
-  const [aiCheckStatus, setAiCheckStatus] = useState<string | null>(null);
+  const [aiCheckCostLabel, setAiCheckCostLabel] = useState<string | null>(null);
+  const [aiCheckError, setAiCheckError] = useState<string | null>(null);
   const aiProofreadIssuesRef = useRef<ProofreadIssue[]>([]);
   /** Sidebar inline rename for a newly created (or future: any) folder. */
   const [folderRename, setFolderRename] = useState<{
@@ -2029,8 +2034,14 @@ export function AppShell() {
     if (!isTauriRuntime()) return;
     const refresh = () => {
       void getAiCheckConfig()
-        .then(setAiCheckConfig)
-        .catch(() => setAiCheckConfig(null));
+        .then((next) => {
+          setAiCheckConfig(next);
+          syncAiCheckPopoverPrefs(next);
+        })
+        .catch(() => {
+          setAiCheckConfig(null);
+          syncAiCheckPopoverPrefs(null);
+        });
     };
     refresh();
     window.addEventListener("harvy:ai-check-config-changed", refresh);
@@ -2042,9 +2053,27 @@ export function AppShell() {
   const editorInstanceKey = activeTabId ?? (openTabIds.length === 0 ? "scratch" : "browse");
 
   useEffect(() => {
+    aiProofreadIssuesRef.current = [];
     setAiProofreadIssues([]);
-    setAiCheckStatus(null);
+    setAiCheckCostLabel(null);
+    setAiCheckError(null);
   }, [editorInstanceKey]);
+
+  const persistAiIssues = useCallback((issues: ProofreadIssue[]) => {
+    const prev = aiProofreadIssuesRef.current;
+    const unchanged =
+      prev.length === issues.length &&
+      prev.every(
+        (issue, index) =>
+          issue.start === issues[index]!.start &&
+          issue.end === issues[index]!.end &&
+          issue.text === issues[index]!.text &&
+          issue.message === issues[index]!.message,
+      );
+    if (unchanged) return;
+    aiProofreadIssuesRef.current = issues;
+    setAiProofreadIssues(issues);
+  }, []);
 
   /** Live rule-based mechanics (Spelling / Grammar / Suggestions) — runs in Edit mode regardless of sidebar. */
   useEffect(() => {
@@ -2053,7 +2082,12 @@ export function AppShell() {
     }
 
     const runSync = () => {
-      void syncMechanicsProofread(tiptapEditor, setProofreadIssues, () => aiProofreadIssuesRef.current);
+      void syncMechanicsProofread(
+        tiptapEditor,
+        setProofreadIssues,
+        () => aiProofreadIssuesRef.current,
+        persistAiIssues,
+      );
     };
 
     runSync();
@@ -2069,42 +2103,51 @@ export function AppShell() {
       tiptapEditor.off("update", onUpdate);
       if (debounceId) clearTimeout(debounceId);
     };
-  }, [tiptapEditor, mode, editorEditable]);
+  }, [tiptapEditor, mode, editorEditable, persistAiIssues]);
 
   const refreshMechanicsProofread = useCallback(() => {
     if (!tiptapEditor) return;
-    void syncMechanicsProofread(tiptapEditor, setProofreadIssues, () => aiProofreadIssuesRef.current);
-  }, [tiptapEditor]);
+    void syncMechanicsProofread(
+      tiptapEditor,
+      setProofreadIssues,
+      () => aiProofreadIssuesRef.current,
+      persistAiIssues,
+    );
+  }, [tiptapEditor, persistAiIssues]);
 
   const handleRunAiCheck = useCallback(async () => {
     if (!tiptapEditor || !isTauriRuntime()) return;
+    setMode("edit");
     setAiCheckRunning(true);
-    setAiCheckStatus("Running…");
+    setAiCheckError(null);
     try {
       const { text } = proofreadPlainTextAndPositions(tiptapEditor.state.doc);
       const result = await runAiCheck(text);
       const located = locateAiIssuesInText(text, result.issues);
-      setAiProofreadIssues(located);
-      aiProofreadIssuesRef.current = located;
-      setAiCheckStatus(
-        `${located.length} issue${located.length === 1 ? "" : "s"} from ${providerLabel(result.provider)} · ${result.model}`,
+      persistAiIssues(located);
+      const usd = estimateCostUsd({
+        modelId: result.model,
+        inputTokens: result.usage?.inputTokens ?? 0,
+        outputTokens: result.usage?.outputTokens ?? 0,
+      });
+      // Fall back to essay-length estimate if the API omitted usage.
+      const costUsd =
+        (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0) > 0
+          ? usd
+          : estimateAiCheckCostFromEssay(result.model, text);
+      setAiCheckCostLabel(formatAiCheckCostUsd(costUsd));
+      await syncMechanicsProofread(
+        tiptapEditor,
+        setProofreadIssues,
+        () => located,
+        persistAiIssues,
       );
-      await syncMechanicsProofread(tiptapEditor, setProofreadIssues, () => located);
     } catch (e) {
-      setAiCheckStatus(e instanceof Error ? e.message : String(e));
+      setAiCheckError(e instanceof Error ? e.message : String(e));
     } finally {
       setAiCheckRunning(false);
     }
-  }, [tiptapEditor]);
-
-  const handleClearAiCheck = useCallback(() => {
-    setAiProofreadIssues([]);
-    aiProofreadIssuesRef.current = [];
-    setAiCheckStatus(null);
-    if (tiptapEditor) {
-      void syncMechanicsProofread(tiptapEditor, setProofreadIssues, () => []);
-    }
-  }, [tiptapEditor]);
+  }, [tiptapEditor, persistAiIssues]);
 
   useEffect(() => {
     setSpellingDocumentKey(editorInstanceKey);
@@ -2285,6 +2328,21 @@ export function AppShell() {
     />
   );
 
+  const aiCheckModelDisplay = aiCheckConfig?.model
+    ? formatAiModelDisplayName(aiCheckConfig.model, aiCheckConfig.provider)
+    : null;
+
+  const aiCheckCostDisplay = useMemo(() => {
+    if (aiCheckCostLabel) return aiCheckCostLabel;
+    if (!aiCheckConfig?.enabled || !aiCheckConfig.model) return null;
+    const essay =
+      tiptapEditor != null
+        ? proofreadPlainTextAndPositions(tiptapEditor.state.doc).text
+        : editorText;
+    if (!essay.trim()) return null;
+    return formatAiCheckCostUsd(estimateAiCheckCostFromEssay(aiCheckConfig.model, essay));
+  }, [aiCheckCostLabel, aiCheckConfig?.enabled, aiCheckConfig?.model, tiptapEditor, editorText]);
+
   const readabilitySidebarPanel = (
     <SidebarRight
       stats={stats}
@@ -2303,15 +2361,11 @@ export function AppShell() {
       workspaceSection={activeWorkspaceSection}
       showQuickLinks={showQuickLinks}
       aiCheckEnabled={Boolean(aiCheckConfig?.enabled && aiCheckConfig.hasApiKey)}
-      aiCheckModelLabel={
-        aiCheckConfig?.model
-          ? `${providerLabel(aiCheckConfig.provider)} · ${aiCheckConfig.model}`
-          : null
-      }
+      aiCheckModelLabel={aiCheckModelDisplay}
       aiCheckRunning={aiCheckRunning}
-      aiCheckStatus={aiCheckStatus}
-      onRunAiCheck={() => void handleRunAiCheck()}
-      onClearAiCheck={handleClearAiCheck}
+      aiCheckCostLabel={aiCheckCostDisplay}
+      aiCheckError={aiCheckError}
+      onRunAiCheck={handleRunAiCheck}
     />
   );
 

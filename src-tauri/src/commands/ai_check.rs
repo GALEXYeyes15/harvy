@@ -38,6 +38,13 @@ pub struct AiCheckConfig {
     pub model: String,
     #[serde(default)]
     pub enabled: bool,
+    /// When true, AI check popovers include a “Replace with…” action.
+    #[serde(default = "default_true")]
+    pub show_replace_suggestions: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +54,7 @@ pub struct AiCheckConfigPublic {
     pub provider: Option<AiProvider>,
     pub model: String,
     pub enabled: bool,
+    pub show_replace_suggestions: bool,
     pub has_api_key: bool,
 }
 
@@ -56,6 +64,7 @@ pub struct AiCheckSaveInput {
     pub api_key: String,
     pub model: Option<String>,
     pub enabled: Option<bool>,
+    pub show_replace_suggestions: Option<bool>,
     /// When true and `api_key` is blank, keep the stored key.
     pub keep_existing_key: Option<bool>,
 }
@@ -80,10 +89,23 @@ pub struct AiCheckIssue {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AiCheckUsage {
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AiCheckResult {
     pub issues: Vec<AiCheckIssue>,
     pub model: String,
     pub provider: AiProvider,
+    pub usage: AiCheckUsage,
+}
+
+struct ModelCheckResponse {
+    text: String,
+    usage: AiCheckUsage,
 }
 
 fn config_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
@@ -143,6 +165,7 @@ fn to_public(config: Option<&AiCheckConfig>) -> AiCheckConfigPublic {
             provider: Some(c.provider),
             model: c.model.clone(),
             enabled: c.enabled,
+            show_replace_suggestions: c.show_replace_suggestions,
             has_api_key: true,
         },
         Some(c) => AiCheckConfigPublic {
@@ -150,6 +173,7 @@ fn to_public(config: Option<&AiCheckConfig>) -> AiCheckConfigPublic {
             provider: Some(c.provider),
             model: c.model.clone(),
             enabled: c.enabled,
+            show_replace_suggestions: c.show_replace_suggestions,
             has_api_key: false,
         },
         None => AiCheckConfigPublic {
@@ -157,6 +181,7 @@ fn to_public(config: Option<&AiCheckConfig>) -> AiCheckConfigPublic {
             provider: None,
             model: String::new(),
             enabled: false,
+            show_replace_suggestions: true,
             has_api_key: false,
         },
     }
@@ -413,7 +438,7 @@ fn run_openai_check(
     api_key: &str,
     model: &str,
     essay: &str,
-) -> Result<String, String> {
+) -> Result<ModelCheckResponse, String> {
     let body = json!({
         "model": model,
         "temperature": 0,
@@ -438,11 +463,26 @@ fn run_openai_check(
     }
     let parsed: Value = serde_json::from_str(&text)
         .map_err(|e| format!("Could not parse OpenAI check JSON: {}", e))?;
-    parsed
+    let content = parsed
         .pointer("/choices/0/message/content")
         .and_then(|c| c.as_str())
         .map(|s| s.to_string())
-        .ok_or_else(|| "OpenAI response missing message content.".to_string())
+        .ok_or_else(|| "OpenAI response missing message content.".to_string())?;
+    let input_tokens = parsed
+        .pointer("/usage/prompt_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    let output_tokens = parsed
+        .pointer("/usage/completion_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    Ok(ModelCheckResponse {
+        text: content,
+        usage: AiCheckUsage {
+            input_tokens,
+            output_tokens,
+        },
+    })
 }
 
 fn run_anthropic_check(
@@ -450,11 +490,10 @@ fn run_anthropic_check(
     api_key: &str,
     model: &str,
     essay: &str,
-) -> Result<String, String> {
+) -> Result<ModelCheckResponse, String> {
     let body = json!({
         "model": model,
         "max_tokens": 4096,
-        "temperature": 0,
         "system": CHECK_SYSTEM_PROMPT,
         "messages": [
             { "role": "user", "content": format!("Essay to review:\n\n{}", essay) }
@@ -492,7 +531,21 @@ fn run_anthropic_check(
     if out.is_empty() {
         return Err("Anthropic response had no text blocks.".to_string());
     }
-    Ok(out)
+    let input_tokens = parsed
+        .pointer("/usage/input_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    let output_tokens = parsed
+        .pointer("/usage/output_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    Ok(ModelCheckResponse {
+        text: out,
+        usage: AiCheckUsage {
+            input_tokens,
+            output_tokens,
+        },
+    })
 }
 
 fn run_openai_test(client: &Client, api_key: &str, model: &str) -> Result<(), String> {
@@ -524,7 +577,6 @@ fn run_anthropic_test(client: &Client, api_key: &str, model: &str) -> Result<(),
     let body = json!({
         "model": model,
         "max_tokens": 16,
-        "temperature": 0,
         "messages": [
             { "role": "user", "content": "Reply with exactly: OK" }
         ]
@@ -587,12 +639,19 @@ pub fn ai_check_save_config(
     let enabled = input
         .enabled
         .unwrap_or_else(|| existing.as_ref().map(|c| c.enabled).unwrap_or(false));
+    let show_replace_suggestions = input.show_replace_suggestions.unwrap_or_else(|| {
+        existing
+            .as_ref()
+            .map(|c| c.show_replace_suggestions)
+            .unwrap_or(true)
+    });
 
     let config = AiCheckConfig {
         api_key,
         provider,
         model,
         enabled,
+        show_replace_suggestions,
     };
     write_config(&app, &config)?;
     Ok(to_public(Some(&config)))
@@ -607,6 +666,22 @@ pub fn ai_check_set_enabled(app: AppHandle, enabled: bool) -> Result<AiCheckConf
         return Err("Add an API key in Settings before enabling AI check.".to_string());
     }
     config.enabled = enabled;
+    write_config(&app, &config)?;
+    Ok(to_public(Some(&config)))
+}
+
+#[tauri::command]
+pub fn ai_check_set_show_replace_suggestions(
+    app: AppHandle,
+    show_replace_suggestions: bool,
+) -> Result<AiCheckConfigPublic, String> {
+    let mut config = read_config(&app)?.ok_or_else(|| {
+        "Add an API key in Settings before changing AI check options.".to_string()
+    })?;
+    if config.api_key.trim().is_empty() {
+        return Err("Add an API key in Settings before changing AI check options.".to_string());
+    }
+    config.show_replace_suggestions = show_replace_suggestions;
     write_config(&app, &config)?;
     Ok(to_public(Some(&config)))
 }
@@ -692,17 +767,18 @@ pub fn ai_check_run(app: AppHandle, essay: String) -> Result<AiCheckResult, Stri
     }
 
     let client = http_client()?;
-    let raw = match config.provider {
+    let checked = match config.provider {
         AiProvider::Openai => run_openai_check(&client, &config.api_key, &config.model, essay)?,
         AiProvider::Anthropic => {
             run_anthropic_check(&client, &config.api_key, &config.model, essay)?
         }
     };
-    let issues = parse_issues_from_model_text(&raw)?;
+    let issues = parse_issues_from_model_text(&checked.text)?;
     Ok(AiCheckResult {
         issues,
         model: config.model,
         provider: config.provider,
+        usage: checked.usage,
     })
 }
 

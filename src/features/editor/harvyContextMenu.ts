@@ -56,6 +56,16 @@ export function getHarvyContextMenuMount(view: EditorView): HTMLElement | null {
   return node ?? editorEl.parentElement;
 }
 
+/**
+ * Same mount as mechanics underlines (sibling of ProseMirror) so popovers share
+ * the underline coordinate space — left edge lines up with the green bar.
+ */
+export function getHarvyUnderlineAlignedMount(view: EditorView): HTMLElement | null {
+  const editorEl = view.dom;
+  if (!editorEl?.isConnected) return null;
+  return editorEl.parentElement;
+}
+
 export function ensureHarvyContextMenuMount(mount: HTMLElement): void {
   if (window.getComputedStyle(mount).position === "static") {
     mount.style.position = "relative";
@@ -84,6 +94,82 @@ export function isHarvyContextMenuAnchorVisible(
   }
 }
 
+/** First non-empty client rect for a PM range (left edge of the first underlined line). */
+function firstLineViewportRect(
+  view: EditorView,
+  from: number,
+  to: number,
+): { left: number; right: number; top: number; bottom: number } | null {
+  try {
+    const start = view.coordsAtPos(from, 1);
+    const end = view.coordsAtPos(to, -1);
+    if (Math.abs(start.bottom - end.bottom) < 6) {
+      return {
+        left: start.left,
+        right: end.right,
+        top: start.top,
+        bottom: Math.max(start.bottom, end.bottom),
+      };
+    }
+  } catch {
+    /* fall through */
+  }
+
+  try {
+    const start = view.domAtPos(from);
+    const end = view.domAtPos(to);
+    const range = document.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    const rect = Array.from(range.getClientRects()).find((r) => r.width > 0 && r.height > 0);
+    if (!rect) return null;
+    return {
+      left: rect.left,
+      right: rect.right,
+      top: rect.top,
+      bottom: rect.bottom,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Map a viewport X/Y into `mount`-local coordinates for `position: absolute`.
+ * Origin is the padding edge (CSS absolute containing block), including scroll.
+ */
+function viewportToMountLocal(
+  mount: HTMLElement,
+  viewportX: number,
+  viewportY: number,
+): { left: number; top: number } {
+  const mountRect = mount.getBoundingClientRect();
+  const cs = window.getComputedStyle(mount);
+  const borderLeft = Number.parseFloat(cs.borderLeftWidth) || 0;
+  const borderTop = Number.parseFloat(cs.borderTopWidth) || 0;
+  return {
+    left: viewportX - mountRect.left - borderLeft + mount.scrollLeft,
+    top: viewportY - mountRect.top - borderTop + mount.scrollTop,
+  };
+}
+
+/** Left edge of the visible Edit tools sidebar, if it overlaps the editor. */
+function toolsSidebarLeftViewport(): number | null {
+  const panel = document.getElementById("harvy-tools-panel");
+  if (!panel) return null;
+  const rect = panel.getBoundingClientRect();
+  if (rect.width < 16 || rect.height < 16) return null;
+  if (panel.closest('[aria-hidden="true"]')) return null;
+  return rect.left;
+}
+
+/** Rightmost viewport X the popup may occupy without covering the tools rail. */
+function popupMaxRightViewport(): number {
+  const sidebarLeft = toolsSidebarLeftViewport();
+  if (sidebarLeft != null) return sidebarLeft - 8;
+  return window.innerWidth - 8;
+}
+
 /** Position a menu inside the editor mount from the current document range. */
 export function placeHarvyContextMenu(
   menuEl: HTMLElement,
@@ -92,14 +178,13 @@ export function placeHarvyContextMenu(
   anchor: HarvyContextMenuAnchorRange,
   placement: HarvyContextMenuPlacement = "below-start",
 ): void {
-  const mountRect = mount.getBoundingClientRect();
   const start = view.coordsAtPos(anchor.from, 1);
   const end = view.coordsAtPos(anchor.to, -1);
-
-  const selTop = Math.min(start.top, end.top) - mountRect.top;
-  const selBottom = Math.max(start.bottom, end.bottom) - mountRect.top;
-  const selLeft = start.left - mountRect.left;
-  const selRight = end.right - mountRect.left;
+  const line = firstLineViewportRect(view, anchor.from, anchor.to);
+  const selTop = line?.top ?? Math.min(start.top, end.top);
+  const selBottom = line?.bottom ?? Math.max(start.bottom, end.bottom);
+  const selLeft = line?.left ?? start.left;
+  const selRight = line?.right ?? end.right;
 
   const gap = 8;
   const menuWidth = menuEl.offsetWidth;
@@ -109,17 +194,32 @@ export function placeHarvyContextMenu(
   let top: number;
 
   if (placement === "beside-below-end") {
-    left = selRight + gap;
+    const beside = viewportToMountLocal(mount, selRight + gap, selBottom + gap);
+    left = beside.left;
+    top = beside.top;
     if (menuWidth > 0 && left + menuWidth > mount.clientWidth) {
-      left = selRight - menuWidth;
+      const flipped = viewportToMountLocal(mount, selRight - menuWidth, selBottom + gap);
+      left = flipped.left;
     }
-    top = selBottom + gap;
-    if (menuHeight > 0 && top + menuHeight > mount.clientHeight) {
-      top = selTop - gap - menuHeight;
+    if (menuHeight > 0 && top + menuHeight > mount.scrollHeight) {
+      const above = viewportToMountLocal(mount, selRight + gap, selTop - gap - menuHeight);
+      top = above.top;
     }
   } else {
-    left = selLeft;
-    top = selBottom + 4;
+    // below-start: left edge flush with underline start by default.
+    // If the popup would overlap the right tools sidebar (or viewport edge),
+    // right-align so the popup's right edge matches the underline's right edge.
+    const under = viewportToMountLocal(mount, selLeft, selBottom + 4);
+    left = under.left;
+    top = under.top;
+
+    if (menuWidth > 0) {
+      const maxRight = popupMaxRightViewport();
+      if (selLeft + menuWidth > maxRight) {
+        const rightAligned = viewportToMountLocal(mount, selRight, selBottom + 4);
+        left = rightAligned.left - menuWidth;
+      }
+    }
   }
 
   menuEl.style.left = `${Math.max(0, left)}px`;
@@ -250,10 +350,14 @@ export function openHarvyContextMenu(opts: {
   placement?: HarvyContextMenuPlacement;
   onAction?: () => void;
   className?: string;
+  /** Prefer the ProseMirror parent (same as underlines) so left edges line up. */
+  alignToUnderlineMount?: boolean;
 }): void {
   closeHarvyContextMenu();
 
-  const mount = getHarvyContextMenuMount(opts.view);
+  const mount = opts.alignToUnderlineMount
+    ? getHarvyUnderlineAlignedMount(opts.view) ?? getHarvyContextMenuMount(opts.view)
+    : getHarvyContextMenuMount(opts.view);
   if (!mount) return;
 
   ensureHarvyContextMenuMount(mount);
@@ -272,9 +376,9 @@ export function openHarvyContextMenu(opts: {
   appendHarvyContextMenuSections(menuEl, opts.sections, runAction);
 
   const placement = opts.placement ?? "below-start";
-  placeHarvyContextMenu(menuEl, opts.view, mount, opts.anchor, placement);
-
+  // Attach first so offsetWidth/height and absolute containing block are correct.
   mount.appendChild(menuEl);
+  placeHarvyContextMenu(menuEl, opts.view, mount, opts.anchor, placement);
 
   const session: HarvyContextMenuSession = {
     menuEl,
@@ -289,17 +393,20 @@ export function openHarvyContextMenu(opts: {
   attachHarvyContextMenuListeners(session, closeHarvyContextMenu);
 }
 
-export function openHarvyContextMenuPanel(opts: {
+export function openHarvyContextMenuAt(opts: {
   view: EditorView;
   anchor: HarvyContextMenuAnchorRange;
   placement?: HarvyContextMenuPlacement;
   className?: string;
   onAction?: () => void;
+  alignToUnderlineMount?: boolean;
   populate: (menuEl: HTMLDivElement, runAction: (onClick: () => void) => void) => void;
 }): void {
   closeHarvyContextMenu();
 
-  const mount = getHarvyContextMenuMount(opts.view);
+  const mount = opts.alignToUnderlineMount
+    ? getHarvyUnderlineAlignedMount(opts.view) ?? getHarvyContextMenuMount(opts.view)
+    : getHarvyContextMenuMount(opts.view);
   if (!mount) return;
 
   ensureHarvyContextMenuMount(mount);
@@ -319,9 +426,8 @@ export function openHarvyContextMenuPanel(opts: {
   opts.populate(menuEl, runAction);
 
   const placement = opts.placement ?? "below-start";
-  placeHarvyContextMenu(menuEl, opts.view, mount, opts.anchor, placement);
-
   mount.appendChild(menuEl);
+  placeHarvyContextMenu(menuEl, opts.view, mount, opts.anchor, placement);
 
   const session: HarvyContextMenuSession = {
     menuEl,

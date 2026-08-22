@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../save/saveRuntime";
-import type { ProofreadIssue, ProofreadIssueType } from "../proofread/types";
+import type { ProofreadIssue } from "../proofread/types";
 
 export type AiProvider = "openai" | "anthropic";
 
@@ -9,6 +9,7 @@ export type AiCheckConfigPublic = {
   provider: AiProvider | null;
   model: string;
   enabled: boolean;
+  showReplaceSuggestions: boolean;
   hasApiKey: boolean;
 };
 
@@ -24,16 +25,23 @@ export type AiCheckIssueRaw = {
   message?: string | null;
 };
 
+export type AiCheckUsage = {
+  inputTokens: number;
+  outputTokens: number;
+};
+
 export type AiCheckResult = {
   issues: AiCheckIssueRaw[];
   model: string;
   provider: AiProvider;
+  usage: AiCheckUsage;
 };
 
 export type AiCheckSaveInput = {
   apiKey: string;
   model?: string;
   enabled?: boolean;
+  showReplaceSuggestions?: boolean;
   keepExistingKey?: boolean;
 };
 
@@ -56,6 +64,15 @@ export async function saveAiCheckConfig(input: AiCheckSaveInput): Promise<AiChec
 export async function setAiCheckEnabled(enabled: boolean): Promise<AiCheckConfigPublic> {
   requireTauri();
   return invoke<AiCheckConfigPublic>("ai_check_set_enabled", { enabled });
+}
+
+export async function setAiCheckShowReplaceSuggestions(
+  showReplaceSuggestions: boolean,
+): Promise<AiCheckConfigPublic> {
+  requireTauri();
+  return invoke<AiCheckConfigPublic>("ai_check_set_show_replace_suggestions", {
+    showReplaceSuggestions,
+  });
 }
 
 export async function clearAiCheckConfig(): Promise<AiCheckConfigPublic> {
@@ -97,15 +114,16 @@ export function providerLabel(provider: AiProvider | null | undefined): string {
   return "Unknown";
 }
 
-function normalizeIssueType(raw: string): ProofreadIssueType {
-  const t = raw.trim().toLowerCase();
-  if (t === "spelling") return "spelling";
-  if (t === "grammar") return "grammar";
-  return "suggestion";
-}
+export {
+  estimateAiCheckCostFromEssay,
+  estimateCostUsd,
+  formatAiCheckCostUsd,
+  formatAiModelDisplayName,
+} from "./aiCheckCost";
 
 /**
  * Map model quotes to character offsets in the plain essay text.
+ * Always tagged as `ai` so the editor can use solid underlines + AI popovers.
  * Skips quotes that cannot be found exactly (LLMs occasionally paraphrase).
  */
 export function locateAiIssuesInText(
@@ -126,11 +144,17 @@ export function locateAiIssuesInText(
     if (start < 0) continue;
 
     const end = start + quote.length;
+    const category = raw.type.trim().toLowerCase();
+    const message =
+      raw.message?.trim() ||
+      (category === "grammar" || category === "spelling"
+        ? "Possible grammar issue"
+        : "Style suggestion");
     located.push({
-      type: normalizeIssueType(raw.type),
+      type: "ai",
       text: quote,
       suggestion: raw.suggestion?.trim() || undefined,
-      message: raw.message?.trim() || undefined,
+      message,
       start,
       end,
     });
@@ -138,4 +162,48 @@ export function locateAiIssuesInText(
   }
 
   return located;
+}
+
+/**
+ * Drop AI issues that were replaced/edited away, and re-anchor surviving quotes
+ * when earlier edits shifted offsets. Used so sidebar counts stay in sync.
+ */
+export function reconcileAiIssuesInText(
+  essay: string,
+  issues: ProofreadIssue[],
+): ProofreadIssue[] {
+  const kept: ProofreadIssue[] = [];
+  let searchFrom = 0;
+
+  for (const issue of issues) {
+    if (issue.type !== "ai") {
+      kept.push(issue);
+      continue;
+    }
+
+    const quote = issue.text;
+    if (!quote) continue;
+
+    if (
+      issue.start >= 0 &&
+      issue.end <= essay.length &&
+      essay.slice(issue.start, issue.end) === quote
+    ) {
+      kept.push(issue);
+      searchFrom = Math.max(searchFrom, issue.end);
+      continue;
+    }
+
+    let start = essay.indexOf(quote, searchFrom);
+    if (start < 0) {
+      start = essay.indexOf(quote);
+    }
+    if (start < 0) continue;
+
+    const end = start + quote.length;
+    kept.push({ ...issue, start, end });
+    searchFrom = end;
+  }
+
+  return kept;
 }

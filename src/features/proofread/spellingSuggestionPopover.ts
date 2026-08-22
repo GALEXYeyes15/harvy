@@ -60,6 +60,7 @@ export function openSpellingSuggestionPopover(opts: {
     anchor: { from: pmFrom, to: pmTo },
     sections,
     placement: "below-start",
+    alignToUnderlineMount: true,
     className: "harvy-spelling-popover",
   });
 }
