@@ -1018,11 +1018,23 @@ export function AppShell() {
 
   function updateActiveDocumentPostTitle(nextValue: string) {
     if (!activeTabId) return;
+    const nextTitleFileName = defaultSaveFileName(nextValue.trim() || "Untitled");
     setOpenDocuments((prev) => {
       const current = prev[activeTabId];
       if (!current) return prev;
-      return { ...prev, [activeTabId]: { ...current, postTitle: nextValue } };
+      return {
+        ...prev,
+        [activeTabId]: {
+          ...current,
+          postTitle: nextValue,
+          // Keep tab / header / Save As filename aligned with the in-document Title.
+          title: nextTitleFileName,
+        },
+      };
     });
+    if (saveAsModalOpen) {
+      setSaveAsLiveFileName(nextTitleFileName);
+    }
   }
 
   function updateActiveDocumentSubtitle(nextValue: string) {
@@ -1065,8 +1077,10 @@ export function AppShell() {
   const finalizeSavedPath = useCallback(
     (outPath: string, markdown: string) => {
       const savedNotes = activeDocument?.notes ?? "";
-      const savedPostTitle = activeDocument?.postTitle ?? "";
       const savedSubtitle = activeDocument?.subtitle ?? "";
+      // Align in-document Title with the saved file basename.
+      const syncedPostTitle =
+        splitFileBaseAndExtension(fileNameFromPath(outPath)).base || "Untitled";
       if (activeTabId && activeDocument) {
         const oldId = activeTabId;
         if (oldId !== outPath) {
@@ -1077,7 +1091,8 @@ export function AppShell() {
             sourcePath: outPath,
             content: markdown,
             lastSavedContent: markdown,
-            lastSavedPostTitle: savedPostTitle,
+            postTitle: syncedPostTitle,
+            lastSavedPostTitle: syncedPostTitle,
             lastSavedSubtitle: savedSubtitle,
             lastSavedNotes: savedNotes,
           };
@@ -1096,7 +1111,8 @@ export function AppShell() {
             ...prev[outPath]!,
             content: markdown,
             lastSavedContent: markdown,
-            lastSavedPostTitle: savedPostTitle,
+            postTitle: syncedPostTitle,
+            lastSavedPostTitle: syncedPostTitle,
             lastSavedSubtitle: savedSubtitle,
             lastSavedNotes: savedNotes,
           },
@@ -1112,8 +1128,8 @@ export function AppShell() {
         sourcePath: outPath,
         kind: "text",
         lastSavedContent: markdown,
-        postTitle: savedPostTitle,
-        lastSavedPostTitle: savedPostTitle,
+        postTitle: syncedPostTitle,
+        lastSavedPostTitle: syncedPostTitle,
         subtitle: savedSubtitle,
         lastSavedSubtitle: savedSubtitle,
         notes: savedNotes,
@@ -1141,8 +1157,13 @@ export function AppShell() {
       return;
     }
     if (!editorEditable) return;
-    const title = activeDocument?.title ?? (openTabIds.length === 0 ? scratchDocumentTitle : "Untitled");
-    const suggestedFileName = defaultSaveFileName(title);
+    const titleFromFile =
+      activeDocument?.title ?? (openTabIds.length === 0 ? scratchDocumentTitle : "Untitled");
+    const titleBase =
+      activeDocument?.postTitle.trim() ||
+      splitFileBaseAndExtension(titleFromFile).base ||
+      "Untitled";
+    const suggestedFileName = defaultSaveFileName(titleBase);
     editorFocusBeforeSaveAsRef.current = editorFocusSuppressedRef.current;
     visuallyDeactivateEditor(tiptapEditor);
     setEditorInactive(true);
@@ -2232,7 +2253,17 @@ export function AppShell() {
 
       let nextBase = sanitizeFileBasename(rawBase);
       if (!nextBase) nextBase = "Untitled";
-      if (nextBase === displayBase) return true;
+      if (nextBase === displayBase) {
+        // File/tab name already matches; still keep in-document Title aligned.
+        if (doc.postTitle !== nextBase) {
+          setOpenDocuments((prev) => {
+            const d = prev[id];
+            if (!d) return prev;
+            return { ...prev, [id]: { ...d, postTitle: nextBase } };
+          });
+        }
+        return true;
+      }
 
       const nameErr = validateFolderName(nextBase);
       if (nameErr) {
@@ -2247,8 +2278,8 @@ export function AppShell() {
         const newTitle = displayExt ? `${nextBase}${displayExt}` : nextBase;
         setOpenDocuments((prev) => {
           const d = prev[id];
-          if (!d || d.title === newTitle) return prev;
-          return { ...prev, [id]: { ...d, title: newTitle } };
+          if (!d || (d.title === newTitle && d.postTitle === nextBase)) return prev;
+          return { ...prev, [id]: { ...d, title: newTitle, postTitle: nextBase } };
         });
         return true;
       }
@@ -2276,6 +2307,7 @@ export function AppShell() {
           id: targetPath,
           sourcePath: targetPath,
           title: fileNameFromPath(targetPath),
+          postTitle: nextBase,
         };
         const { [id]: _removed, ...rest } = prev;
         return { ...rest, [targetPath]: nextDoc };
@@ -2486,7 +2518,13 @@ export function AppShell() {
               documentTitle={editorTitle}
               text={editorText}
               contentSourcePath={activeDocument?.sourcePath ?? null}
-              postTitle={activeDocument?.postTitle ?? ""}
+              postTitle={
+                saveAsModalOpen
+                  ? editorTitleBase
+                  : titleRenameDraft !== null
+                    ? titleRenameDraft
+                    : (activeDocument?.postTitle ?? "")
+              }
               subtitle={activeDocument?.subtitle ?? ""}
               showPostTitle={documentHeaderPrefs.showTitle && !focusModeActive}
               showSubtitle={documentHeaderPrefs.showSubtitle && !focusModeActive}
