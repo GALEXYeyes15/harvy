@@ -67,6 +67,10 @@ import {
   writeQuickLinksSettings,
 } from "../features/quick-links/quickLinksSettings";
 import {
+  readAiCheckSidebarSettings,
+  writeAiCheckSidebarSettings,
+} from "../features/sidebar/aiCheckSidebarSettings";
+import {
   readCriteriaSidebarSettings,
   writeCriteriaSidebarSettings,
 } from "../features/sidebar/criteriaSidebarSettings";
@@ -368,6 +372,9 @@ export function AppShell() {
   const [showCriteria, setShowCriteria] = useState(
     () => readCriteriaSidebarSettings().showCriteria,
   );
+  const [showAiCheck, setShowAiCheck] = useState(
+    () => readAiCheckSidebarSettings().showAiCheck,
+  );
   /** In-memory buffer when no tabs open — not a saved file until persistence exists. */
   const [scratchDraftContent, setScratchDraftContent] = useState("");
   /** When set, scratch buffer last wrote to this path. */
@@ -520,6 +527,11 @@ export function AppShell() {
     if (!next.showCriteria) {
       setMode((current) => (current === "criteria" ? "notes" : current));
     }
+  }, []);
+
+  const handleShowAiCheckChange = useCallback((enabled: boolean) => {
+    const next = writeAiCheckSidebarSettings({ showAiCheck: enabled });
+    setShowAiCheck(next.showAiCheck);
   }, []);
 
   const showWorkspaceNavigation = enableCollect;
@@ -2529,7 +2541,9 @@ export function AppShell() {
       workspaceSection={activeWorkspaceSection}
       showQuickLinks={showQuickLinks}
       showCriteria={showCriteria}
-      aiCheckEnabled={Boolean(aiCheckConfig?.enabled && aiCheckConfig.hasApiKey)}
+      aiCheckEnabled={Boolean(
+        aiCheckConfig?.enabled && aiCheckConfig.hasApiKey && showAiCheck,
+      )}
       aiCheckModelLabel={aiCheckModelDisplay}
       aiCheckRunning={aiCheckRunning}
       aiCheckCostLabel={aiCheckCostDisplay}
@@ -2906,6 +2920,8 @@ export function AppShell() {
         onShowQuickLinksChange={handleShowQuickLinksChange}
         showCriteria={showCriteria}
         onShowCriteriaChange={handleShowCriteriaChange}
+        showAiCheck={showAiCheck}
+        onShowAiCheckChange={handleShowAiCheckChange}
         criteria={activeCriteria}
         onCriteriaChange={updateActiveDocumentCriteria}
         spellcheckEnabled={writingAssistancePrefs.spellcheck}

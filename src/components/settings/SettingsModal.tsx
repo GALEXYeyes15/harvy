@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Minus, Plus, SquareArrowOutUpRight, SquarePen } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Minus, Plus, SquareArrowOutUpRight, SquarePen } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
 import type { DocumentHeaderPrefs } from "../../features/editor/documentHeaderSettings";
 import type { FocusVisibilityPrefs } from "../../features/editor/focusVisibilitySettings";
@@ -102,6 +102,8 @@ const SETTINGS_DIVIDE_X = "divide-x divide-line/[0.12] dark:divide-[#6f6f6f]";
 const SETTINGS_DIVIDE_Y = "divide-y divide-line/[0.12] dark:divide-white/[0.08]";
 /** Apple System Settings–style group: solid Boxes (mist) surface. */
 const SETTINGS_BOX = `overflow-hidden rounded-xl bg-mist ${SETTINGS_DIVIDE_Y}`;
+/** Expandable sidebar cards — no dividers between toggle, chevron, and body. */
+const SETTINGS_BOX_EXPANDABLE = "overflow-hidden rounded-xl bg-mist";
 const SETTINGS_BOX_PAD = "rounded-xl bg-mist px-3.5 py-3";
 const SETTINGS_INLINE_INPUT =
   "w-[4.5rem] shrink-0 rounded-md border-0 bg-page px-2 py-1.5 text-right text-[13px] text-ink outline-none ring-1 ring-line/15 focus:ring-[var(--color-focus-ring)]/45";
@@ -121,6 +123,8 @@ type SettingsModalProps = {
   onShowQuickLinksChange: (enabled: boolean) => void;
   showCriteria: boolean;
   onShowCriteriaChange: (enabled: boolean) => void;
+  showAiCheck: boolean;
+  onShowAiCheckChange: (enabled: boolean) => void;
   criteria: string;
   onCriteriaChange: (value: string) => void;
   spellcheckEnabled: boolean;
@@ -159,6 +163,8 @@ export function SettingsModal({
   onShowQuickLinksChange,
   showCriteria,
   onShowCriteriaChange,
+  showAiCheck,
+  onShowAiCheckChange,
   criteria,
   onCriteriaChange,
   spellcheckEnabled,
@@ -240,6 +246,8 @@ export function SettingsModal({
                 onShowQuickLinksChange={onShowQuickLinksChange}
                 showCriteria={showCriteria}
                 onShowCriteriaChange={onShowCriteriaChange}
+                showAiCheck={showAiCheck}
+                onShowAiCheckChange={onShowAiCheckChange}
                 criteria={criteria}
                 onCriteriaChange={onCriteriaChange}
                 parametersPrefs={parametersPrefs}
@@ -457,6 +465,8 @@ function SidebarsPanel({
   onShowQuickLinksChange,
   showCriteria,
   onShowCriteriaChange,
+  showAiCheck,
+  onShowAiCheckChange,
   criteria,
   onCriteriaChange,
   parametersPrefs,
@@ -468,6 +478,8 @@ function SidebarsPanel({
   onShowQuickLinksChange: (enabled: boolean) => void;
   showCriteria: boolean;
   onShowCriteriaChange: (enabled: boolean) => void;
+  showAiCheck: boolean;
+  onShowAiCheckChange: (enabled: boolean) => void;
   criteria: string;
   onCriteriaChange: (value: string) => void;
   parametersPrefs: ParametersPrefs;
@@ -564,7 +576,7 @@ function SidebarsPanel({
     <div className="space-y-5">
       <SettingsSectionHeader
         title="Sidebars"
-        description="Workspace files, Parameters, AI check, and Quick Links."
+        description="Workspace files, Parameters, AI, and Quick Links."
       />
 
       <div>
@@ -609,116 +621,33 @@ function SidebarsPanel({
           onCriteriaChange={onCriteriaChange}
         />
 
-        <SettingsGroup>
-          <ToggleRow
-            id="enable-ai-check"
-            label="Enable AI check"
-            description="On-demand model review from the Edit sidebar (not live as you type)."
-            checked={Boolean(aiConfig?.enabled)}
-            onChange={handleAiEnabledChange}
-            disabled={!isTauriRuntime()}
-          />
-          {aiConfig?.enabled ? (
-            <ToggleRow
-              id="ai-check-show-replace"
-              label="Show replace suggestions"
-              description="Offer “Replace with…” in the AI check popup."
-              checked={aiConfig.showReplaceSuggestions !== false}
-              onChange={handleAiShowReplaceChange}
-              disabled={!isTauriRuntime() || !aiConfig.hasApiKey}
-            />
-          ) : null}
-          <ToggleRow
-            id="quick-links"
-            label="Quick Links"
-            description="Show saved links below Notes."
-            checked={showQuickLinks}
-            onChange={onShowQuickLinksChange}
-          />
-        </SettingsGroup>
+        <AiCheckExpandableSettings
+          aiConfig={aiConfig}
+          aiToggleError={aiToggleError}
+          showAiCheck={showAiCheck}
+          onAiEnabledChange={handleAiEnabledChange}
+          onShowAiCheckChange={onShowAiCheckChange}
+          onAiShowReplaceChange={handleAiShowReplaceChange}
+          onAiConfigChange={(next) => {
+            setAiConfig(next);
+            syncAiCheckPopoverPrefs(next);
+            window.dispatchEvent(new CustomEvent("harvy:ai-check-config-changed"));
+          }}
+        />
 
-        {aiToggleError ? (
-          <p className="text-[12px] text-red-600/90 dark:text-red-400/90">{aiToggleError}</p>
-        ) : null}
-
-        {/* Show API setup when enabled, or before a key exists so first-time setup isn’t blocked. */}
-        {aiConfig?.enabled || !aiConfig?.hasApiKey ? (
-          <AiCheckSettingsSection
-            onConfigChange={(next) => {
-              setAiConfig(next);
-              syncAiCheckPopoverPrefs(next);
-              window.dispatchEvent(new CustomEvent("harvy:ai-check-config-changed"));
-            }}
-          />
-        ) : null}
-
-        {showQuickLinks ? (
-          <div className={`space-y-2 ${SETTINGS_BOX_PAD}`}>
-            <p className="text-[13px] font-medium text-ink">Saved links</p>
-            <p className="text-[11px] leading-snug text-muted/75">
-              Add a title and URL. Links open in your browser.
-            </p>
-            <form
-              className="mt-2 space-y-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                handleAdd();
-              }}
-            >
-              <input
-                type="text"
-                value={draftTitle}
-                onChange={(event) => setDraftTitle(event.target.value)}
-                placeholder="Title"
-                className={`w-full ${SETTINGS_FIELD_INPUT}`}
-              />
-              <div className="flex items-center gap-2">
-                <input
-                  type="url"
-                  value={draftUrl}
-                  onChange={(event) => {
-                    setDraftUrl(event.target.value);
-                    if (draftError) setDraftError(null);
-                  }}
-                  placeholder="https://…"
-                  required
-                  className={`min-w-0 flex-1 ${SETTINGS_FIELD_INPUT}`}
-                />
-                <button
-                  type="submit"
-                  className="shrink-0 rounded-md bg-ink px-2.5 py-2 text-[12px] font-medium text-page"
-                >
-                  Add
-                </button>
-              </div>
-              {draftError ? (
-                <p className="text-[11px] leading-snug text-[#ff5a5a]">{draftError}</p>
-              ) : null}
-            </form>
-
-            {links.length === 0 ? (
-              <p className="pt-1 text-[12px] text-muted/65">No links yet.</p>
-            ) : (
-              <ul className={`${SETTINGS_DIVIDE_Y} mt-2 overflow-hidden rounded-lg bg-page/70`}>
-                {links.map((link) => (
-                  <li key={link.id} className="flex items-center gap-2 px-2.5 py-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] text-ink">{link.title}</p>
-                      <p className="truncate text-[11px] text-muted/65">{link.url}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setLinks((prev) => prev.filter((row) => row.id !== link.id))}
-                      className="shrink-0 rounded-md px-2 py-1 text-[11px] text-muted/75 hover:text-ink"
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ) : null}
+        <QuickLinksExpandableSettings
+          showQuickLinks={showQuickLinks}
+          onShowQuickLinksChange={onShowQuickLinksChange}
+          links={links}
+          setLinks={setLinks}
+          draftTitle={draftTitle}
+          setDraftTitle={setDraftTitle}
+          draftUrl={draftUrl}
+          setDraftUrl={setDraftUrl}
+          draftError={draftError}
+          setDraftError={setDraftError}
+          onAdd={handleAdd}
+        />
       </div>
     </div>
   );
@@ -2153,35 +2082,20 @@ function CriteriaExpandableSettings({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className={SETTINGS_BOX}>
+    <div className={SETTINGS_BOX_EXPANDABLE}>
       <ul>
         <ToggleRow
           id="enable-criteria-sidebar"
           label="Criteria"
-          description="Show the Criteria tab in the right tools rail."
           checked={showCriteria}
           onChange={onShowCriteriaChange}
+          expanded={expanded}
+          onExpandToggle={() => setExpanded((current) => !current)}
+          expandLabel="Criteria settings"
         />
       </ul>
-      <button
-        type="button"
-        onClick={() => setExpanded((current) => !current)}
-        aria-expanded={expanded}
-        aria-label={expanded ? "Collapse Criteria settings" : "Expand Criteria settings"}
-        className="flex w-full items-center justify-center py-1.5 text-muted/55 transition-colors hover:bg-ink/[0.03] hover:text-muted/75"
-      >
-        <ChevronDown
-          size={14}
-          strokeWidth={2}
-          className={`transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
-          aria-hidden
-        />
-      </button>
       {expanded ? (
-        <div className="space-y-2 px-3.5 py-3">
-          <label htmlFor="criteria-content" className="text-[13px] font-medium text-ink">
-            Criteria
-          </label>
+        <div className="space-y-2 px-3.5 pb-3">
           <p className="text-[11px] leading-snug text-muted/75">
             Saved with the active document. One item per line. Start a line with{" "}
             <span className="font-mono text-[10px] text-ink/80">[]</span> for a checkbox in the
@@ -2189,12 +2103,189 @@ function CriteriaExpandableSettings({
           </p>
           <textarea
             id="criteria-content"
+            aria-label="Document criteria"
             value={criteria}
             onChange={(event) => onCriteriaChange(event.target.value)}
             rows={6}
             placeholder={"Tone matches the audience\n[] Includes a clear thesis\n[] Ends with a call to action"}
             className={`min-h-[8.5rem] w-full resize-y ${SETTINGS_FIELD_INPUT} leading-relaxed`}
           />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AiCheckExpandableSettings({
+  aiConfig,
+  aiToggleError,
+  showAiCheck,
+  onAiEnabledChange,
+  onShowAiCheckChange,
+  onAiShowReplaceChange,
+  onAiConfigChange,
+}: {
+  aiConfig: AiCheckConfigPublic | null;
+  aiToggleError: string | null;
+  showAiCheck: boolean;
+  onAiEnabledChange: (enabled: boolean) => void;
+  onShowAiCheckChange: (enabled: boolean) => void;
+  onAiShowReplaceChange: (enabled: boolean) => void;
+  onAiConfigChange: (config: AiCheckConfigPublic) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className={SETTINGS_BOX_EXPANDABLE}>
+      <ul>
+        <ToggleRow
+          id="enable-artificial-intelligence"
+          label="Artificial Intelligence"
+          checked={Boolean(aiConfig?.enabled)}
+          onChange={onAiEnabledChange}
+          disabled={!isTauriRuntime()}
+          expanded={expanded}
+          onExpandToggle={() => setExpanded((current) => !current)}
+          expandLabel="Artificial Intelligence settings"
+        />
+      </ul>
+      {aiToggleError && !expanded ? (
+        <p className="px-3.5 pb-3 text-[12px] text-red-600/90 dark:text-red-400/90">{aiToggleError}</p>
+      ) : null}
+      <div className={`space-y-3 px-3.5 pb-3 ${expanded ? "" : "hidden"}`}>
+        <AiCheckSettingsSection
+          embedded
+          initialConfig={aiConfig}
+          onConfigChange={onAiConfigChange}
+        />
+        <ul className={`overflow-hidden rounded-lg bg-page/70 ${SETTINGS_DIVIDE_Y}`}>
+          <ToggleRow
+            id="enable-ai-check"
+            label="Show AI Check"
+            checked={showAiCheck}
+            onChange={onShowAiCheckChange}
+            disabled={!isTauriRuntime() || !aiConfig?.hasApiKey || !aiConfig?.enabled}
+          />
+          <ToggleRow
+            id="ai-check-show-replace"
+            label="Show In-Line Replacements"
+            checked={aiConfig?.showReplaceSuggestions !== false}
+            onChange={onAiShowReplaceChange}
+            disabled={!isTauriRuntime() || !aiConfig?.hasApiKey || !aiConfig?.enabled}
+          />
+        </ul>
+        {aiToggleError ? (
+          <p className="text-[12px] text-red-600/90 dark:text-red-400/90">{aiToggleError}</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function QuickLinksExpandableSettings({
+  showQuickLinks,
+  onShowQuickLinksChange,
+  links,
+  setLinks,
+  draftTitle,
+  setDraftTitle,
+  draftUrl,
+  setDraftUrl,
+  draftError,
+  setDraftError,
+  onAdd,
+}: {
+  showQuickLinks: boolean;
+  onShowQuickLinksChange: (enabled: boolean) => void;
+  links: QuickLink[];
+  setLinks: (updater: (prev: QuickLink[]) => QuickLink[]) => void;
+  draftTitle: string;
+  setDraftTitle: (value: string) => void;
+  draftUrl: string;
+  setDraftUrl: (value: string) => void;
+  draftError: string | null;
+  setDraftError: (value: string | null) => void;
+  onAdd: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className={SETTINGS_BOX_EXPANDABLE}>
+      <ul>
+        <ToggleRow
+          id="quick-links"
+          label="Quick Links"
+          checked={showQuickLinks}
+          onChange={onShowQuickLinksChange}
+          expanded={expanded}
+          onExpandToggle={() => setExpanded((current) => !current)}
+          expandLabel="Quick Links settings"
+        />
+      </ul>
+      {expanded ? (
+        <div className="space-y-2 px-3.5 pb-3">
+          <p className="text-[11px] leading-snug text-muted/75">
+            Add a title and URL. Links open in your browser.
+          </p>
+          <form
+            className="space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onAdd();
+            }}
+          >
+            <input
+              type="text"
+              value={draftTitle}
+              onChange={(event) => setDraftTitle(event.target.value)}
+              placeholder="Title"
+              className={`w-full ${SETTINGS_FIELD_INPUT}`}
+            />
+            <div className="flex items-center gap-2">
+              <input
+                type="url"
+                value={draftUrl}
+                onChange={(event) => {
+                  setDraftUrl(event.target.value);
+                  if (draftError) setDraftError(null);
+                }}
+                placeholder="https://…"
+                required
+                className={`min-w-0 flex-1 ${SETTINGS_FIELD_INPUT}`}
+              />
+              <button
+                type="submit"
+                className="shrink-0 rounded-md bg-ink px-2.5 py-2 text-[12px] font-medium text-page"
+              >
+                Add
+              </button>
+            </div>
+            {draftError ? (
+              <p className="text-[11px] leading-snug text-[#ff5a5a]">{draftError}</p>
+            ) : null}
+          </form>
+
+          {links.length === 0 ? (
+            <p className="pt-1 text-[12px] text-muted/65">No links yet.</p>
+          ) : (
+            <ul className={`${SETTINGS_DIVIDE_Y} mt-2 overflow-hidden rounded-lg bg-page/70`}>
+              {links.map((link) => (
+                <li key={link.id} className="flex items-center gap-2 px-2.5 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] text-ink">{link.title}</p>
+                    <p className="truncate text-[11px] text-muted/65">{link.url}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLinks((prev) => prev.filter((row) => row.id !== link.id))}
+                    className="shrink-0 rounded-md px-2 py-1 text-[11px] text-muted/75 hover:text-ink"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       ) : null}
     </div>
@@ -2208,6 +2299,9 @@ function ToggleRow({
   checked,
   onChange,
   disabled = false,
+  expanded,
+  onExpandToggle,
+  expandLabel,
 }: {
   id: string;
   label: string;
@@ -2215,9 +2309,18 @@ function ToggleRow({
   checked: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
+  expanded?: boolean;
+  onExpandToggle?: () => void;
+  expandLabel?: string;
 }) {
+  const isExpandable = Boolean(onExpandToggle && expandLabel);
+
   return (
-    <li className="flex items-start justify-between gap-4 px-3.5 py-3">
+    <li
+      className={`flex justify-between gap-4 px-3.5 py-3 ${
+        description ? "items-start" : "items-center"
+      }`}
+    >
       <div className="min-w-0">
         <label htmlFor={id} className="text-[13px] font-medium text-ink">
           {label}
@@ -2226,28 +2329,46 @@ function ToggleRow({
           <p className="mt-0.5 text-[11px] leading-snug text-muted/85">{description}</p>
         ) : null}
       </div>
-      <button
-        id={id}
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-disabled={disabled || undefined}
-        disabled={disabled}
-        onClick={() => {
-          if (disabled) return;
-          onChange(!checked);
-        }}
-        className={`harvy-settings-switch relative mt-0.5 h-6 w-10 shrink-0 rounded-full transition-[background-color,box-shadow,border-color,opacity] duration-200 ${
-          checked ? "harvy-settings-switch--on" : "harvy-settings-switch--off"
-        } ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
-      >
-        <span
-          aria-hidden
-          className={`harvy-settings-switch-knob pointer-events-none absolute left-0.5 top-0.5 block h-5 w-5 rounded-full transition-[transform,background-color,box-shadow] duration-200 ease-out ${
-            checked ? "translate-x-4" : "translate-x-0"
-          }`}
-        />
-      </button>
+      <div className={`flex shrink-0 items-center gap-1.5 ${description ? "mt-0.5" : ""}`}>
+        {isExpandable ? (
+          <button
+            type="button"
+            onClick={onExpandToggle}
+            aria-expanded={expanded}
+            aria-label={expanded ? `Collapse ${expandLabel}` : `Expand ${expandLabel}`}
+            className="flex h-6 w-6 items-center justify-center rounded-md text-muted/55 transition-colors hover:bg-ink/[0.06] hover:text-muted/80"
+          >
+            <ChevronRight
+              size={14}
+              strokeWidth={2}
+              className={`transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
+              aria-hidden
+            />
+          </button>
+        ) : null}
+        <button
+          id={id}
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          aria-disabled={disabled || undefined}
+          disabled={disabled}
+          onClick={() => {
+            if (disabled) return;
+            onChange(!checked);
+          }}
+          className={`harvy-settings-switch relative h-6 w-10 shrink-0 rounded-full transition-[background-color,box-shadow,border-color,opacity] duration-200 ${
+            checked ? "harvy-settings-switch--on" : "harvy-settings-switch--off"
+          } ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
+        >
+          <span
+            aria-hidden
+            className={`harvy-settings-switch-knob pointer-events-none absolute left-0.5 top-0.5 block h-5 w-5 rounded-full transition-[transform,background-color,box-shadow] duration-200 ease-out ${
+              checked ? "translate-x-4" : "translate-x-0"
+            }`}
+          />
+        </button>
+      </div>
     </li>
   );
 }

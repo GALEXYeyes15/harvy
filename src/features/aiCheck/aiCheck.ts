@@ -131,6 +131,11 @@ export {
   estimateCostUsd,
   formatAiCheckCostUsd,
   formatAiModelDisplayName,
+  formatModelRatesShort,
+  isRecommendedHarvyModel,
+  modelOptionLabel,
+  pickRecommendedModelId,
+  sortModelsByCost,
 } from "./aiCheckCost";
 
 /**

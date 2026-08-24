@@ -1,4 +1,11 @@
+import { ChevronsUpDown } from "lucide-react";
 import { useEffect, useState } from "react";
+import {
+  formatModelIdForPicker,
+  modelOptionLabel,
+  pickRecommendedModelId,
+  sortModelsByCost,
+} from "../../features/aiCheck/aiCheckCost";
 import { isTauriRuntime } from "../../features/save/saveRuntime";
 import {
   clearAiCheckConfig,
@@ -6,30 +13,42 @@ import {
   listAiModels,
   providerLabel,
   saveAiCheckConfig,
-  testAiCheckConnection,
   type AiCheckConfigPublic,
   type AiModelInfo,
   type AiProvider,
 } from "../../features/aiCheck/aiCheck";
 
 const BOX = "rounded-xl bg-mist px-3.5 py-3";
+const FIELD_BOX = "overflow-hidden rounded-lg bg-page/70";
 const FIELD =
   "w-full rounded-md border-0 bg-page px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/15 focus:ring-[var(--color-focus-ring)]/45";
+const FIELD_LABEL =
+  "text-[10px] font-semibold uppercase tracking-[0.12em] text-muted/55";
 const BUTTON =
   "rounded-md bg-page px-2.5 py-1.5 text-[12px] font-medium text-ink ring-1 ring-line/15 transition-colors hover:bg-ink/[0.04] disabled:cursor-not-allowed disabled:opacity-50";
 
 type Props = {
   /** Called whenever stored enabled/connected state changes so the toggle stays in sync. */
   onConfigChange?: (config: AiCheckConfigPublic) => void;
+  /** When true, omit the mist box (for nesting inside an expandable settings group). */
+  embedded?: boolean;
+  /** Preloaded config from parent — renders immediately without a config refetch. */
+  initialConfig?: AiCheckConfigPublic | null;
 };
 
-export function AiCheckSettingsSection({ onConfigChange }: Props) {
+export function AiCheckSettingsSection({
+  onConfigChange,
+  embedded = false,
+  initialConfig = null,
+}: Props) {
   const tauri = isTauriRuntime();
-  const [config, setConfig] = useState<AiCheckConfigPublic | null>(null);
+  const [config, setConfig] = useState<AiCheckConfigPublic | null>(initialConfig);
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("");
+  const [model, setModel] = useState(() => initialConfig?.model ?? "");
   const [models, setModels] = useState<AiModelInfo[]>([]);
-  const [detectedProvider, setDetectedProvider] = useState<AiProvider | null>(null);
+  const [detectedProvider, setDetectedProvider] = useState<AiProvider | null>(
+    () => initialConfig?.provider ?? null,
+  );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,34 +61,47 @@ export function AiCheckSettingsSection({ onConfigChange }: Props) {
   };
 
   useEffect(() => {
-    if (!tauri) return;
-    void (async () => {
-      try {
-        const next = await getAiCheckConfig();
-        applyConfig(next);
-        if (next.hasApiKey) {
-          try {
-            const listed = await listAiModels();
-            setModels(listed);
-            if (!next.model && listed[0]) {
-              setModel(listed[0].id);
-            }
-          } catch {
-            // Key may be invalid; user can re-save.
-          }
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-    })();
+    if (initialConfig) {
+      setConfig(initialConfig);
+      setModel(initialConfig.model);
+      setDetectedProvider(initialConfig.provider);
+    }
+  }, [initialConfig]);
+
+  useEffect(() => {
+    if (!tauri || embedded) return;
+    void getAiCheckConfig()
+      .then(applyConfig)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tauri]);
+  }, [tauri, embedded]);
+
+  useEffect(() => {
+    if (!tauri || !config?.hasApiKey || models.length > 0) return;
+    let cancelled = false;
+    void listAiModels()
+      .then((listed) => {
+        if (cancelled) return;
+        setModels(listed);
+        if (!config.model && listed.length > 0) {
+          setModel(pickRecommendedModelId(listed, config.provider) ?? listed[0]!.id);
+        }
+      })
+      .catch(() => {
+        // Key may be invalid; user can re-save.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tauri, config?.hasApiKey, config?.model, config?.provider, models.length]);
+
+  const shellClass = embedded ? "space-y-3" : `space-y-3 ${BOX}`;
 
   if (!tauri) {
     return (
-      <div className={BOX}>
-        <p className="text-[13px] font-medium text-ink">AI check</p>
-        <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+      <div className={shellClass}>
+        {embedded ? null : <p className="text-[13px] font-medium text-ink">AI check</p>}
+        <p className={`${embedded ? "" : "mt-0.5 "}text-[11px] leading-snug text-muted/75`}>
           Add an OpenAI or Anthropic API key in the Harvy desktop app to enable on-demand essay
           review.
         </p>
@@ -83,7 +115,6 @@ export function AiCheckSettingsSection({ onConfigChange }: Props) {
     setMessage(null);
     try {
       const keepExistingKey = Boolean(config?.hasApiKey && !apiKey.trim());
-      // First-time connect turns AI check on so API settings stay visible after save.
       const enabled = config?.hasApiKey ? Boolean(config.enabled) : true;
       const next = await saveAiCheckConfig({
         apiKey,
@@ -99,7 +130,7 @@ export function AiCheckSettingsSection({ onConfigChange }: Props) {
 
       let chosen = next.model;
       if (!chosen || !listed.some((m) => m.id === chosen)) {
-        chosen = listed[0]?.id ?? "";
+        chosen = pickRecommendedModelId(listed, next.provider) ?? listed[0]?.id ?? "";
       }
       setModel(chosen);
 
@@ -115,7 +146,7 @@ export function AiCheckSettingsSection({ onConfigChange }: Props) {
 
       setMessage(
         next.provider
-          ? `Detected ${providerLabel(next.provider)} — ${listed.length} model${listed.length === 1 ? "" : "s"} available.`
+          ? `${providerLabel(next.provider)} connected — ${listed.length} model${listed.length === 1 ? "" : "s"}.`
           : "API key saved.",
       );
     } catch (e) {
@@ -139,7 +170,6 @@ export function AiCheckSettingsSection({ onConfigChange }: Props) {
         keepExistingKey: true,
       });
       applyConfig(next);
-      setMessage(`Model set to ${nextModel}.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -147,24 +177,7 @@ export function AiCheckSettingsSection({ onConfigChange }: Props) {
     }
   };
 
-  const handleTest = async () => {
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const msg = await testAiCheckConnection({
-        apiKey: apiKey.trim() || undefined,
-        model: model || undefined,
-      });
-      setMessage(msg);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleDisconnect = async () => {
+  const handleRemoveApi = async () => {
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -175,7 +188,7 @@ export function AiCheckSettingsSection({ onConfigChange }: Props) {
       setModel("");
       setModels([]);
       setDetectedProvider(null);
-      setMessage("AI check disconnected.");
+      setMessage("API key removed.");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -184,66 +197,82 @@ export function AiCheckSettingsSection({ onConfigChange }: Props) {
   };
 
   const provider = detectedProvider ?? config?.provider ?? null;
+  const modelOptions = sortModelsByCost(
+    models.length > 0
+      ? models
+      : model
+        ? [{ id: model, provider: provider ?? "openai" }]
+        : [],
+  );
+  const providerText = provider ? providerLabel(provider) : "Not connected";
+  const selectedModelLabel = model ? formatModelIdForPicker(model) : "Default";
 
   return (
-    <div className={`space-y-3 ${BOX}`}>
-      <div>
-        <p className="text-[13px] font-medium text-ink">API & model</p>
-        <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-          Paste an OpenAI (<span className="font-mono text-[10px]">sk-…</span>) or Anthropic (
-          <span className="font-mono text-[10px]">sk-ant-…</span>) key. Harvy detects the provider and
-          lists chat models you can test.
-        </p>
-      </div>
+    <div className={shellClass}>
+      <ul className={FIELD_BOX}>
+        <li className="px-3.5 py-3">
+          <label className="block space-y-1.5">
+            <span className={FIELD_LABEL}>API key</span>
+            <input
+              type="password"
+              autoComplete="off"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={config?.hasApiKey ? "••••••••  (leave blank to keep)" : "sk-… or sk-ant-…"}
+              className={FIELD}
+            />
+          </label>
+        </li>
 
-      <label className="block space-y-1.5">
-        <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted/60">
-          API key
-        </span>
-        <input
-          type="password"
-          autoComplete="off"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder={config?.hasApiKey ? "••••••••  (leave blank to keep)" : "sk-… or sk-ant-…"}
-          className={FIELD}
-        />
-      </label>
-
-      {provider ? (
-        <p className="text-[12px] text-muted/80">
-          Provider: <span className="font-medium text-ink">{providerLabel(provider)}</span>
-        </p>
-      ) : null}
-
-      <label className="block space-y-1.5">
-        <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted/60">
-          Model
-        </span>
-        {models.length > 0 ? (
-          <select
-            value={model}
-            onChange={(e) => void handleModelChange(e.target.value)}
-            className={FIELD}
-            disabled={busy}
-          >
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.id}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            type="text"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder="Save key to load models"
-            className={FIELD}
-            disabled={!config?.hasApiKey && !apiKey.trim()}
-          />
-        )}
-      </label>
+        <li className="flex items-center justify-between gap-4 px-3.5 pb-3 pt-0">
+          <span className="shrink-0 text-[13px] text-ink">
+            Provider{provider ? `: ${providerText}` : ""}
+          </span>
+          <div className="flex min-w-0 items-center justify-end gap-1">
+            {modelOptions.length > 0 ? (
+              <>
+                <div className="relative max-w-[min(100%,14rem)]">
+                  <span
+                    className="block truncate text-right text-[13px] text-ink"
+                    aria-hidden
+                  >
+                    {selectedModelLabel}
+                  </span>
+                  <select
+                    value={model}
+                    onChange={(e) => void handleModelChange(e.target.value)}
+                    aria-label="AI model"
+                    className="absolute inset-0 w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                    disabled={busy || !config?.hasApiKey}
+                  >
+                    {modelOptions.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {modelOptionLabel(m.id)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <ChevronsUpDown
+                  size={13}
+                  strokeWidth={2}
+                  className="shrink-0 text-muted/55"
+                  aria-hidden
+                />
+              </>
+            ) : (
+              <>
+                <span className="text-[13px] text-muted/55">Default</span>
+                <ChevronsUpDown
+                  size={13}
+                  strokeWidth={2}
+                  className="shrink-0 text-muted/55"
+                  aria-hidden
+                />
+              </>
+            )}
+          </div>
+        </li>
+      </ul>
 
       <div className="flex flex-wrap gap-2">
         <button
@@ -255,24 +284,14 @@ export function AiCheckSettingsSection({ onConfigChange }: Props) {
           Save & detect models
         </button>
         {config?.hasApiKey ? (
-          <>
-            <button
-              type="button"
-              className={BUTTON}
-              disabled={busy || !model}
-              onClick={() => void handleTest()}
-            >
-              Test model
-            </button>
-            <button
-              type="button"
-              className={BUTTON}
-              disabled={busy}
-              onClick={() => void handleDisconnect()}
-            >
-              Disconnect
-            </button>
-          </>
+          <button
+            type="button"
+            className={BUTTON}
+            disabled={busy}
+            onClick={() => void handleRemoveApi()}
+          >
+            Remove API
+          </button>
         ) : null}
       </div>
 

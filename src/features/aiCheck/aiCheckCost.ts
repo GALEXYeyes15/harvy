@@ -79,6 +79,79 @@ export function formatAiCheckCostUsd(usd: number): string {
   return `~$${usd.toFixed(2)}`;
 }
 
+function formatRateUsdPerMillion(usd: number): string {
+  if (usd < 1) return `$${usd.toFixed(2)}`;
+  if (Number.isInteger(usd)) return `$${usd}`;
+  return `$${usd.toFixed(1)}`;
+}
+
+/** Compact input/output list price for model pickers (per 1M tokens). */
+export function formatModelRatesShort(modelId: string): string {
+  const { inputPerMillion, outputPerMillion } = ratesForModel(modelId);
+  return `${formatRateUsdPerMillion(inputPerMillion)}/${formatRateUsdPerMillion(outputPerMillion)} per 1M`;
+}
+
+export function formatModelIdForPicker(modelId: string): string {
+  return modelId.trim().replace(/-\d{8}$/i, "");
+}
+
+/** Capable mid-tier models for AI check + podcast notes (not opus/o1, not bare haiku). */
+export function isRecommendedHarvyModel(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  if (/opus|^o1(?!-mini)|^o3(?!-mini)|^o4/i.test(id)) return false;
+  if (/haiku|nano|fable/i.test(id)) return false;
+  if (/sonnet/i.test(id)) return true;
+  if (/gpt-4o-mini|gpt-4\.1-mini|o3-mini|o1-mini/i.test(id)) return true;
+  if (/gpt-4o|gpt-4\.1/i.test(id)) return true;
+  const { inputPerMillion, outputPerMillion } = ratesForModel(modelId);
+  const score = inputPerMillion + outputPerMillion;
+  return score >= 8 && score <= 22;
+}
+
+/** Pick a default model after key detect — balanced for proofreading and podcast notes. */
+export function pickRecommendedModelId(
+  models: readonly { id: string }[],
+  provider?: AiProvider | null,
+): string | null {
+  if (models.length === 0) return null;
+  const sorted = sortModelsByCost(models);
+  const recommended = sorted.filter((m) => isRecommendedHarvyModel(m.id));
+  const pool = recommended.length > 0 ? recommended : sorted;
+
+  if (provider === "anthropic") {
+    const sonnets = pool.filter((m) => /sonnet/i.test(m.id));
+    if (sonnets.length > 0) return sonnets[sonnets.length - 1]!.id;
+  }
+  if (provider === "openai") {
+    const mini = pool.find((m) => /gpt-4o-mini/i.test(m.id));
+    if (mini) return mini.id;
+    const full = pool.find((m) => /^gpt-4o/i.test(m.id) || /^gpt-4\.1/i.test(m.id));
+    if (full) return full.id;
+  }
+
+  return pool[Math.min(pool.length - 1, Math.floor(pool.length * 0.6))]?.id ?? pool[0]?.id ?? null;
+}
+
+export function modelOptionLabel(modelId: string): string {
+  const name = formatModelIdForPicker(modelId);
+  const recommended = isRecommendedHarvyModel(modelId) ? " (recommended)" : "";
+  return `${name}${recommended} · ${formatModelRatesShort(modelId)}`;
+}
+
+/** Sort models cheapest-first using input + output list rates. */
+export function compareModelsByCost(a: string, b: string): number {
+  const ra = ratesForModel(a);
+  const rb = ratesForModel(b);
+  const scoreA = ra.inputPerMillion + ra.outputPerMillion;
+  const scoreB = rb.inputPerMillion + rb.outputPerMillion;
+  if (scoreA !== scoreB) return scoreA - scoreB;
+  return a.localeCompare(b);
+}
+
+export function sortModelsByCost<T extends { id: string }>(models: readonly T[]): T[] {
+  return [...models].sort((a, b) => compareModelsByCost(a.id, b.id));
+}
+
 /**
  * `claude-fable-5` → `Claude Fable 5`
  * `claude-sonnet-4-20250514` → `Claude Sonnet 4`
