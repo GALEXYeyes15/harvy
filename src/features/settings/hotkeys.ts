@@ -21,7 +21,7 @@ export const HOTKEY_GROUPS: HotkeyGroup[] = [
     title: "File",
     items: [
       { id: "save", action: "Save", keys: ["Mod", "S"] },
-      { id: "save-as", action: "Save As File…", keys: ["Mod", "Shift", "S"] },
+      { id: "save-as", action: "Save As…", keys: ["Mod", "Shift", "S"] },
       { id: "export-pdf", action: "Export as PDF…", keys: ["Mod", "Shift", "E"] },
     ],
   },

@@ -117,6 +117,7 @@ pub fn run() {
             commands::ai_check::ai_check_list_models,
             commands::ai_check::ai_check_test_connection,
             commands::ai_check::ai_check_run,
+            commands::ai_check::ai_check_podcast_notes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

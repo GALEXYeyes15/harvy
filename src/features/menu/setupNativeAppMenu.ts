@@ -10,7 +10,7 @@ function isLikelyMac(): boolean {
 /**
  * Installs a native application / window menu with File actions (macOS menu bar when applicable).
  *
- * Save As opens Harvy’s in-app Save As sheet (Logic-inspired layout); choosing Where uses the native folder picker.
+ * Save As opens Harvy’s in-app Save As sheet; choosing Where uses the native folder picker.
  */
 export async function setupNativeAppMenu(): Promise<void> {
   const harvy = await Submenu.new({
@@ -48,18 +48,11 @@ export async function setupNativeAppMenu(): Promise<void> {
         },
       }),
       await MenuItem.new({
-        id: "file-save-as-file",
-        text: "Save As File…",
+        id: "file-save-as",
+        text: "Save As…",
         accelerator: "CmdOrCtrl+Shift+S",
         action: () => {
-          void getFileMenuHandlers().saveAsFile();
-        },
-      }),
-      await MenuItem.new({
-        id: "file-save-as-folder",
-        text: "Save As Folder…",
-        action: () => {
-          void getFileMenuHandlers().saveAsFolder();
+          void getFileMenuHandlers().saveAs();
         },
       }),
       await PredefinedMenuItem.new({ item: "Separator" }),

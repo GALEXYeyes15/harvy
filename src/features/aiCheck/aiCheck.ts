@@ -37,6 +37,13 @@ export type AiCheckResult = {
   usage: AiCheckUsage;
 };
 
+export type PodcastNotesResult = {
+  markdown: string;
+  model: string;
+  provider: AiProvider;
+  usage: AiCheckUsage;
+};
+
 export type AiCheckSaveInput = {
   apiKey: string;
   model?: string;
@@ -106,6 +113,11 @@ export async function testAiCheckConnection(opts?: {
 export async function runAiCheck(essay: string): Promise<AiCheckResult> {
   requireTauri();
   return invoke<AiCheckResult>("ai_check_run", { essay });
+}
+
+export async function generatePodcastNotes(essay: string): Promise<PodcastNotesResult> {
+  requireTauri();
+  return invoke<PodcastNotesResult>("ai_check_podcast_notes", { essay });
 }
 
 export function providerLabel(provider: AiProvider | null | undefined): string {

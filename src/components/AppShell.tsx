@@ -127,6 +127,7 @@ import type { FileNode, WorkspaceDocument } from "../features/workspace/types";
 import { nextActiveTabIdAfterClose, toPageTabs } from "../features/tabs/pageTabs";
 import {
   defaultPdfFileName,
+  defaultPodcastNotesPdfFileName,
   defaultSaveFileName,
   documentTitleBaseFromSaveAsFileName,
   fileNameFromPath,
@@ -186,6 +187,7 @@ import {
   estimateCostUsd,
   formatAiCheckCostUsd,
   formatAiModelDisplayName,
+  generatePodcastNotes,
   getAiCheckConfig,
   locateAiIssuesInText,
   runAiCheck,
@@ -342,6 +344,8 @@ export function AppShell() {
   const [saveAsInitialFileName, setSaveAsInitialFileName] = useState("Untitled.md");
   const [saveAsDestinationPath, setSaveAsDestinationPath] = useState<string | null>(null);
   const [saveAsSubmitting, setSaveAsSubmitting] = useState(false);
+  /** Regular document Save As vs podcast-notes export (forces Folder + writes PDF to Exports). */
+  const [saveAsPurpose, setSaveAsPurpose] = useState<"document" | "podcast-notes">("document");
   const [isTopChromeHidden, setIsTopChromeHidden] = useState(false);
   const [readabilityPanelOpen, setReadabilityPanelOpen] = useState(true);
   const [showQuickLinks, setShowQuickLinks] = useState(
@@ -377,6 +381,7 @@ export function AppShell() {
   const [aiCheckConfig, setAiCheckConfig] = useState<AiCheckConfigPublic | null>(null);
   const [aiProofreadIssues, setAiProofreadIssues] = useState<ProofreadIssue[]>([]);
   const [aiCheckRunning, setAiCheckRunning] = useState(false);
+  const [podcastNotesRunning, setPodcastNotesRunning] = useState(false);
   const [aiCheckCostLabel, setAiCheckCostLabel] = useState<string | null>(null);
   const [aiCheckError, setAiCheckError] = useState<string | null>(null);
   const aiProofreadIssuesRef = useRef<ProofreadIssue[]>([]);
@@ -1147,45 +1152,60 @@ export function AppShell() {
     [activeDocument, activeTabId],
   );
 
-  const openSaveAsModal = useCallback(() => {
-    if (!isTauriRuntime()) {
-      window.alert("Save As is only available in the Harvy desktop app.");
-      return;
-    }
-    if (!hasWorkspaceFolder) {
-      window.alert("Choose a workspace folder before saving files.");
-      return;
-    }
-    if (!editorEditable) return;
-    const titleFromFile =
-      activeDocument?.title ?? (openTabIds.length === 0 ? scratchDocumentTitle : "Untitled");
-    const titleBase =
-      activeDocument?.postTitle.trim() ||
-      splitFileBaseAndExtension(titleFromFile).base ||
-      "Untitled";
-    const suggestedFileName = defaultSaveFileName(titleBase);
-    editorFocusBeforeSaveAsRef.current = editorFocusSuppressedRef.current;
-    visuallyDeactivateEditor(tiptapEditor);
-    setEditorInactive(true);
-    setSaveAsInitialFileName(suggestedFileName);
-    setSaveAsLiveFileName(suggestedFileName);
-    setSaveAsDestinationPath(workspaceBrowsePath ?? supportedTree?.path ?? null);
-    setSaveAsModalOpen(true);
-  }, [
-    editorEditable,
-    activeDocument,
-    openTabIds.length,
-    scratchDocumentTitle,
-    workspaceBrowsePath,
-    supportedTree?.path,
-    hasWorkspaceFolder,
-    tiptapEditor,
-    setEditorInactive,
-  ]);
+  const openSaveAsModal = useCallback(
+    (opts?: { purpose?: "document" | "podcast-notes" }) => {
+      if (!isTauriRuntime()) {
+        window.alert("Save As is only available in the Harvy desktop app.");
+        return;
+      }
+      if (!hasWorkspaceFolder) {
+        window.alert("Choose a workspace folder before saving files.");
+        return;
+      }
+      if (!editorEditable) return;
+      const purpose = opts?.purpose ?? "document";
+      if (purpose === "podcast-notes") {
+        if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
+          window.alert("Enable AI check and add an API key in Settings → Sidebars first.");
+          return;
+        }
+      }
+      const titleFromFile =
+        activeDocument?.title ?? (openTabIds.length === 0 ? scratchDocumentTitle : "Untitled");
+      const titleBase =
+        activeDocument?.postTitle.trim() ||
+        splitFileBaseAndExtension(titleFromFile).base ||
+        "Untitled";
+      const suggestedFileName = defaultSaveFileName(titleBase);
+      editorFocusBeforeSaveAsRef.current = editorFocusSuppressedRef.current;
+      visuallyDeactivateEditor(tiptapEditor);
+      setEditorInactive(true);
+      setSaveAsPurpose(purpose);
+      setSaveAsInitialFileName(suggestedFileName);
+      setSaveAsLiveFileName(suggestedFileName);
+      setSaveAsDestinationPath(workspaceBrowsePath ?? supportedTree?.path ?? null);
+      setSaveAsModalOpen(true);
+    },
+    [
+      editorEditable,
+      activeDocument,
+      openTabIds.length,
+      scratchDocumentTitle,
+      workspaceBrowsePath,
+      supportedTree?.path,
+      hasWorkspaceFolder,
+      tiptapEditor,
+      setEditorInactive,
+      aiCheckConfig?.enabled,
+      aiCheckConfig?.hasApiKey,
+    ],
+  );
 
   const finishSaveAsModal = useCallback(() => {
     setSaveAsModalOpen(false);
     setSaveAsLiveFileName("");
+    setSaveAsPurpose("document");
+    setPodcastNotesRunning(false);
     const wasSuppressedBeforeOpen = editorFocusBeforeSaveAsRef.current;
     editorFocusBeforeSaveAsRef.current = null;
     if (wasSuppressedBeforeOpen === false) {
@@ -1243,7 +1263,8 @@ export function AppShell() {
         editor: tiptapEditor,
         documentMarkdown: markdown,
       });
-      const organizeMode: SaveAsOrganizeMode = folderContext.hasImages ? "folder" : organize;
+      const organizeMode: SaveAsOrganizeMode =
+        saveAsPurpose === "podcast-notes" || folderContext.hasImages ? "folder" : organize;
 
       const resolved = resolveSaveAsOutputPath(saveAsDestinationPath!, fileName, organizeMode);
       if (!resolved) {
@@ -1253,15 +1274,17 @@ export function AppShell() {
 
       const { path: outPath, leaf, folderBase } = resolved;
       setSaveAsSubmitting(true);
+      if (saveAsPurpose === "podcast-notes") setPodcastNotesRunning(true);
       try {
+        let projectDir: string | null = null;
         if (organizeMode === "folder") {
-          const pkgDir = await invoke<string>("ensure_directory", {
+          projectDir = await invoke<string>("ensure_directory", {
             parentPath: saveAsDestinationPath,
             folderName: folderBase,
           });
 
           for (const relativePath of projectSubfolderPathsToCreate(folderContext)) {
-            let parent = pkgDir;
+            let parent = projectDir;
             for (const segment of relativePath.split("/")) {
               parent = await invoke<string>("ensure_directory", {
                 parentPath: parent,
@@ -1273,7 +1296,7 @@ export function AppShell() {
           if (folderContext.hasImages && workspaceRootPath) {
             const { replacements } = await packageDocumentImages({
               workspaceRoot: workspaceRootPath,
-              projectDir: pkgDir,
+              projectDir,
               sources: collectEmbeddedImageSrcs(tiptapEditor, markdown),
             });
             markdown = applyImageSrcRewrites(tiptapEditor, markdown, replacements);
@@ -1296,6 +1319,29 @@ export function AppShell() {
         if (folderContext.hasNotes) {
           await saveDocumentNotes(outPath, activeDocument?.notes ?? "");
         }
+
+        if (saveAsPurpose === "podcast-notes") {
+          if (!projectDir) {
+            throw new Error("Podcast notes require a project folder.");
+          }
+          const { text } = tiptapEditor
+            ? proofreadPlainTextAndPositions(tiptapEditor.state.doc)
+            : { text: activeDocument?.content ?? scratchDraftContent };
+          const essay = text.trim();
+          if (!essay) {
+            throw new Error("Nothing to export — the document is empty.");
+          }
+          const notes = await generatePodcastNotes(essay);
+          const exportsDir = await invoke<string>("ensure_directory", {
+            parentPath: projectDir,
+            folderName: "Exports",
+          });
+          const pdfPath = normalizePdfSavePath(
+            joinPath(exportsDir, defaultPodcastNotesPdfFileName(folderBase)),
+          );
+          await invoke("export_markdown_pdf", { path: pdfPath, markdown: notes.markdown });
+        }
+
         finalizeSavedPath(outPath, markdown);
         await reloadWorkspaceTree();
         finishSaveAsModal();
@@ -1303,10 +1349,12 @@ export function AppShell() {
         window.alert(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
         setSaveAsSubmitting(false);
+        setPodcastNotesRunning(false);
       }
     },
     [
       saveAsDestinationPath,
+      saveAsPurpose,
       workspaceRootPath,
       tiptapEditor,
       activeDocument,
@@ -1321,18 +1369,37 @@ export function AppShell() {
     ? fileNameFromPath(saveAsDestinationPath)
     : "Choose folder…";
 
-  const saveAsFolderPreviewContext = useMemo(
-    () =>
-      getProjectStructure({
-        notes: activeDocument?.notes ?? "",
-        editor: tiptapEditor,
-        documentMarkdown: getDocumentMarkdown(
-          tiptapEditor,
-          activeDocument?.content ?? scratchDraftContent,
-        ),
-      }),
-    [activeDocument?.notes, activeDocument?.content, scratchDraftContent, tiptapEditor],
-  );
+  const saveAsFolderPreviewContext = useMemo(() => {
+    const structure = getProjectStructure({
+      notes: activeDocument?.notes ?? "",
+      editor: tiptapEditor,
+      documentMarkdown: getDocumentMarkdown(
+        tiptapEditor,
+        activeDocument?.content ?? scratchDraftContent,
+      ),
+    });
+    if (saveAsPurpose !== "podcast-notes") return structure;
+    const titleBase =
+      documentTitleBaseFromSaveAsFileName(saveAsLiveFileName || saveAsInitialFileName) ||
+      "Untitled";
+    return {
+      ...structure,
+      exportFolders: [
+        {
+          folderName: "Exports",
+          files: [defaultPodcastNotesPdfFileName(titleBase)],
+        },
+      ],
+    };
+  }, [
+    activeDocument?.notes,
+    activeDocument?.content,
+    scratchDraftContent,
+    tiptapEditor,
+    saveAsPurpose,
+    saveAsLiveFileName,
+    saveAsInitialFileName,
+  ]);
 
   const performExportPdf = useCallback(async () => {
     if (!isTauriRuntime()) {
@@ -1386,6 +1453,11 @@ export function AppShell() {
     workspaceBrowsePath,
     workspaceRootPath,
   ]);
+
+  const performExportPodcastNotesPdf = useCallback(() => {
+    if (podcastNotesRunning || saveAsSubmitting) return;
+    openSaveAsModal({ purpose: "podcast-notes" });
+  }, [openSaveAsModal, podcastNotesRunning, saveAsSubmitting]);
 
   const performSave = useCallback(async () => {
     if (!isTauriRuntime()) {
@@ -1552,8 +1624,7 @@ export function AppShell() {
   useEffect(() => {
     setFileMenuHandlers({
       save: () => void performSave(),
-      saveAsFile: () => void openSaveAsModal(),
-      saveAsFolder: () => void openSaveAsModal(),
+      saveAs: () => void openSaveAsModal(),
       exportPdf: () => void performExportPdf(),
       newMarkdownFile: () => void handleCreateMarkdownFileRef.current(),
     });
@@ -2565,8 +2636,11 @@ export function AppShell() {
                 focusModeActive ? formatFocusRemaining(focusRemainingMs) : undefined
               }
               onCopyDocument={handleCopyDocument}
+              onPodcastNotesPdf={performExportPodcastNotesPdf}
               onSaveAsPdf={performExportPdf}
               onPrint={handlePrintDocument}
+              podcastNotesEnabled={Boolean(aiCheckConfig?.enabled && aiCheckConfig.hasApiKey)}
+              podcastNotesRunning={podcastNotesRunning}
               syncWithChrome
               chromeHidden={hideBottomToolsWhileTyping && !focusModeActive}
             />
@@ -2791,6 +2865,8 @@ export function AppShell() {
         open={saveAsModalOpen}
         onClose={closeSaveAsModal}
         initialFileName={saveAsInitialFileName}
+        initialOrganize={saveAsPurpose === "podcast-notes" ? "folder" : "file"}
+        forceFolderOrganize={saveAsPurpose === "podcast-notes"}
         destinationPath={saveAsDestinationPath}
         destinationDisplay={saveAsDestinationDisplay}
         isSubmitting={saveAsSubmitting}

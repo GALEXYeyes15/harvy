@@ -312,6 +312,7 @@ struct Writer {
     page: PdfPageIndex,
     layer: PdfLayerIndex,
     font: printpdf::IndirectFontRef,
+    font_bold: printpdf::IndirectFontRef,
     y: f32,
     workspace_root: PathBuf,
     images: Vec<PdfImageSpec>,
@@ -324,12 +325,16 @@ impl Writer {
         let font = doc
             .add_builtin_font(BuiltinFont::Helvetica)
             .map_err(|e| e.to_string())?;
+        let font_bold = doc
+            .add_builtin_font(BuiltinFont::HelveticaBold)
+            .map_err(|e| e.to_string())?;
         let y = PAGE_H_MM - MARGIN_MM - 6.0;
         Ok(Self {
             doc,
             page,
             layer,
             font,
+            font_bold,
             y,
             workspace_root: workspace_root.to_path_buf(),
             images,
@@ -374,6 +379,16 @@ impl Writer {
         font_pt: f32,
         indent_mm: f32,
     ) -> Result<(), String> {
+        self.emit_styled_line_with_font(words, font_pt, indent_mm, false)
+    }
+
+    fn emit_styled_line_with_font(
+        &mut self,
+        words: &[StyledWord],
+        font_pt: f32,
+        indent_mm: f32,
+        bold: bool,
+    ) -> Result<(), String> {
         let lh = line_height_mm(font_pt);
         self.ensure_vertical(lh)?;
         if words.is_empty() {
@@ -383,6 +398,7 @@ impl Writer {
 
         let mm_per_char = font_pt * 0.5 * 25.4 / 72.0;
         let layer = self.doc.get_page(self.page).get_layer(self.layer);
+        let font = if bold { &self.font_bold } else { &self.font };
         let mut x = MARGIN_MM + indent_mm;
         let mut i = 0usize;
         while i < words.len() {
@@ -404,7 +420,7 @@ impl Writer {
             } else {
                 layer.set_fill_color(body_fill());
             }
-            layer.use_text(safe, font_pt, Mm(x), Mm(self.y), &self.font);
+            layer.use_text(safe, font_pt, Mm(x), Mm(self.y), font);
             if let Some(url) = url.as_deref() {
                 let underline_y = self.y - font_pt * 0.18 * 25.4 / 72.0;
                 layer.set_outline_color(link_fill());
@@ -455,6 +471,16 @@ impl Writer {
         font_pt: f32,
         indent_mm: f32,
     ) -> Result<(), String> {
+        self.emit_styled_paragraph_with_font(spans, font_pt, indent_mm, false)
+    }
+
+    fn emit_styled_paragraph_with_font(
+        &mut self,
+        spans: &[InlineSpan],
+        font_pt: f32,
+        indent_mm: f32,
+        bold: bool,
+    ) -> Result<(), String> {
         let plain = spans_plain_text(spans);
         let t = plain.trim();
         if t.is_empty() {
@@ -467,7 +493,7 @@ impl Writer {
         let cpl = chars_per_line(font_pt, indent_mm);
         let words = styled_words(spans);
         for line in wrap_styled_words(&words, cpl) {
-            self.emit_styled_line(&line, font_pt, indent_mm)?;
+            self.emit_styled_line_with_font(&line, font_pt, indent_mm, bold)?;
         }
         self.space_after_block(font_pt);
         Ok(())
@@ -639,7 +665,12 @@ pub fn write_markdown_pdf(path: &str, markdown: &str, workspace_root: &Path) -> 
                 if let Some(level) = heading_level.take() {
                     let spans = std::mem::take(&mut heading_buf);
                     let pt = heading_pt(level);
-                    w.emit_styled_paragraph(&spans, pt, blockquote_depth as f32 * 4.0)?;
+                    w.emit_styled_paragraph_with_font(
+                        &spans,
+                        pt,
+                        blockquote_depth as f32 * 4.0,
+                        true,
+                    )?;
                     w.space_after_block(pt);
                 }
             }

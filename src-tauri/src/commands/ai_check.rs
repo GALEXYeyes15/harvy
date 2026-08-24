@@ -103,6 +103,15 @@ pub struct AiCheckResult {
     pub usage: AiCheckUsage,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PodcastNotesResult {
+    pub markdown: String,
+    pub model: String,
+    pub provider: AiProvider,
+    pub usage: AiCheckUsage,
+}
+
 struct ModelCheckResponse {
     text: String,
     usage: AiCheckUsage,
@@ -382,6 +391,48 @@ Rules:
 - Keep quotes short (a phrase or sentence fragment), not whole paragraphs.
 - type "grammar" for correctness; "suggestion" for style/clarity.
 - If nothing needs fixing, return {"issues":[]}."#;
+
+const PODCAST_NOTES_SYSTEM_PROMPT: &str = r#"You turn essays into clear podcast-host notes.
+Return ONLY Markdown — no code fences, no preamble, no closing remarks.
+Structure requirements:
+1. Start with one H1 title for the notes (derived from the essay).
+2. Follow with several sections. Each section MUST begin with an H2 heading (`## Section Title`).
+3. Under every section, list the significant points as Markdown bullet items (`- point`).
+4. Keep bullets concise and speakable for a podcast host.
+5. Do not invent facts that are not supported by the essay.
+6. Prefer about 4–8 sections depending on essay length."#;
+
+fn strip_markdown_fences(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let without_open = trimmed
+        .strip_prefix("```markdown")
+        .or_else(|| trimmed.strip_prefix("```md"))
+        .or_else(|| trimmed.strip_prefix("```"))
+        .unwrap_or(trimmed);
+    without_open
+        .strip_suffix("```")
+        .unwrap_or(without_open)
+        .trim()
+        .to_string()
+}
+
+fn require_ai_config_for_generation(app: &AppHandle) -> Result<AiCheckConfig, String> {
+    let config = read_config(app)?.ok_or_else(|| {
+        "Add an API key in Settings → Sidebars before generating podcast notes.".to_string()
+    })?;
+    if config.api_key.trim().is_empty() {
+        return Err(
+            "Add an API key in Settings → Sidebars before generating podcast notes.".to_string(),
+        );
+    }
+    if !config.enabled {
+        return Err("Enable AI check in Settings → Sidebars first (podcast notes uses the same model).".to_string());
+    }
+    if config.model.trim().is_empty() {
+        return Err("Select a model in Settings → Sidebars first.".to_string());
+    }
+    Ok(config)
+}
 
 fn extract_json_object(raw: &str) -> Result<Value, String> {
     let trimmed = raw.trim();
@@ -779,6 +830,155 @@ pub fn ai_check_run(app: AppHandle, essay: String) -> Result<AiCheckResult, Stri
         model: config.model,
         provider: config.provider,
         usage: checked.usage,
+    })
+}
+
+fn run_openai_podcast_notes(
+    client: &Client,
+    api_key: &str,
+    model: &str,
+    essay: &str,
+) -> Result<ModelCheckResponse, String> {
+    let body = json!({
+        "model": model,
+        "temperature": 0.3,
+        "messages": [
+            { "role": "system", "content": PODCAST_NOTES_SYSTEM_PROMPT },
+            { "role": "user", "content": format!("Essay to turn into podcast notes:\n\n{}", essay) }
+        ]
+    });
+    let response = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .bearer_auth(api_key.trim())
+        .json(&body)
+        .send()
+        .map_err(|e| format!("OpenAI podcast notes request failed: {}", e))?;
+    let status = response.status();
+    let text = response
+        .text()
+        .map_err(|e| format!("Could not read OpenAI podcast notes response: {}", e))?;
+    if !status.is_success() {
+        return Err(format_api_error("OpenAI", status.as_u16(), &text));
+    }
+    let parsed: Value = serde_json::from_str(&text)
+        .map_err(|e| format!("Could not parse OpenAI podcast notes JSON: {}", e))?;
+    let content = parsed
+        .pointer("/choices/0/message/content")
+        .and_then(|c| c.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "OpenAI response missing message content.".to_string())?;
+    let input_tokens = parsed
+        .pointer("/usage/prompt_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    let output_tokens = parsed
+        .pointer("/usage/completion_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    Ok(ModelCheckResponse {
+        text: content,
+        usage: AiCheckUsage {
+            input_tokens,
+            output_tokens,
+        },
+    })
+}
+
+fn run_anthropic_podcast_notes(
+    client: &Client,
+    api_key: &str,
+    model: &str,
+    essay: &str,
+) -> Result<ModelCheckResponse, String> {
+    let body = json!({
+        "model": model,
+        "max_tokens": 8192,
+        "system": PODCAST_NOTES_SYSTEM_PROMPT,
+        "messages": [
+            { "role": "user", "content": format!("Essay to turn into podcast notes:\n\n{}", essay) }
+        ]
+    });
+    let response = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key.trim())
+        .header("anthropic-version", ANTHROPIC_VERSION)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .map_err(|e| format!("Anthropic podcast notes request failed: {}", e))?;
+    let status = response.status();
+    let text = response
+        .text()
+        .map_err(|e| format!("Could not read Anthropic podcast notes response: {}", e))?;
+    if !status.is_success() {
+        return Err(format_api_error("Anthropic", status.as_u16(), &text));
+    }
+    let parsed: Value = serde_json::from_str(&text)
+        .map_err(|e| format!("Could not parse Anthropic podcast notes JSON: {}", e))?;
+    let content = parsed
+        .get("content")
+        .and_then(|c| c.as_array())
+        .ok_or_else(|| "Anthropic response missing content.".to_string())?;
+    let mut out = String::new();
+    for block in content {
+        if block.get("type").and_then(|t| t.as_str()) == Some("text") {
+            if let Some(t) = block.get("text").and_then(|t| t.as_str()) {
+                out.push_str(t);
+            }
+        }
+    }
+    if out.is_empty() {
+        return Err("Anthropic response had no text blocks.".to_string());
+    }
+    let input_tokens = parsed
+        .pointer("/usage/input_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    let output_tokens = parsed
+        .pointer("/usage/output_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    Ok(ModelCheckResponse {
+        text: out,
+        usage: AiCheckUsage {
+            input_tokens,
+            output_tokens,
+        },
+    })
+}
+
+#[tauri::command]
+pub fn ai_check_podcast_notes(app: AppHandle, essay: String) -> Result<PodcastNotesResult, String> {
+    let config = require_ai_config_for_generation(&app)?;
+    let essay = essay.trim();
+    if essay.is_empty() {
+        return Err("Nothing to export — the document is empty.".to_string());
+    }
+    if essay.chars().count() > MAX_ESSAY_CHARS {
+        return Err(format!(
+            "Essay is too long for podcast notes (max {} characters).",
+            MAX_ESSAY_CHARS
+        ));
+    }
+
+    let client = http_client()?;
+    let generated = match config.provider {
+        AiProvider::Openai => {
+            run_openai_podcast_notes(&client, &config.api_key, &config.model, essay)?
+        }
+        AiProvider::Anthropic => {
+            run_anthropic_podcast_notes(&client, &config.api_key, &config.model, essay)?
+        }
+    };
+    let markdown = strip_markdown_fences(&generated.text);
+    if markdown.trim().is_empty() {
+        return Err("The model returned empty podcast notes.".to_string());
+    }
+    Ok(PodcastNotesResult {
+        markdown,
+        model: config.model,
+        provider: config.provider,
+        usage: generated.usage,
     })
 }
 

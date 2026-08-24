@@ -29,8 +29,11 @@ type EditorAmbientControlsProps = {
   focusRemainingLabel?: string;
   /** Copy full document to clipboard (rich HTML + plain text when supported). */
   onCopyDocument: () => Promise<boolean>;
+  onPodcastNotesPdf: () => void | Promise<void>;
   onSaveAsPdf: () => void | Promise<void>;
   onPrint: () => void | Promise<void>;
+  podcastNotesEnabled?: boolean;
+  podcastNotesRunning?: boolean;
   /** When true, use AppShell chrome visibility instead of local idle/typing reveal timing. */
   syncWithChrome?: boolean;
   /** Shared chrome hidden state from AppShell (top + bottom unified). */
@@ -47,8 +50,11 @@ export function EditorAmbientControls({
   focusModeActive = false,
   focusRemainingLabel,
   onCopyDocument,
+  onPodcastNotesPdf,
   onSaveAsPdf,
   onPrint,
+  podcastNotesEnabled = false,
+  podcastNotesRunning = false,
   syncWithChrome,
   chromeHidden,
 }: EditorAmbientControlsProps) {
@@ -143,8 +149,11 @@ export function EditorAmbientControls({
         {focusModeActive ? null : (
           <EditorExportMenu
             onCopyDocument={onCopyDocument}
+            onPodcastNotesPdf={onPodcastNotesPdf}
             onSaveAsPdf={onSaveAsPdf}
             onPrint={onPrint}
+            podcastNotesEnabled={podcastNotesEnabled}
+            podcastNotesRunning={podcastNotesRunning}
           />
         )}
       </div>

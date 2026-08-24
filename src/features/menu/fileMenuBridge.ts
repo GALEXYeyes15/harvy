@@ -1,9 +1,7 @@
 export type FileMenuHandlers = {
   save: () => void | Promise<void>;
-  /** Native save panel (file name + destination). */
-  saveAsFile: () => void | Promise<void>;
-  /** Native folder chooser; saves the document into the chosen folder. */
-  saveAsFolder: () => void | Promise<void>;
+  /** Opens Harvy’s in-app Save As sheet. */
+  saveAs: () => void | Promise<void>;
   exportPdf: () => void | Promise<void>;
   /** Create a new Markdown file in the current browse folder (desktop). */
   newMarkdownFile: () => void | Promise<void>;
@@ -11,8 +9,7 @@ export type FileMenuHandlers = {
 
 let handlers: FileMenuHandlers = {
   save: () => {},
-  saveAsFile: () => {},
-  saveAsFolder: () => {},
+  saveAs: () => {},
   exportPdf: () => {},
   newMarkdownFile: () => {},
 };

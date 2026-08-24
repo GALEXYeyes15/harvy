@@ -14,6 +14,10 @@ type SaveAsModalProps = {
   open: boolean;
   onClose: () => void;
   initialFileName: string;
+  /** Prefer this organize mode when the dialog opens. */
+  initialOrganize?: SaveAsOrganizeMode;
+  /** When true, Folder is selected and File cannot be chosen. */
+  forceFolderOrganize?: boolean;
   destinationPath: string | null;
   /** Short label for the Where control (e.g. folder basename). */
   destinationDisplay: string;
@@ -60,6 +64,8 @@ export function SaveAsModal({
   open,
   onClose,
   initialFileName,
+  initialOrganize = "file",
+  forceFolderOrganize = false,
   destinationPath,
   destinationDisplay,
   isSubmitting,
@@ -78,13 +84,22 @@ export function SaveAsModal({
   useEffect(() => {
     if (!open) return;
     setFileName(initialFileName);
-    setOrganize(folderPreviewContext.hasImages ? "folder" : "file");
+    setOrganize(
+      forceFolderOrganize || folderPreviewContext.hasImages ? "folder" : initialOrganize,
+    );
     onFileNameChange?.(initialFileName);
     requestAnimationFrame(() => {
       fileNameInputRef.current?.focus();
       fileNameInputRef.current?.select();
     });
-  }, [open, initialFileName, onFileNameChange, folderPreviewContext.hasImages]);
+  }, [
+    open,
+    initialFileName,
+    initialOrganize,
+    forceFolderOrganize,
+    onFileNameChange,
+    folderPreviewContext.hasImages,
+  ]);
 
   const filePreview = useMemo(() => {
     if (!destinationPath) {
@@ -113,6 +128,7 @@ export function SaveAsModal({
   }, [destinationPath, fileName]);
 
   const destLabel = destinationPath ? destinationDisplay : "…";
+  const fileOrganizeDisabled = isSubmitting || folderPreviewContext.hasImages || forceFolderOrganize;
 
   const handleClose = useCallback(() => {
     if (isSubmitting) return;
@@ -121,7 +137,8 @@ export function SaveAsModal({
 
   const handleSave = () => {
     if (isSubmitting) return;
-    const nextOrganize = folderPreviewContext.hasImages ? "folder" : organize;
+    const nextOrganize =
+      forceFolderOrganize || folderPreviewContext.hasImages ? "folder" : organize;
     void onSave({ fileName: fileName.trim(), organize: nextOrganize });
   };
 
@@ -194,9 +211,9 @@ export function SaveAsModal({
               type="button"
               role="radio"
               aria-checked={organize === "file"}
-              disabled={isSubmitting || folderPreviewContext.hasImages}
+              disabled={fileOrganizeDisabled}
               onClick={() => setOrganize("file")}
-              className={`${RADIO_CARD_BASE} ${RADIO_CARD_ROW} ${organize === "file" ? RADIO_CARD_SELECTED : RADIO_CARD_UNSELECTED} ${folderPreviewContext.hasImages ? "opacity-45" : ""}`}
+              className={`${RADIO_CARD_BASE} ${RADIO_CARD_ROW} ${organize === "file" ? RADIO_CARD_SELECTED : RADIO_CARD_UNSELECTED} ${fileOrganizeDisabled ? "opacity-45" : ""}`}
             >
               <SaveAsRadioIndicator selected={organize === "file"} />
               <span className="min-w-0 flex-1 text-[13px] leading-snug text-ink/88">
@@ -204,7 +221,11 @@ export function SaveAsModal({
                 <span className="text-muted/62">
                   {" "}
                   – /{destLabel} / {filePreview.leaf}
-                  {folderPreviewContext.hasImages ? " (unavailable with images)" : ""}
+                  {folderPreviewContext.hasImages
+                    ? " (unavailable with images)"
+                    : forceFolderOrganize
+                      ? " (unavailable for podcast notes)"
+                      : ""}
                 </span>
               </span>
             </button>

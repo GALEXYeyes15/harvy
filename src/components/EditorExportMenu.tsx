@@ -1,8 +1,9 @@
-import { Upload } from "lucide-react";
+import { Upload, Zap } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   HARVY_CONTEXT_MENU_ITEM_CLASS,
+  HARVY_CONTEXT_MENU_ITEM_DISABLED_CLASS,
 } from "../features/editor/harvyContextMenu";
 import { HarvyContextMenuShell } from "./HarvyContextMenu";
 
@@ -14,8 +15,11 @@ const ICON_BTN =
 
 type EditorExportMenuProps = {
   onCopyDocument: () => Promise<boolean>;
+  onPodcastNotesPdf: () => void | Promise<void>;
   onSaveAsPdf: () => void | Promise<void>;
   onPrint: () => void | Promise<void>;
+  podcastNotesEnabled?: boolean;
+  podcastNotesRunning?: boolean;
 };
 
 function placeExportMenu(menuEl: HTMLElement, anchorEl: HTMLElement): void {
@@ -40,8 +44,11 @@ function placeExportMenu(menuEl: HTMLElement, anchorEl: HTMLElement): void {
 
 export function EditorExportMenu({
   onCopyDocument,
+  onPodcastNotesPdf,
   onSaveAsPdf,
   onPrint,
+  podcastNotesEnabled = false,
+  podcastNotesRunning = false,
 }: EditorExportMenuProps) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -119,6 +126,30 @@ export function EditorExportMenu({
                 }
               >
                 Copy
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={`${
+                  !podcastNotesEnabled || podcastNotesRunning
+                    ? HARVY_CONTEXT_MENU_ITEM_DISABLED_CLASS
+                    : HARVY_CONTEXT_MENU_ITEM_CLASS
+                } harvy-context-menu-item--with-icon`}
+                disabled={!podcastNotesEnabled || podcastNotesRunning}
+                title={
+                  podcastNotesEnabled
+                    ? "Generate podcast notes with your AI check model, then export a PDF"
+                    : "Enable AI check and add an API key in Settings to use podcast notes"
+                }
+                onClick={() => {
+                  if (!podcastNotesEnabled || podcastNotesRunning) return;
+                  runAction(onPodcastNotesPdf);
+                }}
+              >
+                <span className="min-w-0 flex-1">
+                  {podcastNotesRunning ? "Export Podcast Notes…" : "Export Podcast Notes"}
+                </span>
+                <Zap size={14} strokeWidth={2} aria-hidden className="shrink-0" />
               </button>
               <button
                 type="button"

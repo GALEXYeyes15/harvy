@@ -908,6 +908,14 @@
     transition: background 0.12s ease;
   }
 
+  .harvy-context-menu-item--with-icon {
+    display: inline-flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
   .harvy-context-menu-item:hover {
     background: color-mix(in oklab, var(--color-ink) 6%, transparent);
   }
@@ -923,6 +931,14 @@
     line-height: 1.35;
     color: color-mix(in oklab, var(--color-muted) 45%, transparent);
     cursor: default;
+  }
+
+  .harvy-context-menu-item--disabled.harvy-context-menu-item--with-icon {
+    display: inline-flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
   }
 
   .harvy-context-menu-divider {

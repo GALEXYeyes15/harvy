@@ -57,7 +57,7 @@ export function buildSaveAsFolderPreviewContext(input: ProjectStructureInput): P
 
 /** Relative subfolder paths to create inside a project folder (directories only). */
 export function projectSubfolderPathsToCreate(structure: ProjectStructure): string[] {
-  const paths: string[] = ["Drafts"];
+  const paths: string[] = ["Exports"];
   if (structure.hasNotes) paths.push("Notes");
   if (structure.hasImages) paths.push("Images");
   return paths;
@@ -68,7 +68,14 @@ export function buildSaveAsFolderPreviewRoot(
   leafFileName: string,
   structure: ProjectStructure,
 ): SaveAsFolderPreviewNode {
-  const children: SaveAsFolderPreviewNode[] = [{ name: leafFileName }, { name: "Drafts" }];
+  const children: SaveAsFolderPreviewNode[] = [{ name: leafFileName }];
+
+  const exportEntry = structure.exportFolders.find((folder) => folder.folderName === "Exports");
+  const exportFiles = exportEntry?.files ?? [];
+  children.push({
+    name: "Exports",
+    children: exportFiles.length > 0 ? exportFiles.map((name) => ({ name })) : undefined,
+  });
 
   if (structure.hasNotes) {
     children.push({
