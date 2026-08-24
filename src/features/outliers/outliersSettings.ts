@@ -1,6 +1,7 @@
 import { DEFAULT_SUBSTACK_ACCOUNT_URL } from "./fetchSubstackOutliers";
 import {
   createOutlierSource,
+  defaultLabelForOutlierSource,
   type OutlierSource,
 } from "./outlierSources";
 import {
@@ -33,9 +34,7 @@ export type OutliersSettings = {
 const defaultSources = (): OutlierSource[] => [
   createOutlierSource({
     platform: "substack",
-    kind: "account",
     url: DEFAULT_SUBSTACK_ACCOUNT_URL,
-    label: "alexlacy (Substack Account)",
   }),
 ];
 
@@ -88,12 +87,9 @@ function parseSources(raw: unknown): OutlierSource[] {
     parsed.push({
       id: row.id,
       platform: row.platform,
-      kind: row.kind,
+      kind: "account",
       url: row.url.trim(),
-      label:
-        typeof row.label === "string" && row.label.trim()
-          ? row.label.trim()
-          : row.url.trim(),
+      label: defaultLabelForOutlierSource(row.platform, row.url.trim()),
     });
   }
   return parsed.length > 0 ? parsed : defaultSources();
@@ -112,7 +108,6 @@ function migrateLegacySettings(): OutliersSettings | null {
     const sources = [
       createOutlierSource({
         platform: "substack",
-        kind: "account",
         url: accountLink,
       }),
     ];

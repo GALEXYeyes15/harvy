@@ -1,4 +1,4 @@
-/** Dev-server helper: YouTube channel uploads via Data API v3. */
+/** Dev-server helper: YouTube channel uploads via Data API v3 or public RSS fallback. */
 
 export type YoutubeVideoResult = {
   id: string;
@@ -16,13 +16,11 @@ export type YoutubeVideoResult = {
 };
 
 const MAX_VIDEOS = 50;
+const USER_AGENT = "Harvy/0.1 (YouTube public archive)";
 
-function requireYoutubeApiKey(): string {
+function youtubeApiKey(): string | null {
   const key = process.env.YOUTUBE_API_KEY?.trim() ?? "";
-  if (!key) {
-    throw new Error("Add YOUTUBE_API_KEY to .env.local to fetch YouTube outliers.");
-  }
-  return key;
+  return key || null;
 }
 
 export function parseYoutubeChannelInput(raw: string): { handle?: string; channelId?: string } {
@@ -43,8 +41,143 @@ export function parseYoutubeChannelInput(raw: string): { handle?: string; channe
   throw new Error("Use a youtube.com/@handle or /channel/… URL.");
 }
 
-async function youtubeGet<T>(path: string, params: Record<string, string>): Promise<T> {
-  const key = requireYoutubeApiKey();
+function decodeXml(text: string): string {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function xmlTag(block: string, tag: string): string | null {
+  const match = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  return match ? decodeXml(match[1].trim()) : null;
+}
+
+function xmlAttr(block: string, tag: string, attr: string): string | null {
+  const match = block.match(new RegExp(`<${tag}[^>]*\\s${attr}="([^"]+)"`, "i"));
+  return match ? decodeXml(match[1]) : null;
+}
+
+function extractChannelIdFromHtml(html: string): string | null {
+  const patterns = [
+    /"externalId":"(UC[\w-]{22})"/,
+    /"browseId":"(UC[\w-]{22})"/,
+    /"channelId":"(UC[\w-]{22})"/,
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
+function extractChannelMetaFromHtml(html: string, fallbackHandle?: string): {
+  channelId: string | null;
+  title: string | null;
+  handle: string | null;
+  photoUrl: string | null;
+} {
+  const channelId = extractChannelIdFromHtml(html);
+  const personMatch = html.match(/"@type":"Person"[^}]*"name":"([^"]+)"[^}]*"alternateName":"(@[^"]+)"/);
+  const imageMatch = html.match(/"@type":"Person"[^}]*"image":"(https:[^"]+)"/);
+  return {
+    channelId,
+    title: personMatch?.[1] ?? null,
+    handle: personMatch?.[2] ?? (fallbackHandle ? `@${fallbackHandle.replace(/^@/, "")}` : null),
+    photoUrl: imageMatch?.[1] ?? null,
+  };
+}
+
+async function fetchText(url: string): Promise<string> {
+  const response = await fetch(url, {
+    headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xml" },
+  });
+  if (!response.ok) {
+    throw new Error(`YouTube request failed (${response.status}).`);
+  }
+  return response.text();
+}
+
+async function resolveYoutubeChannelPublic(sourceUrl: string): Promise<{
+  channelId: string;
+  title: string;
+  handle: string;
+  photoUrl: string | null;
+}> {
+  const input = parseYoutubeChannelInput(sourceUrl);
+  if (input.channelId) {
+    const rssXml = await fetchText(
+      `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(input.channelId)}`,
+    );
+    const feedTitle = xmlTag(rssXml, "title") ?? input.channelId;
+    return {
+      channelId: input.channelId,
+      title: feedTitle,
+      handle: `@${feedTitle.replace(/\s+/g, "")}`,
+      photoUrl: null,
+    };
+  }
+
+  const handle = input.handle!;
+  const pageUrl = `https://www.youtube.com/@${encodeURIComponent(handle)}/videos`;
+  const html = await fetchText(pageUrl);
+  const meta = extractChannelMetaFromHtml(html, handle);
+  if (!meta.channelId) {
+    throw new Error("YouTube channel not found.");
+  }
+  return {
+    channelId: meta.channelId,
+    title: meta.title ?? handle,
+    handle: meta.handle ?? `@${handle}`,
+    photoUrl: meta.photoUrl,
+  };
+}
+
+function parseYoutubeRssEntries(
+  xml: string,
+  channel: { title: string; handle: string; photoUrl: string | null },
+): YoutubeVideoResult[] {
+  const results: YoutubeVideoResult[] = [];
+  for (const block of xml.split("<entry>").slice(1, MAX_VIDEOS + 1)) {
+    const id = xmlTag(block, "yt:videoId");
+    if (!id) continue;
+    const title = xmlTag(block, "title")?.trim() || "Untitled";
+    const description = xmlTag(block, "media:description")?.trim() ?? "";
+    const preview = description.slice(0, 280) || title;
+    const postDate = xmlTag(block, "published") ?? new Date().toISOString();
+    const views = Number(xmlAttr(block, "media:statistics", "views") ?? 0) || 0;
+    const likes = Number(xmlAttr(block, "media:starRating", "count") ?? 0) || 0;
+    const coverImage = xmlAttr(block, "media:thumbnail", "url");
+    results.push({
+      id,
+      title,
+      preview,
+      postDate,
+      canonicalUrl: `https://www.youtube.com/watch?v=${id}`,
+      views,
+      likes,
+      comments: 0,
+      creatorName: channel.title,
+      handle: channel.handle,
+      creatorPhotoUrl: channel.photoUrl,
+      coverImage,
+    });
+  }
+  results.sort((a, b) => Date.parse(b.postDate) - Date.parse(a.postDate));
+  return results;
+}
+
+async function fetchYoutubeVideosViaRss(sourceUrl: string): Promise<YoutubeVideoResult[]> {
+  const channel = await resolveYoutubeChannelPublic(sourceUrl);
+  const rssXml = await fetchText(
+    `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channel.channelId)}`,
+  );
+  return parseYoutubeRssEntries(rssXml, channel);
+}
+
+async function youtubeGet<T>(path: string, params: Record<string, string>, key: string): Promise<T> {
   const url = new URL(`https://www.googleapis.com/youtube/v3/${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   url.searchParams.set("key", key);
@@ -91,7 +224,7 @@ type VideosListResponse = {
   }>;
 };
 
-async function resolveChannel(sourceUrl: string): Promise<{
+async function resolveChannelViaApi(sourceUrl: string, key: string): Promise<{
   channelId: string;
   title: string;
   handle: string;
@@ -101,15 +234,17 @@ async function resolveChannel(sourceUrl: string): Promise<{
   const input = parseYoutubeChannelInput(sourceUrl);
   let channelResponse: ChannelListResponse;
   if (input.channelId) {
-    channelResponse = await youtubeGet<ChannelListResponse>("channels", {
-      part: "snippet,contentDetails",
-      id: input.channelId,
-    });
+    channelResponse = await youtubeGet<ChannelListResponse>(
+      "channels",
+      { part: "snippet,contentDetails", id: input.channelId },
+      key,
+    );
   } else if (input.handle) {
-    channelResponse = await youtubeGet<ChannelListResponse>("channels", {
-      part: "snippet,contentDetails",
-      forHandle: input.handle,
-    });
+    channelResponse = await youtubeGet<ChannelListResponse>(
+      "channels",
+      { part: "snippet,contentDetails", forHandle: input.handle },
+      key,
+    );
   } else {
     throw new Error("Could not resolve YouTube channel.");
   }
@@ -136,13 +271,20 @@ async function resolveChannel(sourceUrl: string): Promise<{
   };
 }
 
-export async function fetchYoutubeVideos(sourceUrl: string): Promise<YoutubeVideoResult[]> {
-  const channel = await resolveChannel(sourceUrl);
-  const playlist = await youtubeGet<PlaylistItemsResponse>("playlistItems", {
-    part: "snippet,contentDetails",
-    playlistId: channel.uploadsPlaylistId,
-    maxResults: String(MAX_VIDEOS),
-  });
+async function fetchYoutubeVideosViaApi(
+  sourceUrl: string,
+  key: string,
+): Promise<YoutubeVideoResult[]> {
+  const channel = await resolveChannelViaApi(sourceUrl, key);
+  const playlist = await youtubeGet<PlaylistItemsResponse>(
+    "playlistItems",
+    {
+      part: "snippet,contentDetails",
+      playlistId: channel.uploadsPlaylistId,
+      maxResults: String(MAX_VIDEOS),
+    },
+    key,
+  );
 
   const videoIds =
     playlist.items
@@ -150,10 +292,11 @@ export async function fetchYoutubeVideos(sourceUrl: string): Promise<YoutubeVide
       .filter((id): id is string => Boolean(id)) ?? [];
   if (videoIds.length === 0) return [];
 
-  const videos = await youtubeGet<VideosListResponse>("videos", {
-    part: "snippet,statistics",
-    id: videoIds.join(","),
-  });
+  const videos = await youtubeGet<VideosListResponse>(
+    "videos",
+    { part: "snippet,statistics", id: videoIds.join(",") },
+    key,
+  );
 
   const results: YoutubeVideoResult[] = [];
   for (const video of videos.items ?? []) {
@@ -183,4 +326,16 @@ export async function fetchYoutubeVideos(sourceUrl: string): Promise<YoutubeVide
 
   results.sort((a, b) => Date.parse(b.postDate) - Date.parse(a.postDate));
   return results;
+}
+
+export async function fetchYoutubeVideos(sourceUrl: string): Promise<YoutubeVideoResult[]> {
+  const key = youtubeApiKey();
+  if (!key) {
+    return fetchYoutubeVideosViaRss(sourceUrl);
+  }
+  try {
+    return await fetchYoutubeVideosViaApi(sourceUrl, key);
+  } catch {
+    return fetchYoutubeVideosViaRss(sourceUrl);
+  }
 }

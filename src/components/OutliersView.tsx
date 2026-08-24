@@ -1,5 +1,6 @@
 import {
   Check,
+  CircleUser,
   Heart,
   MessageCircle,
   Plus,
@@ -44,12 +45,11 @@ import {
 } from "../features/outliers/outliersSettings";
 import {
   createOutlierSource,
-  OUTLIER_PLATFORM_LABELS,
-  OUTLIER_PLATFORM_PLACEHOLDERS,
-  validateOutlierSourceUrl,
-  type OutlierPlatform,
+  detectOutlierPlatformFromUrl,
+  formatOutlierSourceListLabel,
+  OUTLIER_SOURCE_URL_PLACEHOLDER,
+  validateOutlierSourceUrlAuto,
   type OutlierSource,
-  type OutlierSourceKind,
 } from "../features/outliers/outlierSources";
 import {
   isSubstackNoteDoc,
@@ -216,8 +216,7 @@ type OutliersSourcesDropdownProps = {
 
 function OutliersSourcesDropdown({ sources, onSourcesChange }: OutliersSourcesDropdownProps) {
   const [open, setOpen] = useState(false);
-  const [platform, setPlatform] = useState<OutlierPlatform>("substack");
-  const [kind, setKind] = useState<OutlierSourceKind>("account");
+  const [showAddForm, setShowAddForm] = useState(false);
   const [draftUrl, setDraftUrl] = useState("");
   const [draftError, setDraftError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -225,19 +224,27 @@ function OutliersSourcesDropdown({ sources, onSourcesChange }: OutliersSourcesDr
 
   const closeMenu = useCallback(() => {
     setOpen(false);
+    setShowAddForm(false);
+    setDraftUrl("");
+    setDraftError(null);
   }, []);
 
   useOutliersPopoverDismiss(open, closeMenu, rootRef);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !showAddForm) return;
     inputRef.current?.focus();
-  }, [open]);
+  }, [open, showAddForm]);
 
   const handleAdd = () => {
-    const validationError = validateOutlierSourceUrl(platform, draftUrl);
+    const validationError = validateOutlierSourceUrlAuto(draftUrl);
     if (validationError) {
       setDraftError(validationError);
+      return;
+    }
+    const platform = detectOutlierPlatformFromUrl(draftUrl);
+    if (!platform) {
+      setDraftError("Use a Substack, Medium, or YouTube URL.");
       return;
     }
     const normalized = draftUrl.trim().replace(/\/+$/, "");
@@ -252,11 +259,12 @@ function OutliersSourcesDropdown({ sources, onSourcesChange }: OutliersSourcesDr
     }
     const next = [
       ...sources,
-      createOutlierSource({ platform, kind, url: normalized }),
+      createOutlierSource({ platform, url: normalized }),
     ];
     onSourcesChange(next);
     setDraftUrl("");
     setDraftError(null);
+    setShowAddForm(false);
   };
 
   const handleRemove = (id: string) => {
@@ -275,100 +283,96 @@ function OutliersSourcesDropdown({ sources, onSourcesChange }: OutliersSourcesDr
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
-        <Plus size={15} strokeWidth={2} aria-hidden />
+        <CircleUser size={15} strokeWidth={2} aria-hidden />
       </button>
       {open ? (
         <div
           role="dialog"
           aria-label="Outlier sources"
-          className="absolute right-0 top-[calc(100%+8px)] z-50 w-[20rem] rounded-lg bg-page px-3.5 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.28)] ring-1 ring-line/40 dark:bg-[#1e1e1e] dark:ring-white/10"
+          className="absolute right-0 top-[calc(100%+8px)] z-50 w-[17.5rem] rounded-lg bg-page px-3 py-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.28)] ring-1 ring-line/40 dark:bg-[#1e1e1e] dark:ring-white/10"
         >
-          <p className="text-[13px] font-semibold tracking-tight text-ink">Sources</p>
-          <p className="mt-1 text-[11px] leading-snug text-muted/70">
-            Add Substack accounts, Medium profiles, or YouTube channels. All posts merge in one grid.
-          </p>
-
           {sources.length > 0 ? (
-            <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto">
+            <ul className="max-h-36 space-y-0.5 overflow-y-auto">
               {sources.map((source) => (
                 <li
                   key={source.id}
-                  className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-ink/[0.04] dark:hover:bg-white/[0.04]"
+                  className="group flex items-center gap-1.5 rounded-md py-1 pl-1 pr-0.5 hover:bg-ink/[0.04] dark:hover:bg-white/[0.04]"
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12px] font-medium text-ink">{source.label}</p>
-                    <p className="truncate text-[10px] text-muted/60">
-                      {OUTLIER_PLATFORM_LABELS[source.platform]} ·{" "}
-                      {source.kind === "feed" ? "Feed" : "Account"}
-                    </p>
-                  </div>
+                  <p className="min-w-0 flex-1 truncate text-[12px] text-ink">
+                    {(() => {
+                      const { handle, suffix } = formatOutlierSourceListLabel(source);
+                      return (
+                        <>
+                          {handle}
+                          <span className="text-muted/50">{suffix}</span>
+                        </>
+                      );
+                    })()}
+                  </p>
                   <button
                     type="button"
                     aria-label={`Remove ${source.label}`}
                     onClick={() => handleRemove(source.id)}
-                    className="shrink-0 rounded-md p-1 text-muted/50 transition-colors hover:bg-ink/[0.06] hover:text-ink"
+                    className="shrink-0 rounded p-1 text-muted/45 opacity-0 transition-opacity hover:text-ink focus:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
                   >
-                    <Trash2 size={13} strokeWidth={2} aria-hidden />
+                    <Trash2 size={12} strokeWidth={2} aria-hidden />
                   </button>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mt-3 text-[11px] text-muted/60">No sources saved yet.</p>
+            <p className="py-1 pl-1 text-[12px] text-muted/55">No sources yet.</p>
           )}
 
-          <div className="mt-3 space-y-2 border-t border-line/15 pt-3 dark:border-white/[0.06]">
-            <div className="flex gap-2">
-              <select
-                value={platform}
-                onChange={(event) => {
-                  setPlatform(event.target.value as OutlierPlatform);
-                  setDraftError(null);
-                }}
-                aria-label="Platform"
-                className="min-w-0 flex-1 rounded-md border-0 bg-canvas/45 px-2 py-1.5 text-[12px] text-ink outline-none ring-1 ring-line/20 dark:bg-canvas/35"
-              >
-                <option value="substack">Substack</option>
-                <option value="medium">Medium</option>
-                <option value="youtube">YouTube</option>
-              </select>
-              <select
-                value={kind}
-                onChange={(event) => setKind(event.target.value as OutlierSourceKind)}
-                aria-label="Source kind"
-                className="min-w-0 flex-1 rounded-md border-0 bg-canvas/45 px-2 py-1.5 text-[12px] text-ink outline-none ring-1 ring-line/20 dark:bg-canvas/35"
-              >
-                <option value="account">Account</option>
-                <option value="feed">Feed</option>
-              </select>
+          {showAddForm ? (
+            <div className="mt-3 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <input
+                  ref={inputRef}
+                  type="url"
+                  value={draftUrl}
+                  onChange={(event) => {
+                    setDraftUrl(event.target.value);
+                    if (draftError) setDraftError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    handleAdd();
+                  }}
+                  placeholder={OUTLIER_SOURCE_URL_PLACEHOLDER}
+                  aria-label="Source URL"
+                  className="min-w-0 flex-1 rounded-md border-0 bg-canvas/45 px-2 py-1.5 text-[12px] text-ink outline-none ring-1 ring-line/20 placeholder:text-muted/50 focus:ring-ink/20 dark:bg-canvas/35"
+                />
+                <button
+                  type="button"
+                  onClick={handleAdd}
+                  aria-label="Add source"
+                  title="Add source"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-ink/[0.07] text-ink transition-colors hover:bg-ink/[0.11] dark:bg-white/[0.07] dark:hover:bg-white/[0.11]"
+                >
+                  <Check size={15} strokeWidth={2} aria-hidden />
+                </button>
+              </div>
+              {draftError ? (
+                <p className="text-[10px] leading-snug text-red-600/90 dark:text-red-400/90">{draftError}</p>
+              ) : null}
             </div>
-            <input
-              ref={inputRef}
-              type="url"
-              value={draftUrl}
-              onChange={(event) => {
-                setDraftUrl(event.target.value);
-                if (draftError) setDraftError(null);
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter") return;
-                event.preventDefault();
-                handleAdd();
-              }}
-              placeholder={OUTLIER_PLATFORM_PLACEHOLDERS[platform]}
-              className="w-full rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 placeholder:text-muted/55 focus:ring-ink/20 dark:bg-canvas/35"
-            />
-            {draftError ? (
-              <p className="text-[11px] leading-snug text-red-600/90 dark:text-red-400/90">{draftError}</p>
-            ) : null}
-            <button
-              type="button"
-              onClick={handleAdd}
-              className="w-full rounded-md bg-ink/[0.08] px-2.5 py-1.5 text-[12px] font-medium text-ink transition-colors hover:bg-ink/[0.12] dark:bg-white/[0.08] dark:hover:bg-white/[0.12]"
-            >
-              Add source
-            </button>
-          </div>
+          ) : null}
+
+          {!showAddForm ? (
+            <div className="mt-2.5">
+              <button
+                type="button"
+                aria-label="Add source"
+                title="Add source"
+                onClick={() => setShowAddForm(true)}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-accent/65 transition-colors hover:bg-white/[0.06] hover:text-accent dark:hover:text-accent"
+              >
+                <Plus size={15} strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

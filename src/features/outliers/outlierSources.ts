@@ -15,11 +15,15 @@ export const OUTLIER_PLATFORM_LABELS: Record<OutlierPlatform, string> = {
   youtube: "YouTube",
 };
 
-export const OUTLIER_PLATFORM_PLACEHOLDERS: Record<OutlierPlatform, string> = {
-  substack: "https://substack.com/@…",
-  medium: "https://medium.com/@…",
-  youtube: "https://youtube.com/@…",
-};
+export function formatOutlierSourceListLabel(
+  source: Pick<OutlierSource, "platform" | "url">,
+): { handle: string; suffix: string } {
+  const handle = extractDisplayHandle(source.platform, source.url);
+  return {
+    handle,
+    suffix: ` · ${OUTLIER_PLATFORM_LABELS[source.platform]}`,
+  };
+}
 
 function randomId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -28,30 +32,31 @@ function randomId(): string {
   return `src-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+export const OUTLIER_SOURCE_URL_PLACEHOLDER = "Paste account URL";
+
 export function createOutlierSource(input: {
   platform: OutlierPlatform;
-  kind: OutlierSourceKind;
+  kind?: OutlierSourceKind;
   url: string;
   label?: string;
 }): OutlierSource {
   const url = input.url.trim();
+  const kind = input.kind ?? "account";
   return {
     id: randomId(),
     platform: input.platform,
-    kind: input.kind,
+    kind,
     url,
-    label: input.label?.trim() || defaultLabelForOutlierSource(input.platform, input.kind, url),
+    label: input.label?.trim() || defaultLabelForOutlierSource(input.platform, url),
   };
 }
 
 export function defaultLabelForOutlierSource(
   platform: OutlierPlatform,
-  kind: OutlierSourceKind,
   url: string,
 ): string {
-  const handle = extractDisplayHandle(platform, url);
-  const kindLabel = kind === "feed" ? "Feed" : "Account";
-  return handle ? `${handle} (${OUTLIER_PLATFORM_LABELS[platform]} ${kindLabel})` : OUTLIER_PLATFORM_LABELS[platform];
+  const { handle, suffix } = formatOutlierSourceListLabel({ platform, url });
+  return `${handle}${suffix}`;
 }
 
 export function extractDisplayHandle(platform: OutlierPlatform, url: string): string {
@@ -96,6 +101,31 @@ export function normalizeOutlierSourceUrl(platform: OutlierPlatform, url: string
 
 export function outlierSourceCacheKey(source: Pick<OutlierSource, "id" | "platform" | "url">): string {
   return `${source.platform}:${normalizeOutlierSourceUrl(source.platform, source.url)}:${source.id}`;
+}
+
+export function detectOutlierPlatformFromUrl(url: string): OutlierPlatform | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = trimmed.startsWith("http") ? new URL(trimmed) : new URL(`https://${trimmed}`);
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (host.includes("substack.com")) return "substack";
+    if (host.includes("medium.com")) return "medium";
+    if (["youtube.com", "youtu.be", "m.youtube.com"].some((h) => host === h || host.endsWith(`.${h}`))) {
+      return "youtube";
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function validateOutlierSourceUrlAuto(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) return "Enter a URL.";
+  const platform = detectOutlierPlatformFromUrl(trimmed);
+  if (!platform) return "Use a Substack, Medium, or YouTube URL.";
+  return validateOutlierSourceUrl(platform, trimmed);
 }
 
 export function validateOutlierSourceUrl(platform: OutlierPlatform, url: string): string | null {

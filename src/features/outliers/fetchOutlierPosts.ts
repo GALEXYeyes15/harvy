@@ -184,10 +184,12 @@ export async function fetchAllOutlierPosts(
   const merged: OutlierPost[] = [];
   const errors: string[] = [];
   let refreshedAny = false;
-  for (const result of results) {
+  for (let index = 0; index < results.length; index += 1) {
+    const result = results[index]!;
+    const source = sources[index]!;
     merged.push(...result.posts);
     if (result.refreshed) refreshedAny = true;
-    if (result.error) errors.push(result.error);
+    if (result.error) errors.push(`${source.label}: ${result.error}`);
   }
   merged.sort((a, b) => Date.parse(b.postDateIso) - Date.parse(a.postDateIso));
   return { posts: merged, refreshedAny, errors };
