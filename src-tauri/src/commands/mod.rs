@@ -6,6 +6,8 @@ use tauri::Manager;
 
 pub mod unsplash;
 pub mod substack;
+pub mod medium;
+pub mod youtube;
 pub mod google_fonts;
 pub mod color_picker;
 pub mod notion;

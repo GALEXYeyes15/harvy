@@ -99,6 +99,8 @@ pub fn run() {
             commands::unsplash::list_popular_unsplash_photos,
             commands::substack::fetch_substack_posts,
             commands::substack::fetch_substack_comments,
+            commands::medium::fetch_medium_posts,
+            commands::youtube::fetch_youtube_videos,
             commands::google_fonts::fetch_google_fonts_catalog,
             commands::color_picker::pick_screen_color,
             commands::notion::notion_get_ideas_config,

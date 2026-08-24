@@ -4,11 +4,16 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import { searchUnsplashPhotos, listPopularUnsplashPhotos } from "./src/server/unsplashSearch";
 import { UNSPLASH_MISSING_KEY_MESSAGE } from "./src/features/editor/unsplashErrors";
 import { fetchSubstackComments, fetchSubstackPosts } from "./src/server/substackArchive";
+import { fetchMediumPosts } from "./src/server/mediumArchive";
+import { fetchYoutubeVideos } from "./src/server/youtubeArchive";
 
 function harvyApiPlugin(env: Record<string, string>): Plugin {
   return {
     name: "harvy-api",
     configureServer(server) {
+      if (env.YOUTUBE_API_KEY?.trim()) {
+        process.env.YOUTUBE_API_KEY = env.YOUTUBE_API_KEY.trim();
+      }
       server.middlewares.use(async (req, res, next) => {
         const url = req.url?.split("?")[0] ?? "";
         if (req.method !== "GET" || !url.startsWith("/api/")) {
@@ -86,6 +91,34 @@ function harvyApiPlugin(env: Record<string, string>): Plugin {
               return;
             }
             const results = await fetchSubstackComments({ kind, sourceId, subdomain });
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ results }));
+            return;
+          }
+
+          if (url === "/api/medium/posts") {
+            const parsed = new URL(req.url ?? "", "http://localhost");
+            const sourceUrl = parsed.searchParams.get("url")?.trim() ?? "";
+            if (!sourceUrl) {
+              res.statusCode = 400;
+              res.end("Missing Medium source URL");
+              return;
+            }
+            const results = await fetchMediumPosts(sourceUrl);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ results }));
+            return;
+          }
+
+          if (url === "/api/youtube/videos") {
+            const parsed = new URL(req.url ?? "", "http://localhost");
+            const sourceUrl = parsed.searchParams.get("url")?.trim() ?? "";
+            if (!sourceUrl) {
+              res.statusCode = 400;
+              res.end("Missing YouTube source URL");
+              return;
+            }
+            const results = await fetchYoutubeVideos(sourceUrl);
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({ results }));
             return;

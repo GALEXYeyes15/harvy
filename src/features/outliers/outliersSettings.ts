@@ -1,12 +1,17 @@
 import { DEFAULT_SUBSTACK_ACCOUNT_URL } from "./fetchSubstackOutliers";
 import {
+  createOutlierSource,
+  type OutlierSource,
+} from "./outlierSources";
+import {
   DEFAULT_CONTENT_TYPE_FILTER,
   type ContentTypeFilter,
   type OutlierScoreFilter,
   type PostedWithinFilter,
 } from "./outlierPosts";
 
-const STORAGE_KEY = "harvy:outliers-settings:v1";
+const STORAGE_KEY = "harvy:outliers-settings:v2";
+const LEGACY_STORAGE_KEY = "harvy:outliers-settings:v1";
 
 /** Fired on `window` after Outliers settings that affect auto-refresh are written. */
 export const OUTLIERS_SETTINGS_CHANGED_EVENT = "harvy:outliers-settings-changed";
@@ -16,26 +21,26 @@ export const OUTLIERS_FETCH_INTERVAL_MIN_MINUTES = 1;
 export const OUTLIERS_FETCH_INTERVAL_MAX_MINUTES = 240;
 
 export type OutliersSettings = {
-  accountLink: string;
+  sources: OutlierSource[];
   contentType: ContentTypeFilter;
   outlierScore: OutlierScoreFilter;
   postedWithin: PostedWithinFilter;
-  /** Minutes between automatic refreshes after an explicit Fetch posts. */
   fetchIntervalMinutes: number;
-  /**
-   * Master switch: when false, never schedule background refreshes
-   * (and clear any armed schedule).
-   */
   autoFetchEnabled: boolean;
-  /**
-   * After the user clicks Fetch posts (and auto-fetch is enabled), keep refreshing
-   * on the fetch interval until the account link changes or they turn auto-fetch off.
-   */
   autoRefreshArmed: boolean;
 };
 
+const defaultSources = (): OutlierSource[] => [
+  createOutlierSource({
+    platform: "substack",
+    kind: "account",
+    url: DEFAULT_SUBSTACK_ACCOUNT_URL,
+    label: "alexlacy (Substack Account)",
+  }),
+];
+
 const defaultSettings: OutliersSettings = {
-  accountLink: DEFAULT_SUBSTACK_ACCOUNT_URL,
+  sources: defaultSources(),
   contentType: { ...DEFAULT_CONTENT_TYPE_FILTER },
   outlierScore: "any",
   postedWithin: "year",
@@ -52,6 +57,83 @@ const POSTED_WITHIN_FILTERS = new Set<PostedWithinFilter>([
   "year",
 ]);
 
+function parseContentType(raw: unknown): ContentTypeFilter {
+  if (!raw || typeof raw !== "object") {
+    return { ...DEFAULT_CONTENT_TYPE_FILTER };
+  }
+  const value = raw as Partial<ContentTypeFilter>;
+  const showNotes = value.showNotes !== false;
+  const showPosts = value.showPosts === true;
+  if (!showNotes && !showPosts) {
+    return { ...DEFAULT_CONTENT_TYPE_FILTER };
+  }
+  return { showNotes, showPosts };
+}
+
+function parseSources(raw: unknown): OutlierSource[] {
+  if (!Array.isArray(raw) || raw.length === 0) return defaultSources();
+  const parsed: OutlierSource[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Partial<OutlierSource>;
+    if (
+      typeof row.id !== "string" ||
+      typeof row.url !== "string" ||
+      !row.url.trim() ||
+      (row.platform !== "substack" && row.platform !== "medium" && row.platform !== "youtube") ||
+      (row.kind !== "account" && row.kind !== "feed")
+    ) {
+      continue;
+    }
+    parsed.push({
+      id: row.id,
+      platform: row.platform,
+      kind: row.kind,
+      url: row.url.trim(),
+      label:
+        typeof row.label === "string" && row.label.trim()
+          ? row.label.trim()
+          : row.url.trim(),
+    });
+  }
+  return parsed.length > 0 ? parsed : defaultSources();
+}
+
+function migrateLegacySettings(): OutliersSettings | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<OutliersSettings & { accountLink?: string }>;
+    const accountLink =
+      typeof parsed.accountLink === "string" && parsed.accountLink.trim()
+        ? parsed.accountLink.trim()
+        : DEFAULT_SUBSTACK_ACCOUNT_URL;
+    const sources = [
+      createOutlierSource({
+        platform: "substack",
+        kind: "account",
+        url: accountLink,
+      }),
+    ];
+    return {
+      sources,
+      contentType: parseContentType(parsed.contentType),
+      outlierScore: SCORE_FILTERS.has(parsed.outlierScore as OutlierScoreFilter)
+        ? (parsed.outlierScore as OutlierScoreFilter)
+        : defaultSettings.outlierScore,
+      postedWithin: POSTED_WITHIN_FILTERS.has(parsed.postedWithin as PostedWithinFilter)
+        ? (parsed.postedWithin as PostedWithinFilter)
+        : defaultSettings.postedWithin,
+      fetchIntervalMinutes: clampOutliersFetchIntervalMinutes(parsed.fetchIntervalMinutes),
+      autoFetchEnabled: parsed.autoFetchEnabled !== false,
+      autoRefreshArmed: parsed.autoRefreshArmed === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function clampOutliersFetchIntervalMinutes(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES;
@@ -67,24 +149,11 @@ export function outliersFetchIntervalMs(
   return clampOutliersFetchIntervalMinutes(minutes) * 60_000;
 }
 
-function parseContentType(raw: unknown): ContentTypeFilter {
-  if (!raw || typeof raw !== "object") {
-    return { ...DEFAULT_CONTENT_TYPE_FILTER };
-  }
-  const value = raw as Partial<ContentTypeFilter>;
-  const showNotes = value.showNotes !== false;
-  const showPosts = value.showPosts === true;
-  // At least one must stay on.
-  if (!showNotes && !showPosts) {
-    return { ...DEFAULT_CONTENT_TYPE_FILTER };
-  }
-  return { showNotes, showPosts };
-}
-
 export function readOutliersSettings(): OutliersSettings {
   if (typeof localStorage === "undefined") {
     return {
       ...defaultSettings,
+      sources: defaultSources(),
       contentType: { ...defaultSettings.contentType },
     };
   }
@@ -92,30 +161,27 @@ export function readOutliersSettings(): OutliersSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
+      const migrated = migrateLegacySettings();
+      if (migrated) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+        return migrated;
+      }
       return {
         ...defaultSettings,
+        sources: defaultSources(),
         contentType: { ...defaultSettings.contentType },
       };
     }
     const parsed = JSON.parse(raw) as Partial<OutliersSettings>;
-    const accountLink =
-      typeof parsed.accountLink === "string" && parsed.accountLink.trim()
-        ? parsed.accountLink.trim()
-        : defaultSettings.accountLink;
-    const outlierScore = SCORE_FILTERS.has(parsed.outlierScore as OutlierScoreFilter)
-      ? (parsed.outlierScore as OutlierScoreFilter)
-      : defaultSettings.outlierScore;
-    const postedWithin = POSTED_WITHIN_FILTERS.has(
-      parsed.postedWithin as PostedWithinFilter,
-    )
-      ? (parsed.postedWithin as PostedWithinFilter)
-      : defaultSettings.postedWithin;
-
     return {
-      accountLink,
+      sources: parseSources(parsed.sources),
       contentType: parseContentType(parsed.contentType),
-      outlierScore,
-      postedWithin,
+      outlierScore: SCORE_FILTERS.has(parsed.outlierScore as OutlierScoreFilter)
+        ? (parsed.outlierScore as OutlierScoreFilter)
+        : defaultSettings.outlierScore,
+      postedWithin: POSTED_WITHIN_FILTERS.has(parsed.postedWithin as PostedWithinFilter)
+        ? (parsed.postedWithin as PostedWithinFilter)
+        : defaultSettings.postedWithin,
       fetchIntervalMinutes: clampOutliersFetchIntervalMinutes(parsed.fetchIntervalMinutes),
       autoFetchEnabled: parsed.autoFetchEnabled !== false,
       autoRefreshArmed: parsed.autoRefreshArmed === true,
@@ -123,6 +189,7 @@ export function readOutliersSettings(): OutliersSettings {
   } catch {
     return {
       ...defaultSettings,
+      sources: defaultSources(),
       contentType: { ...defaultSettings.contentType },
     };
   }
@@ -138,7 +205,6 @@ export function writeOutliersSettings(partial: Partial<OutliersSettings>): Outli
     partial.autoRefreshArmed !== undefined
       ? Boolean(partial.autoRefreshArmed)
       : current.autoRefreshArmed;
-  // Turning off the master switch always disarms the schedule.
   if (!autoFetchEnabled) {
     autoRefreshArmed = false;
   }
@@ -146,13 +212,10 @@ export function writeOutliersSettings(partial: Partial<OutliersSettings>): Outli
   const next: OutliersSettings = {
     ...current,
     ...partial,
+    sources: partial.sources ? parseSources(partial.sources) : current.sources,
     contentType: partial.contentType
       ? parseContentType(partial.contentType)
       : current.contentType,
-    accountLink:
-      partial.accountLink !== undefined
-        ? partial.accountLink.trim() || defaultSettings.accountLink
-        : current.accountLink,
     fetchIntervalMinutes:
       partial.fetchIntervalMinutes !== undefined
         ? clampOutliersFetchIntervalMinutes(partial.fetchIntervalMinutes)
@@ -165,10 +228,13 @@ export function writeOutliersSettings(partial: Partial<OutliersSettings>): Outli
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     } catch {
-      // Quota / private mode — keep in-memory next for this session.
+      // Quota / private mode
     }
   }
 
+  const sourcesChanged =
+    partial.sources !== undefined &&
+    JSON.stringify(next.sources) !== JSON.stringify(current.sources);
   const refreshScheduleChanged =
     (partial.fetchIntervalMinutes !== undefined &&
       next.fetchIntervalMinutes !== current.fetchIntervalMinutes) ||
@@ -177,11 +243,18 @@ export function writeOutliersSettings(partial: Partial<OutliersSettings>): Outli
     (partial.autoRefreshArmed !== undefined &&
       next.autoRefreshArmed !== current.autoRefreshArmed) ||
     (!autoFetchEnabled && current.autoRefreshArmed) ||
-    (partial.accountLink !== undefined && next.accountLink !== current.accountLink);
+    sourcesChanged;
 
   if (refreshScheduleChanged && typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(OUTLIERS_SETTINGS_CHANGED_EVENT));
   }
 
   return next;
+}
+
+/** @deprecated Use `sources` — kept for cache migration reads. */
+export function readLegacyAccountLink(): string | null {
+  const settings = readOutliersSettings();
+  const substack = settings.sources.find((s) => s.platform === "substack");
+  return substack?.url ?? null;
 }

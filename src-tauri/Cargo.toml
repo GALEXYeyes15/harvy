@@ -23,6 +23,7 @@ tauri-plugin-opener = "2"
 printpdf = { version = "0.7", features = ["embedded_images"] }
 pulldown-cmark = "0.12"
 regex = "1"
+time = { version = "0.3", features = ["formatting"] }
 image = { version = "0.24", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp", "tiff"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

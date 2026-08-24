@@ -22,7 +22,9 @@ export type SubstackSourceRef = {
 
 /** Parse `newsletter-123` / `note-456` ids used by the Substack fetch layer. */
 export function parseSubstackSourceRef(post: OutlierPost): SubstackSourceRef | null {
-  const match = /^(newsletter|note)-(\d+)$/.exec(post.id);
+  if (post.platform !== "Substack" && post.platform !== "Note") return null;
+  const platformId = post.id.includes(":") ? post.id.split(":").slice(1).join(":") : post.id;
+  const match = /^(newsletter|note)-(\d+)$/.exec(platformId);
   if (!match) return null;
   const kind = match[1] as "newsletter" | "note";
   const sourceId = Number(match[2]);

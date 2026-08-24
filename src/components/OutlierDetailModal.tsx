@@ -170,7 +170,8 @@ export function OutlierDetailModal({ open, post, onClose }: OutlierDetailModalPr
     const ref = parseSubstackSourceRef(post);
     if (!ref) {
       setComments([]);
-      setError("Could not load comments for this item.");
+      setError(null);
+      setIsLoading(false);
       return;
     }
 
@@ -290,7 +291,7 @@ export function OutlierDetailModal({ open, post, onClose }: OutlierDetailModalPr
               rel="noopener noreferrer"
               className="ml-auto inline-flex items-center gap-1 text-[13px] text-muted/60 transition-colors hover:text-ink dark:text-white/45 dark:hover:text-white/80"
             >
-              Open on Substack
+              Open on {post.platform}
               <ArrowUpRight size={14} strokeWidth={1.75} aria-hidden />
             </a>
           ) : (

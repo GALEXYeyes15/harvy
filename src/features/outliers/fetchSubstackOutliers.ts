@@ -34,7 +34,12 @@ export type SubstackPostResult = {
 
 export const DEFAULT_SUBSTACK_ACCOUNT_URL = "https://substack.com/@alexlacy";
 
-export function scoreSubstackPosts(raw: SubstackPostResult[]): OutlierPost[] {
+const LEGACY_SUBSTACK_SOURCE_ID = "legacy-substack";
+
+export function scoreSubstackPosts(
+  raw: SubstackPostResult[],
+  sourceId: string,
+): OutlierPost[] {
   const likeCounts = raw.map((post) => Math.max(0, post.likes));
   const total = likeCounts.reduce((sum, n) => sum + n, 0);
   const average = likeCounts.length > 0 ? total / likeCounts.length : 0;
@@ -50,7 +55,8 @@ export function scoreSubstackPosts(raw: SubstackPostResult[]): OutlierPost[] {
     const restacksCount = Math.max(0, post.restacks ?? 0);
 
     return {
-      id: post.id,
+      id: `${sourceId}:${post.id}`,
+      sourceId,
       creatorName: post.creatorName,
       creatorPhotoUrl: post.creatorPhotoUrl ?? null,
       handle: post.handle,
@@ -136,7 +142,7 @@ export async function fetchSubstackOutlierPosts(
 
   if (!options.forceRefresh && cached && cacheFresh) {
     return {
-      posts: scoreSubstackPosts(cached.results),
+      posts: scoreSubstackPosts(cached.results, LEGACY_SUBSTACK_SOURCE_ID),
       fromCache: true,
       refreshed: false,
     };
@@ -148,14 +154,14 @@ export async function fetchSubstackOutlierPosts(
     const results = await fetchSubstackPostsFromNetwork(trimmed);
     writeSubstackOutliersCache(trimmed, results);
     return {
-      posts: scoreSubstackPosts(results),
+      posts: scoreSubstackPosts(results, LEGACY_SUBSTACK_SOURCE_ID),
       fromCache: false,
       refreshed: true,
     };
   } catch (error) {
     if (canServeCache && cached) {
       return {
-        posts: scoreSubstackPosts(cached.results),
+        posts: scoreSubstackPosts(cached.results, LEGACY_SUBSTACK_SOURCE_ID),
         fromCache: true,
         refreshed: false,
       };
@@ -170,7 +176,7 @@ export function readCachedSubstackOutlierPosts(
 ): OutlierPost[] | null {
   const cached = readSubstackOutliersCache(accountUrl);
   if (!cached) return null;
-  return scoreSubstackPosts(cached.results);
+  return scoreSubstackPosts(cached.results, LEGACY_SUBSTACK_SOURCE_ID);
 }
 
 export function isCachedSubstackOutliersFresh(accountUrl: string): boolean {
