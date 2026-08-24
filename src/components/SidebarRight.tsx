@@ -1,9 +1,13 @@
 import { ChevronRight, Info, Zap } from "lucide-react";
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import type { EditorStats } from "../features/editor/stats";
-import { SIDEBAR_TOOLS_MODES, type SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
+import {
+  visibleWriteSidebarModes,
+  type SidebarToolsMode,
+} from "../features/sidebar/sidebarToolsMode";
 import type { ProofreadIssue } from "../features/proofread/types";
 import type { WorkspaceSection } from "../features/workspace/workspaceSection";
+import { CriteriaSidebarPanel } from "./CriteriaSidebarPanel";
 import { NotesSidebarPanel } from "./NotesSidebarPanel";
 
 const PANEL =
@@ -21,6 +25,7 @@ const COMPACT_ROWS_GAP = "space-y-3";
 const TAB_LABELS: Record<SidebarToolsMode, string> = {
   notes: "Notes",
   edit: "Edit",
+  criteria: "Criteria",
 };
 
 /** 2px rail — +4px vs column width, centered (2px each side); self-center avoids flex stretch overriding width. */
@@ -35,10 +40,14 @@ export type SidebarRightProps = {
   selectedWordCount: number | null;
   notes: string;
   onNotesChange: (value: string) => void;
+  criteria: string;
+  onCriteriaChange: (value: string) => void;
   /** Toggle the separate Notes pop-out window. */
   onToggleNotesPopout?: () => void;
   /** When on, Quick Links appears below Notes. */
   showQuickLinks?: boolean;
+  /** When on, Criteria appears as a tools tab (Write). */
+  showCriteria?: boolean;
   proofreadIssues?: ProofreadIssue[];
   workspaceSection?: WorkspaceSection;
   /** When AI check is configured + enabled in Settings. */
@@ -336,8 +345,11 @@ export function SidebarRight({
   selectedWordCount,
   notes,
   onNotesChange,
+  criteria,
+  onCriteriaChange,
   onToggleNotesPopout,
   showQuickLinks = false,
+  showCriteria = true,
   proofreadIssues = [],
   workspaceSection = "write",
   aiCheckEnabled = false,
@@ -347,6 +359,13 @@ export function SidebarRight({
   aiCheckError = null,
   onRunAiCheck,
 }: SidebarRightProps) {
+  const writeTabs = useMemo(
+    () => visibleWriteSidebarModes({ showCriteria }),
+    [showCriteria],
+  );
+  const tabColsClass =
+    writeTabs.length >= 3 ? "grid-cols-3" : writeTabs.length === 2 ? "grid-cols-2" : "grid-cols-1";
+
   if (workspaceSection === "collect") {
     return (
       <div className={PANEL}>
@@ -369,11 +388,11 @@ export function SidebarRight({
     <div className={PANEL}>
       {/* pt-1 mirrors SidebarLeft first block after the h-8 chrome band (toggle → content rhythm) */}
       <div
-        className="grid shrink-0 grid-cols-2 items-end gap-x-5 px-7 pb-3 pt-1"
+        className={`grid shrink-0 items-end gap-x-5 px-7 pb-3 pt-1 ${tabColsClass}`}
         role="tablist"
         aria-label="Tools"
       >
-        {SIDEBAR_TOOLS_MODES.map((tab) => (
+        {writeTabs.map((tab) => (
           <SidebarToolsTab key={tab} tab={tab} current={mode} onSelect={onModeChange} />
         ))}
       </div>
@@ -391,6 +410,8 @@ export function SidebarRight({
             onTogglePopout={onToggleNotesPopout}
             showQuickLinks={showQuickLinks}
           />
+        ) : mode === "criteria" ? (
+          <CriteriaSidebarPanel criteria={criteria} onCriteriaChange={onCriteriaChange} />
         ) : (
           <EditSidebarView
             stats={stats}

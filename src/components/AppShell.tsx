@@ -66,6 +66,10 @@ import {
   readQuickLinksSettings,
   writeQuickLinksSettings,
 } from "../features/quick-links/quickLinksSettings";
+import {
+  readCriteriaSidebarSettings,
+  writeCriteriaSidebarSettings,
+} from "../features/sidebar/criteriaSidebarSettings";
 import { SaveAsModal, type SaveAsOrganizeMode } from "./SaveAsModal";
 import type { EditorCommand } from "../features/editor/commands";
 import { documentTextForStats, ingestTextFileContent } from "../features/editor/documentMarkdown";
@@ -117,6 +121,11 @@ import {
   resolveProjectDirectory,
   saveDocumentNotes,
 } from "../features/workspace/documentNotes";
+import {
+  loadDocumentCriteria,
+  renameDocumentCriteriaSidecar,
+  saveDocumentCriteria,
+} from "../features/workspace/documentCriteria";
 import { countSpellingWords } from "../features/proofread/mechanics/spellingNormalize";
 import { appendTextToDocumentNotes } from "../features/workspace/appendDocumentNotes";
 import {
@@ -242,6 +251,8 @@ function createInitialUntitledWorkspaceDocument(): WorkspaceDocument {
     lastSavedSubtitle: "",
     notes: "",
     lastSavedNotes: "",
+    criteria: "",
+    lastSavedCriteria: "",
   };
 }
 
@@ -259,6 +270,8 @@ function createUntitledWorkspaceDocument(id: string): WorkspaceDocument {
     lastSavedSubtitle: "",
     notes: "",
     lastSavedNotes: "",
+    criteria: "",
+    lastSavedCriteria: "",
   };
 }
 
@@ -266,6 +279,7 @@ function isDocumentDirty(doc: WorkspaceDocument): boolean {
   return (
     doc.content !== doc.lastSavedContent ||
     doc.notes !== doc.lastSavedNotes ||
+    doc.criteria !== doc.lastSavedCriteria ||
     doc.postTitle !== doc.lastSavedPostTitle ||
     doc.subtitle !== doc.lastSavedSubtitle
   );
@@ -350,6 +364,9 @@ export function AppShell() {
   const [readabilityPanelOpen, setReadabilityPanelOpen] = useState(true);
   const [showQuickLinks, setShowQuickLinks] = useState(
     () => readQuickLinksSettings().showQuickLinks,
+  );
+  const [showCriteria, setShowCriteria] = useState(
+    () => readCriteriaSidebarSettings().showCriteria,
   );
   /** In-memory buffer when no tabs open — not a saved file until persistence exists. */
   const [scratchDraftContent, setScratchDraftContent] = useState("");
@@ -497,6 +514,14 @@ export function AppShell() {
     setShowQuickLinks(next.showQuickLinks);
   }, []);
 
+  const handleShowCriteriaChange = useCallback((enabled: boolean) => {
+    const next = writeCriteriaSidebarSettings({ showCriteria: enabled });
+    setShowCriteria(next.showCriteria);
+    if (!next.showCriteria) {
+      setMode((current) => (current === "criteria" ? "notes" : current));
+    }
+  }, []);
+
   const showWorkspaceNavigation = enableCollect;
 
   useOutliersAutoRefresh(enableCollect && showOutliersView);
@@ -515,8 +540,12 @@ export function AppShell() {
   useEffect(() => {
     if (!isSidebarModeForSection(mode, activeWorkspaceSection)) {
       setMode("notes");
+      return;
     }
-  }, [activeWorkspaceSection, mode]);
+    if (mode === "criteria" && !showCriteria) {
+      setMode("notes");
+    }
+  }, [activeWorkspaceSection, mode, showCriteria]);
 
   useEffect(() => {
     if (activeWorkspaceSection !== "write") return;
@@ -1060,6 +1089,15 @@ export function AppShell() {
     });
   }
 
+  function updateActiveDocumentCriteria(nextValue: string) {
+    if (!activeTabId) return;
+    setOpenDocuments((prev) => {
+      const current = prev[activeTabId];
+      if (!current) return prev;
+      return { ...prev, [activeTabId]: { ...current, criteria: nextValue } };
+    });
+  }
+
   const handleAddCollectPreviewToNotes = useCallback(
     (preview: string) => {
       const currentNotes = activeDocument?.notes ?? "";
@@ -1082,6 +1120,7 @@ export function AppShell() {
   const finalizeSavedPath = useCallback(
     (outPath: string, markdown: string) => {
       const savedNotes = activeDocument?.notes ?? "";
+      const savedCriteria = activeDocument?.criteria ?? "";
       const savedSubtitle = activeDocument?.subtitle ?? "";
       // Align in-document Title with the saved file basename.
       const syncedPostTitle =
@@ -1100,6 +1139,7 @@ export function AppShell() {
             lastSavedPostTitle: syncedPostTitle,
             lastSavedSubtitle: savedSubtitle,
             lastSavedNotes: savedNotes,
+            lastSavedCriteria: savedCriteria,
           };
           setOpenDocuments((prev) => {
             const { [oldId]: _removed, ...rest } = prev;
@@ -1120,6 +1160,7 @@ export function AppShell() {
             lastSavedPostTitle: syncedPostTitle,
             lastSavedSubtitle: savedSubtitle,
             lastSavedNotes: savedNotes,
+            lastSavedCriteria: savedCriteria,
           },
         }));
         setSelectedPath(outPath);
@@ -1139,6 +1180,8 @@ export function AppShell() {
         lastSavedSubtitle: savedSubtitle,
         notes: savedNotes,
         lastSavedNotes: savedNotes,
+        criteria: savedCriteria,
+        lastSavedCriteria: savedCriteria,
       };
       setOpenDocuments((prev) => ({ ...prev, [outPath]: doc }));
       setOpenTabIds([outPath]);
@@ -1260,6 +1303,7 @@ export function AppShell() {
       let markdown = getDocumentMarkdown(tiptapEditor, activeDocument?.content ?? scratchDraftContent);
       const folderContext = getProjectStructure({
         notes: activeDocument?.notes ?? "",
+        criteria: activeDocument?.criteria ?? "",
         editor: tiptapEditor,
         documentMarkdown: markdown,
       });
@@ -1319,6 +1363,9 @@ export function AppShell() {
         if (folderContext.hasNotes) {
           await saveDocumentNotes(outPath, activeDocument?.notes ?? "");
         }
+        if (folderContext.hasCriteria) {
+          await saveDocumentCriteria(outPath, activeDocument?.criteria ?? "");
+        }
 
         if (saveAsPurpose === "podcast-notes") {
           if (!projectDir) {
@@ -1372,6 +1419,7 @@ export function AppShell() {
   const saveAsFolderPreviewContext = useMemo(() => {
     const structure = getProjectStructure({
       notes: activeDocument?.notes ?? "",
+      criteria: activeDocument?.criteria ?? "",
       editor: tiptapEditor,
       documentMarkdown: getDocumentMarkdown(
         tiptapEditor,
@@ -1393,6 +1441,7 @@ export function AppShell() {
     };
   }, [
     activeDocument?.notes,
+    activeDocument?.criteria,
     activeDocument?.content,
     scratchDraftContent,
     tiptapEditor,
@@ -1481,6 +1530,7 @@ export function AppShell() {
         let markdown = getDocumentMarkdown(tiptapEditor, activeDocument.content);
         const folderContext = getProjectStructure({
           notes: activeDocument.notes,
+          criteria: activeDocument.criteria,
           editor: tiptapEditor,
           documentMarkdown: markdown,
         });
@@ -1538,6 +1588,7 @@ export function AppShell() {
           contents: markdownForDisk(markdown, activeDocument),
         });
         await saveDocumentNotes(outPath, activeDocument.notes);
+        await saveDocumentCriteria(outPath, activeDocument.criteria);
         if (outPath !== path) {
           finalizeSavedPath(outPath, markdown);
           await reloadWorkspaceTree();
@@ -1551,6 +1602,7 @@ export function AppShell() {
               lastSavedPostTitle: activeDocument.postTitle,
               lastSavedSubtitle: activeDocument.subtitle,
               lastSavedNotes: activeDocument.notes,
+              lastSavedCriteria: activeDocument.criteria,
             },
           }));
         }
@@ -1561,6 +1613,7 @@ export function AppShell() {
           let markdown = getDocumentMarkdown(tiptapEditor, scratchDraftContent);
           const folderContext = getProjectStructure({
             notes: "",
+            criteria: "",
             editor: tiptapEditor,
             documentMarkdown: markdown,
           });
@@ -1780,7 +1833,10 @@ export function AppShell() {
         const { meta, body: rawBody } = parseDocumentFrontmatter(raw);
         content = ingestTextFileContent(rawBody, node.path);
         kind = "text";
-        const notes = await loadDocumentNotes(node.path);
+        const [notes, criteria] = await Promise.all([
+          loadDocumentNotes(node.path),
+          loadDocumentCriteria(node.path),
+        ]);
         const nextDoc: WorkspaceDocument = {
           id,
           title: node.name,
@@ -1794,6 +1850,8 @@ export function AppShell() {
           lastSavedSubtitle: meta.subtitle,
           notes,
           lastSavedNotes: notes,
+          criteria,
+          lastSavedCriteria: criteria,
         };
         setOpenDocuments((prev) => ({ ...prev, [id]: nextDoc }));
         setActiveTabId(id);
@@ -1808,6 +1866,7 @@ export function AppShell() {
     }
 
     const notes = "";
+    const criteria = "";
 
     const nextDoc: WorkspaceDocument = {
       id,
@@ -1822,6 +1881,8 @@ export function AppShell() {
       lastSavedSubtitle: "",
       notes,
       lastSavedNotes: notes,
+      criteria,
+      lastSavedCriteria: criteria,
     };
 
     setOpenDocuments((prev) => ({ ...prev, [id]: nextDoc }));
@@ -2026,6 +2087,7 @@ export function AppShell() {
   }, [activeTabId]);
 
   const activeNotes = activeDocument?.notes ?? "";
+  const activeCriteria = activeDocument?.criteria ?? "";
   const notesPopoutSyncRef = useRef({
     notes: "",
     documentTitle: "Untitled",
@@ -2365,6 +2427,7 @@ export function AppShell() {
       try {
         await invoke("rename_fs_path", { fromPath: sourcePath, toPath: targetPath });
         await renameDocumentNotesSidecar(sourcePath, targetPath);
+        await renameDocumentCriteriaSidecar(sourcePath, targetPath);
       } catch (e) {
         window.alert(e instanceof Error ? e.message : String(e));
         return false;
@@ -2454,6 +2517,8 @@ export function AppShell() {
       selectedWordCount={selectedWordCount}
       notes={activeNotes}
       onNotesChange={updateActiveDocumentNotes}
+      criteria={activeCriteria}
+      onCriteriaChange={updateActiveDocumentCriteria}
       onToggleNotesPopout={() => {
         void toggleNotesPopoutWindow().catch((err) => {
           console.error("Notes pop-out failed:", err);
@@ -2463,6 +2528,7 @@ export function AppShell() {
       proofreadIssues={proofreadIssues}
       workspaceSection={activeWorkspaceSection}
       showQuickLinks={showQuickLinks}
+      showCriteria={showCriteria}
       aiCheckEnabled={Boolean(aiCheckConfig?.enabled && aiCheckConfig.hasApiKey)}
       aiCheckModelLabel={aiCheckModelDisplay}
       aiCheckRunning={aiCheckRunning}
@@ -2838,6 +2904,10 @@ export function AppShell() {
         systemPrefersDark={systemPrefersDark}
         showQuickLinks={showQuickLinks}
         onShowQuickLinksChange={handleShowQuickLinksChange}
+        showCriteria={showCriteria}
+        onShowCriteriaChange={handleShowCriteriaChange}
+        criteria={activeCriteria}
+        onCriteriaChange={updateActiveDocumentCriteria}
         spellcheckEnabled={writingAssistancePrefs.spellcheck}
         onSpellcheckChange={handleSpellcheckPref}
         focusVisibilityPrefs={focusVisibilityPrefs}

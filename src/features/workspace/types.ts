@@ -23,4 +23,7 @@ export type WorkspaceDocument = {
   /** Sidebar scratchpad notes for this document (persisted under `Notes/` in project folders). */
   notes: string;
   lastSavedNotes: string;
+  /** Writing criteria for this document (persisted under `Notes/` in project folders). */
+  criteria: string;
+  lastSavedCriteria: string;
 };

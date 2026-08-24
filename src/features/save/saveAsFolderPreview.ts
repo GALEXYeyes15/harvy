@@ -1,4 +1,5 @@
 import type { Editor } from "@tiptap/core";
+import { projectCriteriaFileName } from "../workspace/documentCriteria";
 import { projectNotesFileName } from "../workspace/documentNotes";
 import { collectEmbeddedImageSrcs, packagedImageFileName } from "./documentImages";
 
@@ -9,6 +10,7 @@ export type ProjectExportFolder = {
 
 export type ProjectStructure = {
   hasNotes: boolean;
+  hasCriteria: boolean;
   hasImages: boolean;
   /** Suggested image filenames for folder preview (best-effort). */
   imageFileNames: string[];
@@ -20,6 +22,7 @@ export type SaveAsFolderPreviewContext = ProjectStructure;
 
 export type ProjectStructureInput = {
   notes: string;
+  criteria: string;
   editor: Editor | null;
   documentMarkdown: string;
 };
@@ -31,6 +34,10 @@ export type SaveAsFolderPreviewNode = {
 
 export function hasSaveAsNotesContent(notes: string): boolean {
   return Boolean(notes.trim());
+}
+
+export function hasSaveAsCriteriaContent(criteria: string): boolean {
+  return Boolean(criteria.trim());
 }
 
 export function documentHasEmbeddedImages(
@@ -45,6 +52,7 @@ export function getProjectStructure(input: ProjectStructureInput): ProjectStruct
   const imageSrcs = collectEmbeddedImageSrcs(input.editor, input.documentMarkdown);
   return {
     hasNotes: hasSaveAsNotesContent(input.notes),
+    hasCriteria: hasSaveAsCriteriaContent(input.criteria),
     hasImages: imageSrcs.length > 0,
     imageFileNames: imageSrcs.map((ref, i) => packagedImageFileName(ref, i + 1)),
     exportFolders: [],
@@ -58,7 +66,7 @@ export function buildSaveAsFolderPreviewContext(input: ProjectStructureInput): P
 /** Relative subfolder paths to create inside a project folder (directories only). */
 export function projectSubfolderPathsToCreate(structure: ProjectStructure): string[] {
   const paths: string[] = ["Exports"];
-  if (structure.hasNotes) paths.push("Notes");
+  if (structure.hasNotes || structure.hasCriteria) paths.push("Notes");
   if (structure.hasImages) paths.push("Images");
   return paths;
 }
@@ -77,10 +85,13 @@ export function buildSaveAsFolderPreviewRoot(
     children: exportFiles.length > 0 ? exportFiles.map((name) => ({ name })) : undefined,
   });
 
-  if (structure.hasNotes) {
+  if (structure.hasNotes || structure.hasCriteria) {
+    const noteFiles: string[] = [];
+    if (structure.hasNotes) noteFiles.push(projectNotesFileName(leafFileName));
+    if (structure.hasCriteria) noteFiles.push(projectCriteriaFileName(leafFileName));
     children.push({
       name: "Notes",
-      children: [{ name: projectNotesFileName(leafFileName) }],
+      children: noteFiles.map((name) => ({ name })),
     });
   }
 

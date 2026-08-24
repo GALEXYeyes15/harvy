@@ -119,6 +119,10 @@ type SettingsModalProps = {
   systemPrefersDark: boolean;
   showQuickLinks: boolean;
   onShowQuickLinksChange: (enabled: boolean) => void;
+  showCriteria: boolean;
+  onShowCriteriaChange: (enabled: boolean) => void;
+  criteria: string;
+  onCriteriaChange: (value: string) => void;
   spellcheckEnabled: boolean;
   onSpellcheckChange: (enabled: boolean) => void;
   focusVisibilityPrefs: FocusVisibilityPrefs;
@@ -153,6 +157,10 @@ export function SettingsModal({
   systemPrefersDark,
   showQuickLinks,
   onShowQuickLinksChange,
+  showCriteria,
+  onShowCriteriaChange,
+  criteria,
+  onCriteriaChange,
   spellcheckEnabled,
   onSpellcheckChange,
   focusVisibilityPrefs,
@@ -230,6 +238,10 @@ export function SettingsModal({
                 onChooseWorkspaceFolder={onChooseWorkspaceFolder}
                 showQuickLinks={showQuickLinks}
                 onShowQuickLinksChange={onShowQuickLinksChange}
+                showCriteria={showCriteria}
+                onShowCriteriaChange={onShowCriteriaChange}
+                criteria={criteria}
+                onCriteriaChange={onCriteriaChange}
                 parametersPrefs={parametersPrefs}
                 onParametersPrefsChange={onParametersPrefsChange}
               />
@@ -443,6 +455,10 @@ function SidebarsPanel({
   onChooseWorkspaceFolder,
   showQuickLinks,
   onShowQuickLinksChange,
+  showCriteria,
+  onShowCriteriaChange,
+  criteria,
+  onCriteriaChange,
   parametersPrefs,
   onParametersPrefsChange,
 }: {
@@ -450,6 +466,10 @@ function SidebarsPanel({
   onChooseWorkspaceFolder?: () => void | Promise<void>;
   showQuickLinks: boolean;
   onShowQuickLinksChange: (enabled: boolean) => void;
+  showCriteria: boolean;
+  onShowCriteriaChange: (enabled: boolean) => void;
+  criteria: string;
+  onCriteriaChange: (value: string) => void;
   parametersPrefs: ParametersPrefs;
   onParametersPrefsChange: (partial: Partial<ParametersPrefs>) => void;
 }) {
@@ -581,6 +601,13 @@ function SidebarsPanel({
           </p>
           <ParametersFields prefs={parametersPrefs} onChange={onParametersPrefsChange} />
         </div>
+
+        <CriteriaExpandableSettings
+          showCriteria={showCriteria}
+          onShowCriteriaChange={onShowCriteriaChange}
+          criteria={criteria}
+          onCriteriaChange={onCriteriaChange}
+        />
 
         <SettingsGroup>
           <ToggleRow
@@ -2108,6 +2135,68 @@ function HotkeysPanel() {
           </ul>
         </div>
       ))}
+    </div>
+  );
+}
+
+function CriteriaExpandableSettings({
+  showCriteria,
+  onShowCriteriaChange,
+  criteria,
+  onCriteriaChange,
+}: {
+  showCriteria: boolean;
+  onShowCriteriaChange: (enabled: boolean) => void;
+  criteria: string;
+  onCriteriaChange: (value: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className={SETTINGS_BOX}>
+      <ul>
+        <ToggleRow
+          id="enable-criteria-sidebar"
+          label="Criteria"
+          description="Show the Criteria tab in the right tools rail."
+          checked={showCriteria}
+          onChange={onShowCriteriaChange}
+        />
+      </ul>
+      <button
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+        aria-expanded={expanded}
+        aria-label={expanded ? "Collapse Criteria settings" : "Expand Criteria settings"}
+        className="flex w-full items-center justify-center py-1.5 text-muted/55 transition-colors hover:bg-ink/[0.03] hover:text-muted/75"
+      >
+        <ChevronDown
+          size={14}
+          strokeWidth={2}
+          className={`transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+      {expanded ? (
+        <div className="space-y-2 px-3.5 py-3">
+          <label htmlFor="criteria-content" className="text-[13px] font-medium text-ink">
+            Criteria
+          </label>
+          <p className="text-[11px] leading-snug text-muted/75">
+            Saved with the active document. One item per line. Start a line with{" "}
+            <span className="font-mono text-[10px] text-ink/80">[]</span> for a checkbox in the
+            sidebar.
+          </p>
+          <textarea
+            id="criteria-content"
+            value={criteria}
+            onChange={(event) => onCriteriaChange(event.target.value)}
+            rows={6}
+            placeholder={"Tone matches the audience\n[] Includes a clear thesis\n[] Ends with a call to action"}
+            className={`min-h-[8.5rem] w-full resize-y ${SETTINGS_FIELD_INPUT} leading-relaxed`}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

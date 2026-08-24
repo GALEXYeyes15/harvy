@@ -23,6 +23,7 @@ export function toPageTabs(
       isDirty:
         doc.content !== doc.lastSavedContent ||
         doc.notes !== doc.lastSavedNotes ||
+        doc.criteria !== doc.lastSavedCriteria ||
         doc.postTitle !== doc.lastSavedPostTitle ||
         doc.subtitle !== doc.lastSavedSubtitle,
     });
