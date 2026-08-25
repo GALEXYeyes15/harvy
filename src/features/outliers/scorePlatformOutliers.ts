@@ -34,7 +34,9 @@ export function scoreMediumPosts(raw: MediumPostResult[], sourceId: string): Out
       primary: post.claps,
       toPost: (multiple) => {
         const hasThumbnail = Boolean(post.coverImage);
-        const preview = post.preview.trim() || post.title;
+        const title = post.title.trim() || post.preview.trim() || "Untitled";
+        const subtitle =
+          post.preview.trim() && post.preview.trim() !== title ? post.preview.trim() : undefined;
         return {
           id: post.id,
           sourceId,
@@ -44,7 +46,7 @@ export function scoreMediumPosts(raw: MediumPostResult[], sourceId: string): Out
           platform: "Medium",
           postedAgo: formatPostedAgo(post.postDate),
           postDateIso: post.postDate,
-          preview,
+          preview: title,
           likes: formatCompactCount(post.claps),
           likesCount: post.claps,
           comments: formatCompactCount(post.responses),
@@ -58,7 +60,7 @@ export function scoreMediumPosts(raw: MediumPostResult[], sourceId: string): Out
           thumbnailUrl: post.coverImage,
           thumbnailTone: hasThumbnail ? "warm" : undefined,
           thumbnailHeight: hasThumbnail ? "short" : undefined,
-          captionBelowThumbnail: post.title !== preview ? post.title : undefined,
+          captionBelowThumbnail: subtitle,
           canonicalUrl: post.canonicalUrl,
         };
       },
@@ -74,7 +76,11 @@ export function scoreYoutubeVideos(raw: YoutubeVideoResult[], sourceId: string):
       primary: video.views,
       toPost: (multiple) => {
         const hasThumbnail = Boolean(video.coverImage);
-        const preview = video.preview.trim() || video.title;
+        const title = video.title.trim() || video.preview.trim() || "Untitled";
+        const subtitle =
+          video.preview.trim() && video.preview.trim() !== title
+            ? video.preview.trim()
+            : undefined;
         return {
           id: video.id,
           sourceId,
@@ -84,7 +90,7 @@ export function scoreYoutubeVideos(raw: YoutubeVideoResult[], sourceId: string):
           platform: "YouTube",
           postedAgo: formatPostedAgo(video.postDate),
           postDateIso: video.postDate,
-          preview,
+          preview: title,
           likes: formatCompactCount(video.likes),
           likesCount: video.likes,
           comments: formatCompactCount(video.comments),
@@ -98,7 +104,7 @@ export function scoreYoutubeVideos(raw: YoutubeVideoResult[], sourceId: string):
           thumbnailUrl: video.coverImage,
           thumbnailTone: hasThumbnail ? "cool" : undefined,
           thumbnailHeight: hasThumbnail ? "short" : undefined,
-          captionBelowThumbnail: video.title !== preview ? video.title : undefined,
+          captionBelowThumbnail: subtitle,
           canonicalUrl: video.canonicalUrl,
         };
       },

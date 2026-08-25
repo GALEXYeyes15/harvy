@@ -50,7 +50,10 @@ export function scoreSubstackPosts(
     const hasThumbnail = Boolean(post.coverImage);
 
     const isNote = post.kind === "note";
-    const preview = post.preview.trim() || post.title;
+    const title = (post.title ?? "").trim();
+    const preview = isNote
+      ? post.preview.trim() || title
+      : title || post.preview.trim() || "Untitled";
     const commentsCount = Math.max(0, post.comments ?? 0);
     const restacksCount = Math.max(0, post.restacks ?? 0);
 
@@ -79,7 +82,9 @@ export function scoreSubstackPosts(
       thumbnailTone: hasThumbnail ? "slate" : undefined,
       thumbnailHeight: hasThumbnail ? "short" : undefined,
       captionBelowThumbnail:
-        !isNote && post.title !== preview ? post.title : undefined,
+        !isNote && post.preview.trim() && post.preview.trim() !== title
+          ? post.preview.trim()
+          : undefined,
       canonicalUrl: post.canonicalUrl,
       subdomain: post.subdomain,
       noteBodyJson: isNote ? post.bodyJson : undefined,

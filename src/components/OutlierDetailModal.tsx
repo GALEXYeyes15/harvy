@@ -113,11 +113,11 @@ function CommentThread({
             <div className="mt-1">
               <SubstackNoteBody
                 doc={comment.bodyJson}
-                className="space-y-2 text-[14px] leading-relaxed text-ink/90 dark:text-white/86"
+                className="min-w-0 break-words space-y-2 text-[14px] leading-relaxed text-ink/90 dark:text-white/86 [overflow-wrap:anywhere]"
               />
             </div>
           ) : (
-            <p className="mt-1 whitespace-pre-wrap text-[14px] leading-relaxed text-ink/90 dark:text-white/86">
+            <p className="mt-1 break-words whitespace-pre-wrap text-[14px] leading-relaxed text-ink/90 dark:text-white/86 [overflow-wrap:anywhere]">
               {comment.body}
             </p>
           )}
@@ -244,10 +244,10 @@ export function OutlierDetailModal({ open, post, onClose }: OutlierDetailModalPr
           {isSubstackNoteDoc(post.noteBodyJson) ? (
             <SubstackNoteBody
               doc={post.noteBodyJson}
-              className="space-y-3 text-[15px] leading-[1.55] text-ink dark:text-white/92"
+              className="min-w-0 break-words space-y-3 text-[15px] leading-[1.55] text-ink dark:text-white/92 [overflow-wrap:anywhere]"
             />
           ) : (
-            <p className="whitespace-pre-wrap text-[15px] leading-[1.55] text-ink dark:text-white/92">
+            <p className="break-words whitespace-pre-wrap text-[15px] leading-[1.55] text-ink dark:text-white/92 [overflow-wrap:anywhere]">
               {post.preview}
             </p>
           )}

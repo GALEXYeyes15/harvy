@@ -29,6 +29,7 @@ import { distributeOutlierPosts } from "../features/outliers/outlierMasonry";
 import {
   filterOutlierPosts,
   formatFetchedAgo,
+  isOutlierNote,
   toggleContentType,
   type ContentTypeFilter,
   type OutlierPost,
@@ -605,19 +606,67 @@ function OutlierThumbnail({ post }: { post: OutlierPost }) {
   );
 }
 
+/** Substack-style article link preview: cover image over author + title bar. */
+function OutlierArticleLinkCard({ post }: { post: OutlierPost }) {
+  const title = post.preview.trim() || "Untitled";
+  const tone = THUMBNAIL_TONE_CLASS[post.thumbnailTone ?? "slate"];
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-xl ring-1 ring-line/20 dark:ring-white/[0.08]">
+      {post.thumbnailUrl ? (
+        <div className="aspect-[16/10] w-full overflow-hidden bg-ink/[0.04] dark:bg-white/[0.04]">
+          <img
+            src={post.thumbnailUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            loading="lazy"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      ) : post.hasThumbnail ? (
+        <div className={`aspect-[16/10] w-full ${tone}`} aria-hidden />
+      ) : null}
+
+      <div className="flex items-start gap-2.5 bg-ink/[0.04] px-3 py-2.5 dark:bg-white/[0.06]">
+        <OutlierCardAvatar
+          name={post.creatorName}
+          photoUrl={post.creatorPhotoUrl}
+          size="sm"
+          rounded="md"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[11px] leading-snug text-muted/70 dark:text-white/50">
+            {post.creatorName}
+          </p>
+          <p className="mt-0.5 break-words text-[13px] font-semibold leading-snug text-ink [overflow-wrap:anywhere]">
+            {title}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OutlierCardAvatar({
   name,
   photoUrl,
+  size = "md",
+  rounded = "full",
 }: {
   name: string;
   photoUrl?: string | null;
+  size?: "sm" | "md";
+  rounded?: "full" | "md";
 }) {
+  const sizeClass = size === "sm" ? "h-7 w-7 text-[9px]" : "h-8 w-8 text-[10px]";
+  const roundClass = rounded === "md" ? "rounded-md" : "rounded-full";
+
   if (photoUrl) {
     return (
       <img
         src={photoUrl}
         alt=""
-        className="h-8 w-8 shrink-0 rounded-full object-cover"
+        className={`${sizeClass} ${roundClass} shrink-0 object-cover`}
       />
     );
   }
@@ -630,7 +679,7 @@ function OutlierCardAvatar({
     .join("");
   return (
     <div
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink/[0.08] text-[10px] font-semibold text-ink/70 dark:bg-white/[0.08] dark:text-white/70"
+      className={`flex ${sizeClass} ${roundClass} shrink-0 items-center justify-center bg-ink/[0.08] font-semibold text-ink/70 dark:bg-white/[0.08] dark:text-white/70`}
       aria-hidden
     >
       {initials || "?"}
@@ -647,8 +696,10 @@ function OutlierCard({
   onAddToNotes?: (text: string) => void;
   onOpen: (post: OutlierPost) => void;
 }) {
+  const isNote = isOutlierNote(post) || isSubstackNoteDoc(post.noteBodyJson);
+
   return (
-    <article className="harvy-outlier-card flex flex-col px-4 py-4">
+    <article className="harvy-outlier-card flex min-w-0 flex-col overflow-hidden px-4 py-4">
       <div className="flex items-start justify-between gap-3">
         <button
           type="button"
@@ -684,24 +735,33 @@ function OutlierCard({
         </button>
       </div>
 
-      <button type="button" onClick={() => onOpen(post)} className="mt-3 w-full text-left">
-        {isSubstackNoteDoc(post.noteBodyJson) ? (
-          <SubstackNoteBody doc={post.noteBodyJson} />
-        ) : (
-          <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-ink/88 dark:text-white/82">
-            {post.preview}
-          </p>
-        )}
-      </button>
+      {isNote ? (
+        <button type="button" onClick={() => onOpen(post)} className="mt-3 min-w-0 w-full overflow-hidden text-left">
+          {isSubstackNoteDoc(post.noteBodyJson) ? (
+            <SubstackNoteBody doc={post.noteBodyJson} />
+          ) : (
+            <p className="break-words whitespace-pre-wrap text-[12px] leading-relaxed text-ink/88 dark:text-white/82 [overflow-wrap:anywhere]">
+              {post.preview}
+            </p>
+          )}
+        </button>
+      ) : (
+        <button type="button" onClick={() => onOpen(post)} className="min-w-0 w-full overflow-hidden text-left">
+          <OutlierArticleLinkCard post={post} />
+        </button>
+      )}
 
-      <button type="button" onClick={() => onOpen(post)} className="text-left">
-        <OutlierThumbnail post={post} />
-      </button>
-
-      {post.captionBelowThumbnail ? (
-        <p className="mt-2.5 text-[11px] leading-snug text-muted/70 dark:text-white/50">
-          {post.captionBelowThumbnail}
-        </p>
+      {isNote ? (
+        <>
+          <button type="button" onClick={() => onOpen(post)} className="text-left">
+            <OutlierThumbnail post={post} />
+          </button>
+          {post.captionBelowThumbnail ? (
+            <p className="mt-2.5 text-[11px] leading-snug text-muted/70 dark:text-white/50">
+              {post.captionBelowThumbnail}
+            </p>
+          ) : null}
+        </>
       ) : null}
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-line/15 pt-3 dark:border-white/[0.06]">

@@ -48,7 +48,7 @@ function renderBlock(node: JsonNode, key: string): ReactNode {
   switch (node.type) {
     case "paragraph":
       return (
-        <p key={key} className="min-h-[1em]">
+        <p key={key} className="min-h-[1em] break-words [overflow-wrap:anywhere]">
           {node.content?.length ? renderInline(node.content, key) : "\u00A0"}
         </p>
       );
@@ -85,7 +85,7 @@ function renderBlock(node: JsonNode, key: string): ReactNode {
 /** Render Substack Note ProseMirror JSON with paragraph breaks and basic marks. */
 export function SubstackNoteBody({
   doc,
-  className = "space-y-2.5 text-[12px] leading-relaxed text-ink/88 dark:text-white/82",
+  className = "min-w-0 break-words space-y-2.5 text-[12px] leading-relaxed text-ink/88 dark:text-white/82 [overflow-wrap:anywhere]",
 }: {
   doc: unknown;
   className?: string;
