@@ -257,6 +257,7 @@
     content: attr(data-placeholder);
     float: left;
     height: 0;
+    width: 100%;
     pointer-events: none;
     color: color-mix(in oklab, var(--color-ink) 72%, transparent);
     font-style: normal;

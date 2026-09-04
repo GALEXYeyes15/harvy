@@ -172,6 +172,11 @@ import {
   writeDocumentHeaderPrefs,
 } from "../features/editor/documentHeaderSettings";
 import {
+  pickRandomEditorPrompt,
+  readEditorPromptPrefs,
+  writeEditorPromptPrefs,
+} from "../features/editor/editorPromptSettings";
+import {
   readEncouragementPrefs,
   writeEncouragementPrefs,
 } from "../features/encouragement/encouragementSettings";
@@ -399,6 +404,10 @@ export function AppShell() {
   const [writingAssistancePrefs, setWritingAssistancePrefs] = useState(readWritingAssistancePrefs);
   const [focusVisibilityPrefs, setFocusVisibilityPrefs] = useState(readFocusVisibilityPrefs);
   const [documentHeaderPrefs, setDocumentHeaderPrefs] = useState(readDocumentHeaderPrefs);
+  const [editorPromptPrefs, setEditorPromptPrefs] = useState(readEditorPromptPrefs);
+  const [sessionEditorPrompt] = useState(() =>
+    pickRandomEditorPrompt(editorPromptPrefs.prompts),
+  );
   const [encouragementPrefs, setEncouragementPrefs] = useState(readEncouragementPrefs);
   const [parametersPrefs, setParametersPrefs] = useState(readParametersPrefs);
   const { activePhrase: encouragementPhrase, dismiss: dismissEncouragement, showTest: testEncouragement } =
@@ -601,6 +610,13 @@ export function AppShell() {
   const handleDocumentHeaderPrefChange = useCallback(
     (partial: Parameters<typeof writeDocumentHeaderPrefs>[0]) => {
       setDocumentHeaderPrefs(writeDocumentHeaderPrefs(partial));
+    },
+    [],
+  );
+
+  const handleEditorPromptPrefsChange = useCallback(
+    (partial: Parameters<typeof writeEditorPromptPrefs>[0]) => {
+      setEditorPromptPrefs(writeEditorPromptPrefs(partial));
     },
     [],
   );
@@ -2225,7 +2241,7 @@ export function AppShell() {
   }, []);
 
   /** TipTap Placeholder extension only renders when the doc is empty; no real document text. */
-  const editorPlaceholder = editorEditable ? "Start writing..." : undefined;
+  const editorPlaceholder = editorEditable ? sessionEditorPrompt : undefined;
   const editorInstanceKey = activeTabId ?? (openTabIds.length === 0 ? "scratch" : "browse");
 
   useEffect(() => {
@@ -2956,6 +2972,8 @@ export function AppShell() {
         onFocusVisibilityPrefChange={handleFocusVisibilityPrefChange}
         documentHeaderPrefs={documentHeaderPrefs}
         onDocumentHeaderPrefChange={handleDocumentHeaderPrefChange}
+        editorPromptPrefs={editorPromptPrefs}
+        onEditorPromptPrefsChange={handleEditorPromptPrefsChange}
         enableCollect={enableCollect}
         onEnableCollectChange={handleEnableCollectChange}
         showOutliersView={showOutliersView}

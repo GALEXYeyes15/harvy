@@ -4,10 +4,13 @@ import { Check, ChevronDown, ChevronRight, Minus, Plus, SquareArrowOutUpRight, S
 import { APP_NAME } from "../../lib/constants";
 import type { DocumentHeaderPrefs } from "../../features/editor/documentHeaderSettings";
 import type { FocusVisibilityPrefs } from "../../features/editor/focusVisibilitySettings";
+import type { EncouragementPhrase, EncouragementPrefs } from "../../features/encouragement/encouragementSettings";
 import {
-  type EncouragementPhrase,
-  type EncouragementPrefs,
-} from "../../features/encouragement/encouragementSettings";
+  createEditorPrompt,
+  removeEditorPrompt,
+  updateEditorPrompt,
+  type EditorPromptPrefs,
+} from "../../features/editor/editorPromptSettings";
 import { formatHotkeyKeys, HOTKEY_GROUPS } from "../../features/settings/hotkeys";
 import {
   FK_COMPLEXITY_THRESHOLD_MAX,
@@ -78,6 +81,7 @@ import {
 import { CenteredOverlayModal } from "../overlay/CenteredOverlayModal";
 import { CanvaColorPicker } from "./CanvaColorPicker";
 import { PhrasesCsvTable } from "./PhrasesCsvTable";
+import { PromptsCsvTable } from "./PromptsCsvTable";
 import { NotionIdeasSettingsSection } from "./NotionIdeasSettingsSection";
 import { AiCheckSettingsSection } from "./AiCheckSettingsSection";
 import { SETTINGS_NAV, type SettingsSectionId } from "./sectionIds";
@@ -135,6 +139,8 @@ type SettingsModalProps = {
   onFocusVisibilityPrefChange: (partial: Partial<FocusVisibilityPrefs>) => void;
   documentHeaderPrefs: DocumentHeaderPrefs;
   onDocumentHeaderPrefChange: (partial: Partial<DocumentHeaderPrefs>) => void;
+  editorPromptPrefs: EditorPromptPrefs;
+  onEditorPromptPrefsChange: (partial: Partial<EditorPromptPrefs>) => void;
   enableCollect: boolean;
   onEnableCollectChange: (enabled: boolean) => void;
   showOutliersView: boolean;
@@ -177,6 +183,8 @@ export function SettingsModal({
   onFocusVisibilityPrefChange,
   documentHeaderPrefs,
   onDocumentHeaderPrefChange,
+  editorPromptPrefs,
+  onEditorPromptPrefsChange,
   enableCollect,
   onEnableCollectChange,
   showOutliersView,
@@ -240,6 +248,8 @@ export function SettingsModal({
                 onFocusVisibilityPrefChange={onFocusVisibilityPrefChange}
                 documentHeaderPrefs={documentHeaderPrefs}
                 onDocumentHeaderPrefChange={onDocumentHeaderPrefChange}
+                editorPromptPrefs={editorPromptPrefs}
+                onEditorPromptPrefsChange={onEditorPromptPrefsChange}
               />
             ) : null}
             {activeSection === "sidebars" ? (
@@ -1866,6 +1876,8 @@ function EditorPanel({
   onFocusVisibilityPrefChange,
   documentHeaderPrefs,
   onDocumentHeaderPrefChange,
+  editorPromptPrefs,
+  onEditorPromptPrefsChange,
 }: {
   spellcheckEnabled: boolean;
   onSpellcheckChange: (v: boolean) => void;
@@ -1873,7 +1885,17 @@ function EditorPanel({
   onFocusVisibilityPrefChange: (partial: Partial<FocusVisibilityPrefs>) => void;
   documentHeaderPrefs: DocumentHeaderPrefs;
   onDocumentHeaderPrefChange: (partial: Partial<DocumentHeaderPrefs>) => void;
+  editorPromptPrefs: EditorPromptPrefs;
+  onEditorPromptPrefsChange: (partial: Partial<EditorPromptPrefs>) => void;
 }) {
+  const [promptsExpanded, setPromptsExpanded] = useState(false);
+
+  function addPromptRow() {
+    onEditorPromptPrefsChange({
+      prompts: [...editorPromptPrefs.prompts, createEditorPrompt()],
+    });
+  }
+
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
@@ -1904,6 +1926,87 @@ function EditorPanel({
           onChange={onSpellcheckChange}
         />
       </SettingsGroup>
+
+      <div>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-[12px] italic leading-snug text-muted/75">Prompt</p>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={addPromptRow}
+              className="rounded-md px-2 py-1 text-[11px] font-medium text-muted/80 transition-colors hover:bg-ink/[0.06] hover:text-ink"
+            >
+              Add row
+            </button>
+            <button
+              type="button"
+              onClick={() => setPromptsExpanded(true)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted/60 transition-colors hover:bg-ink/[0.06] hover:text-ink"
+              aria-label="Expand prompts table"
+              title="Expand prompts table"
+            >
+              <SquareArrowOutUpRight size={14} strokeWidth={1.5} aria-hidden />
+            </button>
+          </div>
+        </div>
+        <PromptsCsvTable
+          prompts={editorPromptPrefs.prompts}
+          onUpdate={(id, text) =>
+            onEditorPromptPrefsChange({
+              prompts: updateEditorPrompt(editorPromptPrefs.prompts, id, text),
+            })
+          }
+          onRemove={(id) =>
+            onEditorPromptPrefsChange({
+              prompts: removeEditorPrompt(editorPromptPrefs.prompts, id),
+            })
+          }
+          maxHeightClass="max-h-[14rem]"
+        />
+        <p className="mt-2 text-[11px] leading-relaxed text-muted/70">
+          Shown in an empty document. A random prompt is chosen each time you open Harvy. The
+          default cannot be removed.
+        </p>
+      </div>
+
+      <CenteredOverlayModal
+        open={promptsExpanded}
+        onClose={() => setPromptsExpanded(false)}
+        title="Prompts"
+        titleId="prompts-expand-dialog-title"
+        backdropLabel="Close prompts table"
+        closeLabel="Close prompts table"
+        panelSizeClassName={PHRASES_EXPAND_PANEL_SIZE}
+        bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-5"
+        zIndexClass="z-[220]"
+        escapeCapture
+        subtitle="One writing prompt per row."
+      >
+        <div className="mb-3 flex shrink-0 items-center justify-end">
+          <button
+            type="button"
+            onClick={addPromptRow}
+            className="rounded-md px-2.5 py-1.5 text-[12px] font-medium text-muted/80 transition-colors hover:bg-ink/[0.06] hover:text-ink"
+          >
+            Add row
+          </button>
+        </div>
+        <PromptsCsvTable
+          prompts={editorPromptPrefs.prompts}
+          onUpdate={(id, text) =>
+            onEditorPromptPrefsChange({
+              prompts: updateEditorPrompt(editorPromptPrefs.prompts, id, text),
+            })
+          }
+          onRemove={(id) =>
+            onEditorPromptPrefsChange({
+              prompts: removeEditorPrompt(editorPromptPrefs.prompts, id),
+            })
+          }
+          maxHeightClass="min-h-0 flex-1"
+          fillHeight
+        />
+      </CenteredOverlayModal>
 
       <SettingsGroup
         label="While Typing"
