@@ -120,6 +120,7 @@ pub fn run() {
             commands::ai_check::ai_check_test_connection,
             commands::ai_check::ai_check_run,
             commands::ai_check::ai_check_podcast_notes,
+            commands::ai_check::ai_check_headline_pairs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

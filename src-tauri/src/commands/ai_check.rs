@@ -112,6 +112,22 @@ pub struct PodcastNotesResult {
     pub usage: AiCheckUsage,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HeadlinePair {
+    pub title: String,
+    #[serde(default)]
+    pub subtitle: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeadlinePairsResult {
+    pub pairs: Vec<HeadlinePair>,
+    pub model: String,
+    pub provider: AiProvider,
+    pub usage: AiCheckUsage,
+}
+
 struct ModelCheckResponse {
     text: String,
     usage: AiCheckUsage,
@@ -402,6 +418,26 @@ Structure requirements:
 5. Do not invent facts that are not supported by the essay.
 6. Prefer about 4–8 sections depending on essay length."#;
 
+const HEADLINE_STYLE_PROMPT_DEFAULT: &str = r#"You write titles and subtitles (deks) for essays.
+Read the essay and propose exactly 5 distinct title+subtitle pairs.
+Rules:
+- Title is the headline; subtitle sits under it as the dek.
+- Stay faithful to the essay; do not invent facts, names, or claims.
+- Make the five pairs meaningfully different from each other.
+- Titles: about 4–12 words. Subtitles: one sentence.
+- No wrapping quotation marks around the whole title or subtitle."#;
+
+const HEADLINE_JSON_CONTRACT: &str = r#"Return ONLY valid JSON (no markdown fences, no preamble) with this shape:
+{"pairs":[{"title":"<headline>","subtitle":"<one-sentence dek>"}]}"#;
+
+fn compose_headline_system_prompt(style_prompt: Option<&str>) -> String {
+    let style = style_prompt
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(HEADLINE_STYLE_PROMPT_DEFAULT);
+    format!("{}\n\n{}", style, HEADLINE_JSON_CONTRACT)
+}
+
 fn strip_markdown_fences(raw: &str) -> String {
     let trimmed = raw.trim();
     let without_open = trimmed
@@ -418,20 +454,41 @@ fn strip_markdown_fences(raw: &str) -> String {
 
 fn require_ai_config_for_generation(app: &AppHandle) -> Result<AiCheckConfig, String> {
     let config = read_config(app)?.ok_or_else(|| {
-        "Add an API key in Settings → Sidebars before generating podcast notes.".to_string()
+        "Add an API key in Settings → Sidebars first.".to_string()
     })?;
     if config.api_key.trim().is_empty() {
-        return Err(
-            "Add an API key in Settings → Sidebars before generating podcast notes.".to_string(),
-        );
+        return Err("Add an API key in Settings → Sidebars first.".to_string());
     }
     if !config.enabled {
-        return Err("Enable AI check in Settings → Sidebars first (podcast notes uses the same model).".to_string());
+        return Err("Enable AI check in Settings → Sidebars first.".to_string());
     }
     if config.model.trim().is_empty() {
         return Err("Select a model in Settings → Sidebars first.".to_string());
     }
     Ok(config)
+}
+
+fn parse_headline_pairs_from_model_text(raw: &str) -> Result<Vec<HeadlinePair>, String> {
+    let value = extract_json_object(raw)?;
+    let pairs_value = value
+        .get("pairs")
+        .cloned()
+        .ok_or_else(|| "Model JSON missing \"pairs\" array.".to_string())?;
+    let raw_pairs: Vec<HeadlinePair> = serde_json::from_value(pairs_value)
+        .map_err(|e| format!("Could not parse headline pairs from model JSON: {}", e))?;
+    let pairs: Vec<HeadlinePair> = raw_pairs
+        .into_iter()
+        .map(|p| HeadlinePair {
+            title: p.title.trim().to_string(),
+            subtitle: p.subtitle.trim().to_string(),
+        })
+        .filter(|p| !p.title.is_empty())
+        .take(5)
+        .collect();
+    if pairs.is_empty() {
+        return Err("The model returned no title suggestions.".to_string());
+    }
+    Ok(pairs)
 }
 
 fn extract_json_object(raw: &str) -> Result<Value, String> {
@@ -982,6 +1039,169 @@ pub fn ai_check_podcast_notes(app: AppHandle, essay: String) -> Result<PodcastNo
     })
 }
 
+fn run_openai_headline_pairs(
+    client: &Client,
+    api_key: &str,
+    model: &str,
+    essay: &str,
+    system_prompt: &str,
+) -> Result<ModelCheckResponse, String> {
+    let body = json!({
+        "model": model,
+        "temperature": 0.7,
+        "response_format": { "type": "json_object" },
+        "messages": [
+            { "role": "system", "content": system_prompt },
+            { "role": "user", "content": format!("Essay to title:\n\n{}", essay) }
+        ]
+    });
+    let response = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .bearer_auth(api_key.trim())
+        .json(&body)
+        .send()
+        .map_err(|e| format!("OpenAI headline request failed: {}", e))?;
+    let status = response.status();
+    let text = response
+        .text()
+        .map_err(|e| format!("Could not read OpenAI headline response: {}", e))?;
+    if !status.is_success() {
+        return Err(format_api_error("OpenAI", status.as_u16(), &text));
+    }
+    let parsed: Value = serde_json::from_str(&text)
+        .map_err(|e| format!("Could not parse OpenAI headline JSON: {}", e))?;
+    let content = parsed
+        .pointer("/choices/0/message/content")
+        .and_then(|c| c.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "OpenAI response missing message content.".to_string())?;
+    let input_tokens = parsed
+        .pointer("/usage/prompt_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    let output_tokens = parsed
+        .pointer("/usage/completion_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    Ok(ModelCheckResponse {
+        text: content,
+        usage: AiCheckUsage {
+            input_tokens,
+            output_tokens,
+        },
+    })
+}
+
+fn run_anthropic_headline_pairs(
+    client: &Client,
+    api_key: &str,
+    model: &str,
+    essay: &str,
+    system_prompt: &str,
+) -> Result<ModelCheckResponse, String> {
+    let body = json!({
+        "model": model,
+        "max_tokens": 2048,
+        "temperature": 0.7,
+        "system": system_prompt,
+        "messages": [
+            { "role": "user", "content": format!("Essay to title:\n\n{}", essay) }
+        ]
+    });
+    let response = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key.trim())
+        .header("anthropic-version", ANTHROPIC_VERSION)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .map_err(|e| format!("Anthropic headline request failed: {}", e))?;
+    let status = response.status();
+    let text = response
+        .text()
+        .map_err(|e| format!("Could not read Anthropic headline response: {}", e))?;
+    if !status.is_success() {
+        return Err(format_api_error("Anthropic", status.as_u16(), &text));
+    }
+    let parsed: Value = serde_json::from_str(&text)
+        .map_err(|e| format!("Could not parse Anthropic headline JSON: {}", e))?;
+    let content = parsed
+        .get("content")
+        .and_then(|c| c.as_array())
+        .ok_or_else(|| "Anthropic response missing content.".to_string())?;
+    let mut out = String::new();
+    for block in content {
+        if block.get("type").and_then(|t| t.as_str()) == Some("text") {
+            if let Some(t) = block.get("text").and_then(|t| t.as_str()) {
+                out.push_str(t);
+            }
+        }
+    }
+    if out.is_empty() {
+        return Err("Anthropic response had no text blocks.".to_string());
+    }
+    let input_tokens = parsed
+        .pointer("/usage/input_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    let output_tokens = parsed
+        .pointer("/usage/output_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    Ok(ModelCheckResponse {
+        text: out,
+        usage: AiCheckUsage {
+            input_tokens,
+            output_tokens,
+        },
+    })
+}
+
+#[tauri::command]
+pub fn ai_check_headline_pairs(
+    app: AppHandle,
+    essay: String,
+    style_prompt: Option<String>,
+) -> Result<HeadlinePairsResult, String> {
+    let config = require_ai_config_for_generation(&app)?;
+    let essay = essay.trim();
+    if essay.is_empty() {
+        return Err("Nothing to title — the document is empty.".to_string());
+    }
+    if essay.chars().count() > MAX_ESSAY_CHARS {
+        return Err(format!(
+            "Essay is too long for headline suggestions (max {} characters).",
+            MAX_ESSAY_CHARS
+        ));
+    }
+
+    let system_prompt = compose_headline_system_prompt(style_prompt.as_deref());
+    let client = http_client()?;
+    let generated = match config.provider {
+        AiProvider::Openai => run_openai_headline_pairs(
+            &client,
+            &config.api_key,
+            &config.model,
+            essay,
+            &system_prompt,
+        )?,
+        AiProvider::Anthropic => run_anthropic_headline_pairs(
+            &client,
+            &config.api_key,
+            &config.model,
+            essay,
+            &system_prompt,
+        )?,
+    };
+    let pairs = parse_headline_pairs_from_model_text(&generated.text)?;
+    Ok(HeadlinePairsResult {
+        pairs,
+        model: config.model,
+        provider: config.provider,
+        usage: generated.usage,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1006,5 +1226,41 @@ mod tests {
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].r#type, "grammar");
         assert_eq!(issues[0].text, "was went");
+    }
+
+    #[test]
+    fn parses_headline_pairs_json() {
+        let raw = r#"```json
+{"pairs":[
+  {"title":" First ","subtitle":" A dek. "},
+  {"title":"Second","subtitle":"Another dek."},
+  {"title":"","subtitle":"skip me"},
+  {"title":"Third","subtitle":"Third dek."},
+  {"title":"Fourth","subtitle":"Fourth dek."},
+  {"title":"Fifth","subtitle":"Fifth dek."},
+  {"title":"Sixth","subtitle":"should be dropped"}
+]}
+```"#;
+        let pairs = parse_headline_pairs_from_model_text(raw).unwrap();
+        assert_eq!(pairs.len(), 5);
+        assert_eq!(pairs[0].title, "First");
+        assert_eq!(pairs[0].subtitle, "A dek.");
+        assert_eq!(pairs[4].title, "Fifth");
+    }
+
+    #[test]
+    fn rejects_headline_pairs_without_titles() {
+        let raw = r#"{"pairs":[{"title":"","subtitle":"nope"}]}"#;
+        assert!(parse_headline_pairs_from_model_text(raw).is_err());
+    }
+
+    #[test]
+    fn composes_custom_style_with_json_contract() {
+        let prompt = compose_headline_system_prompt(Some("Punchy news headlines."));
+        assert!(prompt.starts_with("Punchy news headlines."));
+        assert!(prompt.contains("\"pairs\""));
+        let fallback = compose_headline_system_prompt(Some("  "));
+        assert!(fallback.starts_with("You write titles and subtitles"));
+        assert!(fallback.contains("\"pairs\""));
     }
 }

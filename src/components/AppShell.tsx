@@ -211,13 +211,16 @@ import {
   estimateCostUsd,
   formatAiCheckCostUsd,
   formatAiModelDisplayName,
+  generateHeadlinePairs,
   generatePodcastNotes,
   getAiCheckConfig,
   locateAiIssuesInText,
   runAiCheck,
   type AiCheckConfigPublic,
+  type HeadlinePair,
 } from "../features/aiCheck/aiCheck";
 import { syncAiCheckPopoverPrefs } from "../features/aiCheck/aiCheckPopoverPrefs";
+import { readHeadlineStylePrompt } from "../features/aiCheck/headlinePromptSettings";
 import { ensureUserRulesFile, loadEditorRules } from "../features/writing-assistance/editorRules";
 
 /** Formatting toolbar (Bold, H1, etc.): hidden for distraction-free writing; set true to restore for Edit chrome. */
@@ -407,6 +410,12 @@ export function AppShell() {
   const [showAiCheck, setShowAiCheck] = useState(
     () => readAiCheckSidebarSettings().showAiCheck,
   );
+  const [showPodcastNotes, setShowPodcastNotes] = useState(
+    () => readAiCheckSidebarSettings().showPodcastNotes,
+  );
+  const [showTitleGeneration, setShowTitleGeneration] = useState(
+    () => readAiCheckSidebarSettings().showTitleGeneration,
+  );
   /** In-memory buffer when no tabs open — not a saved file until persistence exists. */
   const [scratchDraftContent, setScratchDraftContent] = useState("");
   /** When set, scratch buffer last wrote to this path. */
@@ -451,6 +460,10 @@ export function AppShell() {
   const [podcastNotesRunning, setPodcastNotesRunning] = useState(false);
   const [aiCheckCostLabel, setAiCheckCostLabel] = useState<string | null>(null);
   const [aiCheckError, setAiCheckError] = useState<string | null>(null);
+  const [headlinePairs, setHeadlinePairs] = useState<HeadlinePair[]>([]);
+  const [headlinePairsRunning, setHeadlinePairsRunning] = useState(false);
+  const [headlinePairsError, setHeadlinePairsError] = useState<string | null>(null);
+  const [selectedHeadlineIndex, setSelectedHeadlineIndex] = useState<number | null>(null);
   const aiProofreadIssuesRef = useRef<ProofreadIssue[]>([]);
   /** Sidebar inline rename for a newly created (or future: any) folder. */
   const [folderRename, setFolderRename] = useState<{
@@ -580,6 +593,16 @@ export function AppShell() {
   const handleShowAiCheckChange = useCallback((enabled: boolean) => {
     const next = writeAiCheckSidebarSettings({ showAiCheck: enabled });
     setShowAiCheck(next.showAiCheck);
+  }, []);
+
+  const handleShowPodcastNotesChange = useCallback((enabled: boolean) => {
+    const next = writeAiCheckSidebarSettings({ showPodcastNotes: enabled });
+    setShowPodcastNotes(next.showPodcastNotes);
+  }, []);
+
+  const handleShowTitleGenerationChange = useCallback((enabled: boolean) => {
+    const next = writeAiCheckSidebarSettings({ showTitleGeneration: enabled });
+    setShowTitleGeneration(next.showTitleGeneration);
   }, []);
 
   const showWorkspaceNavigation = enableCollect;
@@ -1363,6 +1386,10 @@ export function AppShell() {
           window.alert("Enable AI check and add an API key in Settings → Sidebars first.");
           return;
         }
+        if (!showPodcastNotes) {
+          window.alert("Turn on Podcast Notes in Settings → Sidebars → Artificial Intelligence.");
+          return;
+        }
       }
       const flushed = await flushPendingTitleRename();
       if (!flushed.ok) return;
@@ -1390,6 +1417,7 @@ export function AppShell() {
       setEditorInactive,
       aiCheckConfig?.enabled,
       aiCheckConfig?.hasApiKey,
+      showPodcastNotes,
       flushPendingTitleRename,
     ],
   );
@@ -2320,6 +2348,9 @@ export function AppShell() {
 
   useEffect(() => {
     setTitleRenameDraft(null);
+    setHeadlinePairs([]);
+    setHeadlinePairsError(null);
+    setSelectedHeadlineIndex(null);
   }, [activeTabId]);
 
   const activeNotes = activeDocument?.notes ?? "";
@@ -2538,6 +2569,41 @@ export function AppShell() {
       setAiCheckRunning(false);
     }
   }, [tiptapEditor, persistAiIssues]);
+
+  const handleGenerateHeadlines = useCallback(async () => {
+    if (!isTauriRuntime()) {
+      window.alert("Headline suggestions are only available in the Harvy desktop app.");
+      return;
+    }
+    if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
+      window.alert("Enable AI check and add an API key in Settings → Sidebars first.");
+      return;
+    }
+    const essay = tiptapEditor
+      ? proofreadPlainTextAndPositions(tiptapEditor.state.doc).text
+      : editorText;
+    if (!essay.trim()) {
+      setHeadlinePairsError("Nothing to title — the document is empty.");
+      return;
+    }
+    setHeadlinePairsRunning(true);
+    setHeadlinePairsError(null);
+    try {
+      const result = await generateHeadlinePairs(essay, readHeadlineStylePrompt());
+      setHeadlinePairs(result.pairs);
+      setSelectedHeadlineIndex(null);
+    } catch (e) {
+      setHeadlinePairsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setHeadlinePairsRunning(false);
+    }
+  }, [aiCheckConfig?.enabled, aiCheckConfig?.hasApiKey, editorText, tiptapEditor]);
+
+  function handleSelectHeadlinePair(pair: HeadlinePair, index: number) {
+    updateActiveDocumentPostTitle(pair.title);
+    updateActiveDocumentSubtitle(pair.subtitle);
+    setSelectedHeadlineIndex(index);
+  }
 
   useEffect(() => {
     setSpellingDocumentKey(editorInstanceKey);
@@ -2852,6 +2918,16 @@ export function AppShell() {
       aiCheckCostLabel={aiCheckCostDisplay}
       aiCheckError={aiCheckError}
       onRunAiCheck={handleRunAiCheck}
+      showHeadlines={showTitleGeneration}
+      headlinesEnabled={Boolean(
+        showTitleGeneration && aiCheckConfig?.enabled && aiCheckConfig.hasApiKey,
+      )}
+      headlinesRunning={headlinePairsRunning}
+      headlinesError={headlinePairsError}
+      headlinePairs={headlinePairs}
+      selectedHeadlineIndex={selectedHeadlineIndex}
+      onGenerateHeadlines={handleGenerateHeadlines}
+      onSelectHeadlinePair={handleSelectHeadlinePair}
     />
   );
 
@@ -3024,7 +3100,9 @@ export function AppShell() {
               onPodcastNotesPdf={performExportPodcastNotesPdf}
               onSaveAsPdf={performExportPdf}
               onPrint={handlePrintDocument}
-              podcastNotesEnabled={Boolean(aiCheckConfig?.enabled && aiCheckConfig.hasApiKey)}
+              podcastNotesEnabled={Boolean(
+                showPodcastNotes && aiCheckConfig?.enabled && aiCheckConfig.hasApiKey,
+              )}
               podcastNotesRunning={podcastNotesRunning}
               syncWithChrome
               chromeHidden={hideBottomToolsWhileTyping && !focusModeActive}
@@ -3223,6 +3301,10 @@ export function AppShell() {
         onShowCriteriaChange={handleShowCriteriaChange}
         showAiCheck={showAiCheck}
         onShowAiCheckChange={handleShowAiCheckChange}
+        showPodcastNotes={showPodcastNotes}
+        onShowPodcastNotesChange={handleShowPodcastNotesChange}
+        showTitleGeneration={showTitleGeneration}
+        onShowTitleGenerationChange={handleShowTitleGenerationChange}
         criteria={activeCriteria}
         onCriteriaChange={updateActiveDocumentCriteria}
         publishUrl={publishUrl}

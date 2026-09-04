@@ -9,6 +9,7 @@ import type { ProofreadIssue } from "../features/proofread/types";
 import type { WorkspaceSection } from "../features/workspace/workspaceSection";
 import { CriteriaSidebarPanel } from "./CriteriaSidebarPanel";
 import { NotesSidebarPanel } from "./NotesSidebarPanel";
+import type { HeadlinePair } from "../features/aiCheck/aiCheck";
 
 const PANEL =
   "relative flex h-full min-h-0 w-full flex-col bg-stage font-[system-ui,-apple-system,BlinkMacSystemFont,'Segoe_UI',sans-serif] text-ink antialiased [backdrop-filter:none]";
@@ -60,6 +61,14 @@ export type SidebarRightProps = {
   /** Error message from the last run, if any. */
   aiCheckError?: string | null;
   onRunAiCheck?: () => void | Promise<void>;
+  showHeadlines?: boolean;
+  headlinesEnabled?: boolean;
+  headlinesRunning?: boolean;
+  headlinesError?: string | null;
+  headlinePairs?: HeadlinePair[];
+  selectedHeadlineIndex?: number | null;
+  onGenerateHeadlines?: () => void | Promise<void>;
+  onSelectHeadlinePair?: (pair: HeadlinePair, index: number) => void;
 };
 
 function SidebarToolsTab({
@@ -358,6 +367,14 @@ export function SidebarRight({
   aiCheckCostLabel = null,
   aiCheckError = null,
   onRunAiCheck,
+  showHeadlines = false,
+  headlinesEnabled = false,
+  headlinesRunning = false,
+  headlinesError = null,
+  headlinePairs = [],
+  selectedHeadlineIndex = null,
+  onGenerateHeadlines,
+  onSelectHeadlinePair,
 }: SidebarRightProps) {
   const writeTabs = useMemo(
     () => visibleWriteSidebarModes({ showCriteria }),
@@ -409,6 +426,14 @@ export function SidebarRight({
             onNotesChange={onNotesChange}
             onTogglePopout={onToggleNotesPopout}
             showQuickLinks={showQuickLinks}
+            showHeadlines={showHeadlines}
+            headlinesEnabled={headlinesEnabled}
+            headlinesRunning={headlinesRunning}
+            headlinesError={headlinesError}
+            headlinePairs={headlinePairs}
+            selectedHeadlineIndex={selectedHeadlineIndex}
+            onGenerateHeadlines={onGenerateHeadlines}
+            onSelectHeadlinePair={onSelectHeadlinePair}
           />
         ) : mode === "criteria" ? (
           <CriteriaSidebarPanel criteria={criteria} onCriteriaChange={onCriteriaChange} />

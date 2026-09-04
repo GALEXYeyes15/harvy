@@ -120,6 +120,29 @@ export async function generatePodcastNotes(essay: string): Promise<PodcastNotesR
   return invoke<PodcastNotesResult>("ai_check_podcast_notes", { essay });
 }
 
+export type HeadlinePair = {
+  title: string;
+  subtitle: string;
+};
+
+export type HeadlinePairsResult = {
+  pairs: HeadlinePair[];
+  model: string;
+  provider: AiProvider;
+  usage: AiCheckUsage;
+};
+
+export async function generateHeadlinePairs(
+  essay: string,
+  stylePrompt?: string,
+): Promise<HeadlinePairsResult> {
+  requireTauri();
+  return invoke<HeadlinePairsResult>("ai_check_headline_pairs", {
+    essay,
+    stylePrompt: stylePrompt?.trim() ? stylePrompt : null,
+  });
+}
+
 export function providerLabel(provider: AiProvider | null | undefined): string {
   if (provider === "openai") return "OpenAI";
   if (provider === "anthropic") return "Anthropic";

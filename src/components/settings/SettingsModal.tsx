@@ -19,8 +19,6 @@ import {
   READING_WPM_MIN,
   SUGGESTED_FK_COMPLEXITY_THRESHOLD_MAX,
   SUGGESTED_FK_COMPLEXITY_THRESHOLD_MIN,
-  SUGGESTED_READING_WPM_MAX,
-  SUGGESTED_READING_WPM_MIN,
   type ParametersPrefs,
 } from "../../features/settings/parametersSettings";
 import type { ThemeMode, ResolvedTheme } from "../../theme/themeMode";
@@ -61,7 +59,6 @@ import {
 } from "../../theme/appearanceStyles";
 import {
   clampOutliersFetchIntervalMinutes,
-  DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES,
   OUTLIERS_FETCH_INTERVAL_MAX_MINUTES,
   OUTLIERS_FETCH_INTERVAL_MIN_MINUTES,
   readOutliersSettings,
@@ -92,6 +89,12 @@ import {
   type AiCheckConfigPublic,
 } from "../../features/aiCheck/aiCheck";
 import { syncAiCheckPopoverPrefs } from "../../features/aiCheck/aiCheckPopoverPrefs";
+import {
+  DEFAULT_HEADLINE_STYLE_PROMPT,
+  readHeadlineStylePrompt,
+  resetHeadlineStylePrompt,
+  writeHeadlineStylePrompt,
+} from "../../features/aiCheck/headlinePromptSettings";
 import { isTauriRuntime } from "../../features/save/saveRuntime";
 
 
@@ -129,6 +132,10 @@ type SettingsModalProps = {
   onShowCriteriaChange: (enabled: boolean) => void;
   showAiCheck: boolean;
   onShowAiCheckChange: (enabled: boolean) => void;
+  showPodcastNotes: boolean;
+  onShowPodcastNotesChange: (enabled: boolean) => void;
+  showTitleGeneration: boolean;
+  onShowTitleGenerationChange: (enabled: boolean) => void;
   criteria: string;
   onCriteriaChange: (value: string) => void;
   publishUrl: string;
@@ -173,6 +180,10 @@ export function SettingsModal({
   onShowCriteriaChange,
   showAiCheck,
   onShowAiCheckChange,
+  showPodcastNotes,
+  onShowPodcastNotesChange,
+  showTitleGeneration,
+  onShowTitleGenerationChange,
   criteria,
   onCriteriaChange,
   publishUrl,
@@ -262,6 +273,10 @@ export function SettingsModal({
                 onShowCriteriaChange={onShowCriteriaChange}
                 showAiCheck={showAiCheck}
                 onShowAiCheckChange={onShowAiCheckChange}
+                showPodcastNotes={showPodcastNotes}
+                onShowPodcastNotesChange={onShowPodcastNotesChange}
+                showTitleGeneration={showTitleGeneration}
+                onShowTitleGenerationChange={onShowTitleGenerationChange}
                 criteria={criteria}
                 onCriteriaChange={onCriteriaChange}
                 parametersPrefs={parametersPrefs}
@@ -397,14 +412,12 @@ function CollectSettingsPanel({
         <ToggleRow
           id="enable-collect"
           label="Enable Research"
-          description="Add Research to the left workspace rail."
           checked={enableCollect}
           onChange={onEnableCollectChange}
         />
         <ToggleRow
           id="show-outliers-view"
           label="Show Outliers"
-          description="Creator posts and Notes scored against your average."
           checked={showOutliersView}
           onChange={onShowOutliersViewChange}
           disabled={!enableCollect || (showOutliersView && enabledViewCount === 1)}
@@ -412,7 +425,6 @@ function CollectSettingsPanel({
         <ToggleRow
           id="show-collect-view"
           label="Show Ideas"
-          description="Your table of saved essay ideas."
           checked={showCollectView}
           onChange={onShowCollectViewChange}
           disabled={!enableCollect || (showCollectView && enabledViewCount === 1)}
@@ -420,7 +432,6 @@ function CollectSettingsPanel({
         <ToggleRow
           id="show-avatar-view"
           label="Show Avatar"
-          description="Target audience description you can refer to while writing."
           checked={showAvatarView}
           onChange={onShowAvatarViewChange}
           disabled={!enableCollect || (showAvatarView && enabledViewCount === 1)}
@@ -432,7 +443,6 @@ function CollectSettingsPanel({
             <ToggleRow
               id="outliers-auto-fetch"
               label="Auto-fetch Outliers"
-              description="After Fetch posts, refresh on the interval below while Harvy is open."
               checked={autoFetchEnabled}
               onChange={(enabled) => {
                 setAutoFetchEnabled(enabled);
@@ -441,16 +451,12 @@ function CollectSettingsPanel({
             />
           </SettingsGroup>
           <label
-            className={`flex items-start justify-between gap-4 ${SETTINGS_BOX_PAD} ${
+            className={`flex items-center justify-between gap-4 ${SETTINGS_BOX_PAD} ${
               autoFetchEnabled ? "" : "opacity-55"
             }`}
           >
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-ink">Fetch interval</p>
-              <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-                Minutes between refreshes when auto-fetch is on. Default{" "}
-                {DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES}.
-              </p>
             </div>
             <input
               type="number"
@@ -484,6 +490,10 @@ function SidebarsPanel({
   onShowCriteriaChange,
   showAiCheck,
   onShowAiCheckChange,
+  showPodcastNotes,
+  onShowPodcastNotesChange,
+  showTitleGeneration,
+  onShowTitleGenerationChange,
   criteria,
   onCriteriaChange,
   parametersPrefs,
@@ -497,6 +507,10 @@ function SidebarsPanel({
   onShowCriteriaChange: (enabled: boolean) => void;
   showAiCheck: boolean;
   onShowAiCheckChange: (enabled: boolean) => void;
+  showPodcastNotes: boolean;
+  onShowPodcastNotesChange: (enabled: boolean) => void;
+  showTitleGeneration: boolean;
+  onShowTitleGenerationChange: (enabled: boolean) => void;
   criteria: string;
   onCriteriaChange: (value: string) => void;
   parametersPrefs: ParametersPrefs;
@@ -645,6 +659,10 @@ function SidebarsPanel({
           onAiEnabledChange={handleAiEnabledChange}
           onShowAiCheckChange={onShowAiCheckChange}
           onAiShowReplaceChange={handleAiShowReplaceChange}
+          showPodcastNotes={showPodcastNotes}
+          onShowPodcastNotesChange={onShowPodcastNotesChange}
+          showTitleGeneration={showTitleGeneration}
+          onShowTitleGenerationChange={onShowTitleGenerationChange}
           onAiConfigChange={(next) => {
             setAiConfig(next);
             syncAiCheckPopoverPrefs(next);
@@ -1757,7 +1775,6 @@ function EncouragementPanel({
         <ToggleRow
           id="encouragement-enabled"
           label="Enable"
-          description="Show a random phrase on a timer."
           checked={prefs.enabled}
           onChange={(enabled) => onChange({ enabled })}
         />
@@ -1907,21 +1924,18 @@ function EditorPanel({
         <ToggleRow
           id="show-document-title"
           label="Title"
-          description="Headline field above the body."
           checked={documentHeaderPrefs.showTitle}
           onChange={(v) => onDocumentHeaderPrefChange({ showTitle: v })}
         />
         <ToggleRow
           id="show-document-subtitle"
           label="Subtitle"
-          description="Optional dek under the title."
           checked={documentHeaderPrefs.showSubtitle}
           onChange={(v) => onDocumentHeaderPrefChange({ showSubtitle: v })}
         />
         <ToggleRow
           id="spellcheck"
           label="Spellcheck"
-          description="Underline misspellings; apply fixes from the menu."
           checked={spellcheckEnabled}
           onChange={onSpellcheckChange}
         />
@@ -1963,10 +1977,6 @@ function EditorPanel({
           }
           maxHeightClass="max-h-[14rem]"
         />
-        <p className="mt-2 text-[11px] leading-relaxed text-muted/70">
-          Shown in an empty document. A random prompt is chosen each time you open Harvy. The
-          default cannot be removed.
-        </p>
       </div>
 
       <CenteredOverlayModal
@@ -2016,14 +2026,12 @@ function EditorPanel({
         <ToggleRow
           id="keep-top-bar-visible-while-typing"
           label="Page Tab Bar"
-          description="Tabs and sidebar toggles stay visible."
           checked={focusVisibilityPrefs.keepTopBarVisibleWhileTyping}
           onChange={(v) => onFocusVisibilityPrefChange({ keepTopBarVisibleWhileTyping: v })}
         />
         <ToggleRow
           id="keep-document-title-visible-while-typing"
           label="Document Name"
-          description="Document title and unsaved indicator."
           checked={focusVisibilityPrefs.keepDocumentTitleVisibleWhileTyping}
           onChange={(v) =>
             onFocusVisibilityPrefChange({ keepDocumentTitleVisibleWhileTyping: v })
@@ -2032,7 +2040,6 @@ function EditorPanel({
         <ToggleRow
           id="keep-bottom-tools-visible-while-typing"
           label="Control Panel"
-          description="Sidebar, timer, and copy controls."
           checked={focusVisibilityPrefs.keepBottomToolsVisibleWhileTyping}
           onChange={(v) => onFocusVisibilityPrefChange({ keepBottomToolsVisibleWhileTyping: v })}
         />
@@ -2075,13 +2082,9 @@ function ParametersFields({
       </li>
 
       <li>
-        <label className="flex items-start justify-between gap-4 px-3.5 py-3">
+        <label className="flex items-center justify-between gap-4 px-3.5 py-3">
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium text-ink">Words per minute</p>
-            <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-              Reading-time estimate. Suggested {SUGGESTED_READING_WPM_MIN}–
-              {SUGGESTED_READING_WPM_MAX}.
-            </p>
           </div>
           <input
             type="number"
@@ -2265,6 +2268,41 @@ function ExportPanel({
   );
 }
 
+function HeadlinePromptSettings() {
+  const [prompt, setPrompt] = useState(() => readHeadlineStylePrompt());
+  const isDefault = prompt === DEFAULT_HEADLINE_STYLE_PROMPT;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted/55">
+          Headline prompt
+        </span>
+        <button
+          type="button"
+          disabled={isDefault}
+          onClick={() => setPrompt(resetHeadlineStylePrompt())}
+          className="text-[12px] font-medium text-ink/80 transition-colors hover:text-ink disabled:cursor-default disabled:text-muted/40"
+        >
+          Reset
+        </button>
+      </div>
+      <textarea
+        value={prompt}
+        onChange={(event) => {
+          const next = event.target.value;
+          setPrompt(next);
+          writeHeadlineStylePrompt(next);
+        }}
+        rows={8}
+        spellCheck={false}
+        aria-label="Headline prompt"
+        className={`min-h-[9rem] w-full resize-y ${SETTINGS_FIELD_INPUT}`}
+      />
+    </div>
+  );
+}
+
 function AiCheckExpandableSettings({
   aiConfig,
   aiToggleError,
@@ -2272,6 +2310,10 @@ function AiCheckExpandableSettings({
   onAiEnabledChange,
   onShowAiCheckChange,
   onAiShowReplaceChange,
+  showPodcastNotes,
+  onShowPodcastNotesChange,
+  showTitleGeneration,
+  onShowTitleGenerationChange,
   onAiConfigChange,
 }: {
   aiConfig: AiCheckConfigPublic | null;
@@ -2280,9 +2322,15 @@ function AiCheckExpandableSettings({
   onAiEnabledChange: (enabled: boolean) => void;
   onShowAiCheckChange: (enabled: boolean) => void;
   onAiShowReplaceChange: (enabled: boolean) => void;
+  showPodcastNotes: boolean;
+  onShowPodcastNotesChange: (enabled: boolean) => void;
+  showTitleGeneration: boolean;
+  onShowTitleGenerationChange: (enabled: boolean) => void;
   onAiConfigChange: (config: AiCheckConfigPublic) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [titlePromptExpanded, setTitlePromptExpanded] = useState(false);
+  const aiReady = isTauriRuntime() && Boolean(aiConfig?.hasApiKey && aiConfig?.enabled);
 
   return (
     <div className={SETTINGS_BOX_EXPANDABLE}>
@@ -2313,15 +2361,37 @@ function AiCheckExpandableSettings({
             label="Show AI Check"
             checked={showAiCheck}
             onChange={onShowAiCheckChange}
-            disabled={!isTauriRuntime() || !aiConfig?.hasApiKey || !aiConfig?.enabled}
+            disabled={!aiReady}
           />
           <ToggleRow
             id="ai-check-show-replace"
             label="Show In-Line Replacements"
             checked={aiConfig?.showReplaceSuggestions !== false}
             onChange={onAiShowReplaceChange}
-            disabled={!isTauriRuntime() || !aiConfig?.hasApiKey || !aiConfig?.enabled}
+            disabled={!aiReady}
           />
+          <ToggleRow
+            id="enable-podcast-notes"
+            label="Podcast Notes"
+            checked={showPodcastNotes}
+            onChange={onShowPodcastNotesChange}
+            disabled={!aiReady}
+          />
+          <ToggleRow
+            id="enable-title-generation"
+            label="Title Generation"
+            checked={showTitleGeneration}
+            onChange={onShowTitleGenerationChange}
+            disabled={!aiReady}
+            expanded={titlePromptExpanded}
+            onExpandToggle={() => setTitlePromptExpanded((current) => !current)}
+            expandLabel="Headline prompt"
+          />
+          {titlePromptExpanded ? (
+            <li className="px-3.5 pb-3 pt-1">
+              <HeadlinePromptSettings />
+            </li>
+          ) : null}
         </ul>
         {aiToggleError ? (
           <p className="text-[12px] text-red-600/90 dark:text-red-400/90">{aiToggleError}</p>
