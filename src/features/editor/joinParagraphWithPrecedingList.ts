@@ -57,6 +57,11 @@ function isInsideListItem($from: ResolvedPos): boolean {
   return findListItemAtCursor($from) != null;
 }
 
+function isListNode(node: PMNode | null | undefined): boolean {
+  const name = node?.type.name;
+  return name === "bulletList" || name === "orderedList";
+}
+
 type JoinTarget = {
   blockStart: number;
   blockEnd: number;
@@ -74,8 +79,14 @@ function resolveJoinTarget(state: EditorState): JoinTarget | null {
 
   const blockStart = $from.before($from.depth);
   const blockEnd = $from.after($from.depth);
-  const previousTextEnd = findPreviousListItemTextblockEnd(state.doc, blockStart);
   const paragraphEmpty = isParagraphEffectivelyEmpty($from.parent);
+  // Only merge when this paragraph sits directly after a list. A body block
+  // between the list and this paragraph must keep the caret.
+  const topIndex = $from.index(0);
+  const previousTopLevel = topIndex > 0 ? $from.node(0).child(topIndex - 1) : null;
+  if (!isListNode(previousTopLevel)) return null;
+
+  const previousTextEnd = findPreviousListItemTextblockEnd(state.doc, blockStart);
   const insideList = isInsideListItem($from);
 
   if (previousTextEnd == null || previousTextEnd >= blockStart) return null;
