@@ -119,8 +119,8 @@ export function OpenWindowsBar({
                     key={item.id}
                     className={
                       active
-                        ? "group relative z-10 box-border flex w-[160px] shrink-0 items-stretch rounded-t-none rounded-b-none bg-stage px-0"
-                        : "group relative z-0 flex w-[160px] shrink-0 items-stretch rounded-none bg-transparent text-muted/40 transition-colors hover:bg-ink/[0.03] hover:text-muted/65"
+                        ? "group relative z-10 box-border flex w-[160px] shrink-0 items-stretch rounded-t-none rounded-b-none bg-stage pl-0 pr-2"
+                        : "group relative z-0 flex w-[160px] shrink-0 items-stretch rounded-none bg-transparent pr-2 text-muted/40 transition-colors hover:bg-ink/[0.03] hover:text-muted/65"
                     }
                   >
                     <button
@@ -131,18 +131,16 @@ export function OpenWindowsBar({
                       onClick={() => onSelectTab(item.id)}
                       className={
                         active
-                          ? "min-w-0 flex-1 overflow-hidden px-2 py-0.5 text-left text-[11px] font-medium leading-tight text-ink/92"
-                          : "min-w-0 flex-1 overflow-hidden px-2 py-0.5 text-left text-[11px] font-normal leading-tight"
+                          ? "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[11px] font-medium leading-tight text-ink/92 group-hover:pr-6 group-focus-within:pr-6"
+                          : "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[11px] font-normal leading-tight group-hover:pr-6 group-focus-within:pr-6"
                       }
                     >
-                      <span className="inline-flex min-w-0 items-center gap-1">
-                        <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                        {item.isDirty ? (
-                          <span className="shrink-0 text-muted/70" aria-label="Unsaved changes">
-                            •
-                          </span>
-                        ) : null}
-                      </span>
+                      <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                      {item.isDirty ? (
+                        <span className="ml-1 shrink-0 text-muted/70" aria-label="Unsaved changes">
+                          •
+                        </span>
+                      ) : null}
                     </button>
                     <button
                       type="button"
@@ -151,10 +149,10 @@ export function OpenWindowsBar({
                         e.stopPropagation();
                         onCloseTab(item.id);
                       }}
-                      className={`-ml-0.5 shrink-0 rounded px-1 py-0.5 text-[12px] leading-none transition hover:bg-ink/[0.06] ${
+                      className={`absolute top-0 right-2 bottom-0 z-10 flex items-center rounded px-1 text-[12px] leading-none opacity-0 pointer-events-none transition hover:bg-ink/[0.06] group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 ${
                         active
-                          ? "text-accent/70 opacity-90 hover:text-accent group-hover:opacity-100"
-                          : "text-accent/40 opacity-0 hover:text-accent/70 group-hover:opacity-100"
+                          ? "text-accent/70 hover:text-accent"
+                          : "text-accent/40 hover:text-accent/70"
                       }`}
                     >
                       ×
