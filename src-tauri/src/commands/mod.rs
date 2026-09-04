@@ -34,8 +34,54 @@ fn sort_nodes(nodes: &mut [FileNode]) {
     nodes.sort_by(|a, b| match (&a.kind, &b.kind) {
         (NodeKind::Directory, NodeKind::File) => std::cmp::Ordering::Less,
         (NodeKind::File, NodeKind::Directory) => std::cmp::Ordering::Greater,
-        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        _ => cmp_natural_ignore_case(&a.name, &b.name),
     });
+}
+
+/// Compare names so digit runs use their full numeric value (`6:7` before `6:14`).
+fn cmp_natural_ignore_case(a: &str, b: &str) -> std::cmp::Ordering {
+    let a = a.to_lowercase();
+    let b = b.to_lowercase();
+    let a = a.as_bytes();
+    let b = b.as_bytes();
+    let mut i = 0usize;
+    let mut j = 0usize;
+    while i < a.len() && j < b.len() {
+        if a[i].is_ascii_digit() && b[j].is_ascii_digit() {
+            while i < a.len() && a[i] == b'0' {
+                i += 1;
+            }
+            while j < b.len() && b[j] == b'0' {
+                j += 1;
+            }
+            let start_a = i;
+            let start_b = j;
+            while i < a.len() && a[i].is_ascii_digit() {
+                i += 1;
+            }
+            while j < b.len() && b[j].is_ascii_digit() {
+                j += 1;
+            }
+            let len_a = i - start_a;
+            let len_b = j - start_b;
+            if len_a != len_b {
+                return len_a.cmp(&len_b);
+            }
+            match a[start_a..i].cmp(&b[start_b..j]) {
+                std::cmp::Ordering::Equal => {}
+                other => return other,
+            }
+        } else {
+            match a[i].cmp(&b[j]) {
+                std::cmp::Ordering::Equal => {
+                    i += 1;
+                    j += 1;
+                }
+                other => return other,
+            }
+        }
+    }
+    a.len().cmp(&b.len())
 }
 
 fn build_tree(path: &Path, depth: usize, root_label: &str) -> Result<FileNode, String> {
@@ -808,4 +854,26 @@ pub fn write_user_editor_rules(app: AppHandle, contents: String) -> Result<(), S
     let path = user_rules_path(&app)?;
     fs::write(&path, contents)
         .map_err(|e| format!("Could not write user rules '{}': {}", path.display(), e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cmp_natural_ignore_case;
+    use std::cmp::Ordering;
+
+    #[test]
+    fn week_folders_sort_by_full_day_number() {
+        let mut names = vec!["6:14-6:20", "6:21-6:27", "6:28-7:4", "6:7-6:13"];
+        names.sort_by(|a, b| cmp_natural_ignore_case(a, b));
+        assert_eq!(
+            names,
+            vec!["6:7-6:13", "6:14-6:20", "6:21-6:27", "6:28-7:4"]
+        );
+    }
+
+    #[test]
+    fn seven_comes_before_fourteen() {
+        assert_eq!(cmp_natural_ignore_case("6:7", "6:14"), Ordering::Less);
+        assert_eq!(cmp_natural_ignore_case("6:14", "6:7"), Ordering::Greater);
+    }
 }

@@ -1,10 +1,16 @@
 import type { FileNode } from "./types";
 import { findNodeByPath } from "./tree";
 
-const INVALID_CHARS_RE = /[<>:"/\\|?*\u0000-\u001f]/;
+const WINDOWS_INVALID_CHARS_RE = /[<>:"/\\|?*\u0000-\u001f]/;
+const POSIX_INVALID_CHARS_RE = /[/\u0000]/;
 
 /** Windows reserved device names (with or without extension). */
 const WIN_RESERVED_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
+
+function isWindowsPlatform(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Windows/i.test(navigator.userAgent);
+}
 
 /** Parent directory path for a file or folder (best-effort for Windows + POSIX). */
 export function parentDirectory(path: string): string {
@@ -42,16 +48,19 @@ export function splitFileBaseAndExtension(fileName: string): { base: string; ext
 export function sanitizeFileBasename(name: string): string {
   const t = name.trim();
   if (!t) return "";
-  return t.replace(INVALID_CHARS_RE, "-").replace(/[. \u00a0]+$/g, "").trim();
+  const invalid = isWindowsPlatform() ? WINDOWS_INVALID_CHARS_RE : POSIX_INVALID_CHARS_RE;
+  return t.replace(invalid, "-").replace(/[. \u00a0]+$/g, "").trim();
 }
 
 export function validateFolderName(name: string): string | null {
   const t = name.trim();
   if (!t) return "Folder name cannot be empty.";
   if (t === "." || t === "..") return "Invalid folder name.";
-  if (INVALID_CHARS_RE.test(t)) return "This name contains characters that are not allowed on this system.";
+  const windows = isWindowsPlatform();
+  const invalid = windows ? WINDOWS_INVALID_CHARS_RE : POSIX_INVALID_CHARS_RE;
+  if (invalid.test(t)) return "This name contains characters that are not allowed on this system.";
   if (/[. \u00a0]$/.test(t)) return "Name cannot end with a space or dot.";
-  if (WIN_RESERVED_RE.test(t)) return "This name is reserved on Windows.";
+  if (windows && WIN_RESERVED_RE.test(t)) return "This name is reserved on Windows.";
   return null;
 }
 

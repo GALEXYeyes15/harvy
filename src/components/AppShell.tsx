@@ -113,6 +113,7 @@ import {
   splitFileBaseAndExtension,
   validateFolderName,
 } from "../features/workspace/folderNaming";
+import { finderNameToPosixSegment, posixSegmentToFinderName } from "../features/workspace/finderFileNames";
 import {
   browsePathFromFolderSegments,
   filterFileTree,
@@ -2078,7 +2079,7 @@ export function AppShell() {
     }
     const fr = folderRenameRef.current;
     if (!fr) return;
-    const next = fr.draft.trim();
+    const next = finderNameToPosixSegment(fr.draft.trim());
     const err = validateFolderName(next);
     if (err) {
       window.alert(err);
@@ -2124,7 +2125,11 @@ export function AppShell() {
       const bn = fileNameFromPath(newPath);
       setExpandedPaths((prev) => new Set([...prev, parent]));
       setSelectedPath(newPath);
-      const st = { path: newPath, draft: bn, originalBasename: bn };
+      const st = {
+        path: newPath,
+        draft: posixSegmentToFinderName(bn),
+        originalBasename: bn,
+      };
       folderRenameRef.current = st;
       setFolderRename(st);
     } catch (e) {

@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useState } from "react";
 import { FolderOpen, FolderPlus, Settings } from "lucide-react";
 import { APP_NAME } from "../lib/constants";
+import { posixSegmentToFinderName } from "../features/workspace/finderFileNames";
 import { WorkspaceTree, WORKSPACE_ROW_SHELL_UNSELECTED } from "./WorkspaceTree";
 import type { FileNode } from "../features/workspace/types";
 
@@ -11,8 +12,9 @@ const CRUMB_BTN =
   "max-w-[min(100%,7rem)] truncate rounded px-0.5 text-left text-muted/55 transition-colors hover:bg-ink/[0.04] hover:text-muted sm:max-w-[10rem]";
 
 function getDisplayBreadcrumbs(volumeLabel: string, rootDisplay: string, folderSegments: string[]) {
-  if (!folderSegments.length) return [volumeLabel, rootDisplay];
-  return [volumeLabel, "...", folderSegments[folderSegments.length - 1]!];
+  const finderSegments = folderSegments.map((segment) => posixSegmentToFinderName(segment));
+  if (!finderSegments.length) return [volumeLabel, posixSegmentToFinderName(rootDisplay)];
+  return [volumeLabel, "...", finderSegments[finderSegments.length - 1]!];
 }
 
 /** Breadcrumb: drive root only, or `drive / folder`, or `drive / … / leaf`. Full path stays in `title`. */
@@ -136,8 +138,8 @@ export function SidebarLeft({
 
   const isWorkspaceRoot = breadcrumbFolderSegments.length === 0;
   const currentFolderTitle = isWorkspaceRoot
-    ? breadcrumbRootDisplayLabel
-    : breadcrumbFolderSegments[breadcrumbFolderSegments.length - 1]!;
+    ? posixSegmentToFinderName(breadcrumbRootDisplayLabel)
+    : posixSegmentToFinderName(breadcrumbFolderSegments[breadcrumbFolderSegments.length - 1]!);
   /** UI-only; breadcrumb state unchanged. */
   const displayFolderTitle = currentFolderTitle ? `/${currentFolderTitle}` : "";
   const canStepUpWorkspace = !isWorkspaceRoot;
@@ -167,7 +169,11 @@ export function SidebarLeft({
             <nav
               aria-label="Workspace path"
               className="min-w-0 flex-1 truncate text-[10px] font-normal leading-relaxed tracking-wide text-muted/55"
-              title={[breadcrumbVolumeLabel, breadcrumbRootDisplayLabel, ...breadcrumbFolderSegments].join(" / ")}
+              title={[
+                breadcrumbVolumeLabel,
+                posixSegmentToFinderName(breadcrumbRootDisplayLabel),
+                ...breadcrumbFolderSegments.map((segment) => posixSegmentToFinderName(segment)),
+              ].join(" / ")}
             >
               <ShortWorkspaceBreadcrumb
                 volumeLabel={breadcrumbVolumeLabel}

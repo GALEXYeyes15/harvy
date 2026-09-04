@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from "react";
 import { isTauriRuntime } from "../features/save/saveRuntime";
 import { setWorkspaceImageDragData } from "../features/editor/imageDrop";
 import { armSidebarImagePointerDrag } from "../features/editor/sidebarImageDrag";
+import { posixSegmentToFinderName } from "../features/workspace/finderFileNames";
 import { isImagePreviewable } from "../features/workspace/tree";
 import { WorkspaceNodeIcon } from "../features/workspace/nodeIcon";
 import type { FileNode } from "../features/workspace/types";
@@ -55,6 +56,7 @@ export function WorkspaceTree({
   const isSelected = selectedPath === node.path;
   const isRenaming = Boolean(isDirectory && renamingPath === node.path);
   const isDraggableImage = !isDirectory && isImagePreviewable(node.path);
+  const displayName = posixSegmentToFinderName(node.name);
 
   const rowShell = isSelected
     ? "relative flex w-full min-w-0 items-center overflow-hidden rounded-md bg-ink/[0.045] px-2 py-[5px] text-[12px] text-ink"
@@ -160,13 +162,13 @@ export function WorkspaceTree({
             ) : (
               <WorkspaceNodeIcon node={node} isExpanded={isExpanded} selected={isSelected} />
             )}
-            <span className="min-w-0 flex-1 truncate leading-snug">{node.name}</span>
+            <span className="min-w-0 flex-1 truncate leading-snug">{displayName}</span>
           </button>
           <div className="flex h-6 w-10 shrink-0 items-center justify-end">
             {isDirectory && onOpenFolder ? (
               <button
                 type="button"
-                aria-label={`Open folder ${node.name}`}
+                aria-label={`Open folder ${displayName}`}
                 className={`rounded px-1.5 py-0.5 text-[10px] font-medium text-muted/65 transition-opacity duration-75 ease-out hover:bg-ink/[0.06] hover:text-ink ${
                   isThisRowHovered
                     ? "visible opacity-100 pointer-events-auto"
