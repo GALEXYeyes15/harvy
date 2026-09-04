@@ -81,7 +81,7 @@ import { documentTextForStats, ingestTextFileContent } from "../features/editor/
 import { setFileMenuHandlers } from "../features/menu/fileMenuBridge";
 import { setupNativeAppMenu } from "../features/menu/setupNativeAppMenu";
 import { setupWindowDragRegions } from "../features/window/setupWindowDragRegions";
-import { isEditableKeyboardTarget } from "../lib/isEditableKeyboardTarget";
+import { isDocumentNameKeyboardTarget, isEditableKeyboardTarget } from "../lib/isEditableKeyboardTarget";
 import { formatHotkeyChord, matchSidebarToggleHotkey } from "../features/settings/hotkeys";
 import {
   emitNotesPopoutState,
@@ -154,6 +154,8 @@ import {
   normalizeMarkdownSavePath,
   normalizePdfSavePath,
   resolveSaveAsOutputPath,
+  resolveRenamedDocumentPath,
+  suggestedSaveAsFileName,
   validateSaveAsOutputPath,
 } from "../features/save/saveRuntime";
 import {
@@ -289,21 +291,39 @@ function createUntitledWorkspaceDocument(id: string): WorkspaceDocument {
 }
 
 function isDocumentDirty(doc: WorkspaceDocument): boolean {
+  const titleBase = splitFileBaseAndExtension(doc.title.trim() || "Untitled").base || "Untitled";
+  const diskBase = doc.sourcePath.trim()
+    ? splitFileBaseAndExtension(fileNameFromPath(doc.sourcePath)).base || ""
+    : null;
+  const fileNameChanged = diskBase != null && diskBase !== titleBase;
+
   return (
     doc.content !== doc.lastSavedContent ||
     doc.notes !== doc.lastSavedNotes ||
     doc.criteria !== doc.lastSavedCriteria ||
     doc.postTitle !== doc.lastSavedPostTitle ||
-    doc.subtitle !== doc.lastSavedSubtitle
+    doc.subtitle !== doc.lastSavedSubtitle ||
+    fileNameChanged
   );
 }
 
-function markdownForDisk(body: string, doc: WorkspaceDocument | null | undefined): string {
+function markdownForDisk(
+  body: string,
+  doc: Pick<WorkspaceDocument, "postTitle" | "subtitle"> | null | undefined,
+): string {
   return serializeDocumentWithFrontmatter(body, {
     postTitle: doc?.postTitle ?? "",
     subtitle: doc?.subtitle ?? "",
   });
 }
+
+type TitleRenameResult = {
+  ok: boolean;
+  id?: string;
+  title?: string;
+  sourcePath?: string;
+  postTitle?: string;
+};
 
 function getFolderSegmentsRelativeToRoot(rootPath: string, targetPath: string): string[] | null {
   const normalize = (value: string) => value.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -395,6 +415,13 @@ export function AppShell() {
   const [scratchLastSavedContent, setScratchLastSavedContent] = useState("");
   /** Display name for the scratch buffer (no tab row); shown in the document header. */
   const [scratchDocumentTitle, setScratchDocumentTitle] = useState("Untitled");
+  /** Inline rename draft so Notes pop-out can follow typing before commit. */
+  const [titleRenameDraft, setTitleRenameDraft] = useState<string | null>(null);
+  const applyTitleRenameRef = useRef<
+    (rawBase: string) => Promise<TitleRenameResult>
+  >(async () => ({ ok: false }));
+  const titleRenameDraftRef = useRef<string | null>(null);
+  titleRenameDraftRef.current = titleRenameDraft;
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredThemeMode());
   const [appearanceStyleId, setAppearanceStyleId] = useState<AppearanceStyleId>(
     () => readStoredAppearanceStyleId(),
@@ -653,9 +680,50 @@ export function AppShell() {
   const hideWorkspaceSectionRail = focusModeActive || isTopChromeHidden;
   const openTabIdsRef = useRef(openTabIds);
   const activeTabIdRef = useRef(activeTabId);
+  const openDocumentsRef = useRef(openDocuments);
+  const scratchDocumentTitleRef = useRef(scratchDocumentTitle);
+  const scratchDiskPathRef = useRef(scratchDiskPath);
   const handleCreateMarkdownFileRef = useRef<() => Promise<void>>(async () => {});
   openTabIdsRef.current = openTabIds;
   activeTabIdRef.current = activeTabId;
+  openDocumentsRef.current = openDocuments;
+  scratchDocumentTitleRef.current = scratchDocumentTitle;
+  scratchDiskPathRef.current = scratchDiskPath;
+
+  const currentTitleRenameSnapshot = useCallback((): TitleRenameResult => {
+    const id = activeTabIdRef.current;
+    if (id) {
+      const doc = openDocumentsRef.current[id];
+      if (doc) {
+        return {
+          ok: true,
+          id: doc.id,
+          title: doc.title,
+          sourcePath: doc.sourcePath,
+          postTitle: doc.postTitle,
+        };
+      }
+    }
+    const title = scratchDocumentTitleRef.current;
+    return {
+      ok: true,
+      id: "",
+      title,
+      sourcePath: scratchDiskPathRef.current ?? "",
+      postTitle: splitFileBaseAndExtension(title).base || "Untitled",
+    };
+  }, []);
+
+  const flushPendingTitleRename = useCallback(async (): Promise<TitleRenameResult> => {
+    const draft = titleRenameDraftRef.current;
+    if (draft === null) return currentTitleRenameSnapshot();
+    const result = await applyTitleRenameRef.current(draft);
+    if (result.ok) {
+      setTitleRenameDraft(null);
+      titleRenameDraftRef.current = null;
+    }
+    return result;
+  }, [currentTitleRenameSnapshot]);
 
   const editorTypingActivityHandlerRef = useRef<(() => void) | null>(null);
   const bothSidebarsClosed = !isWorkspaceSidebarOpen && !readabilityPanelOpen;
@@ -1018,19 +1086,36 @@ export function AppShell() {
     activeDocument?.content ?? (openTabIds.length === 0 ? scratchDraftContent : "");
 
   const isDirty = useMemo(() => {
+    const editorTitleBase = splitFileBaseAndExtension(
+      activeDocument?.title ?? (openTabIds.length === 0 ? scratchDocumentTitle : "Untitled"),
+    ).base || "Untitled";
+    const pendingRename =
+      titleRenameDraft !== null && titleRenameDraft.trim() !== editorTitleBase;
+
     if (activeTabId && activeDocument) {
-      return isDocumentDirty(activeDocument);
+      return pendingRename || isDocumentDirty(activeDocument);
     }
     if (openTabIds.length === 0) {
-      return scratchDraftContent !== scratchLastSavedContent;
+      const scratchSavedBase = scratchDiskPath
+        ? splitFileBaseAndExtension(fileNameFromPath(scratchDiskPath)).base || "Untitled"
+        : "Untitled";
+      const scratchRenamed = editorTitleBase !== scratchSavedBase;
+      return (
+        pendingRename ||
+        scratchRenamed ||
+        scratchDraftContent !== scratchLastSavedContent
+      );
     }
-    return false;
+    return pendingRename;
   }, [
     activeTabId,
     activeDocument,
     openTabIds.length,
     scratchDraftContent,
     scratchLastSavedContent,
+    scratchDocumentTitle,
+    scratchDiskPath,
+    titleRenameDraft,
   ]);
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
@@ -1262,7 +1347,7 @@ export function AppShell() {
   );
 
   const openSaveAsModal = useCallback(
-    (opts?: { purpose?: "document" | "podcast-notes" }) => {
+    async (opts?: { purpose?: "document" | "podcast-notes"; fileName?: string }) => {
       if (!isTauriRuntime()) {
         window.alert("Save As is only available in the Harvy desktop app.");
         return;
@@ -1279,13 +1364,14 @@ export function AppShell() {
           return;
         }
       }
-      const titleFromFile =
-        activeDocument?.title ?? (openTabIds.length === 0 ? scratchDocumentTitle : "Untitled");
-      const titleBase =
-        activeDocument?.postTitle.trim() ||
-        splitFileBaseAndExtension(titleFromFile).base ||
-        "Untitled";
-      const suggestedFileName = defaultSaveFileName(titleBase);
+      const flushed = await flushPendingTitleRename();
+      if (!flushed.ok) return;
+      const suggestedFileName =
+        opts?.fileName ??
+        suggestedSaveAsFileName({
+          fileTitle: flushed.title,
+          postTitle: flushed.postTitle,
+        });
       editorFocusBeforeSaveAsRef.current = editorFocusSuppressedRef.current;
       visuallyDeactivateEditor(tiptapEditor);
       setEditorInactive(true);
@@ -1297,9 +1383,6 @@ export function AppShell() {
     },
     [
       editorEditable,
-      activeDocument,
-      openTabIds.length,
-      scratchDocumentTitle,
       workspaceBrowsePath,
       supportedTree?.path,
       hasWorkspaceFolder,
@@ -1307,6 +1390,7 @@ export function AppShell() {
       setEditorInactive,
       aiCheckConfig?.enabled,
       aiCheckConfig?.hasApiKey,
+      flushPendingTitleRename,
     ],
   );
 
@@ -1422,9 +1506,13 @@ export function AppShell() {
           if (!ok) return;
         }
 
+        const titleForDisk = documentTitleBaseFromSaveAsFileName(fileName);
         await invoke("write_text_file", {
           path: outPath,
-          contents: markdownForDisk(markdown, activeDocument),
+          contents: markdownForDisk(markdown, {
+            postTitle: titleForDisk,
+            subtitle: activeDocument?.subtitle ?? "",
+          }),
         });
         if (folderContext.hasNotes) {
           await saveDocumentNotes(outPath, activeDocument?.notes ?? "");
@@ -1584,19 +1672,63 @@ export function AppShell() {
       return;
     }
     if (!editorEditable) return;
-    if (!isDirty) return;
+
+    const draft = titleRenameDraftRef.current;
+    const before = currentTitleRenameSnapshot();
+    const currentTitleBase =
+      splitFileBaseAndExtension(before.title ?? "Untitled").base || "Untitled";
+    const hasPendingRename = draft !== null && draft.trim() !== currentTitleBase;
+    if (!isDirty && !hasPendingRename) return;
+
+    const flushed = await flushPendingTitleRename();
+    if (!flushed.ok) return;
+
+    const liveDoc =
+      activeTabId && activeDocument
+        ? {
+            ...activeDocument,
+            id: flushed.id || activeDocument.id,
+            title: flushed.title ?? activeDocument.title,
+            sourcePath: flushed.sourcePath ?? activeDocument.sourcePath,
+            postTitle: flushed.postTitle ?? activeDocument.postTitle,
+          }
+        : null;
+    const docId = liveDoc?.id || activeTabId;
 
     try {
-      if (activeTabId && activeDocument) {
-        const path = activeDocument.sourcePath;
-        if (!path) {
-          openSaveAsModal();
+      if (docId && liveDoc) {
+        const originalPath = liveDoc.sourcePath;
+        if (!originalPath) {
+          await openSaveAsModal({
+            fileName: suggestedSaveAsFileName({
+              fileTitle: flushed.title,
+              postTitle: flushed.postTitle,
+            }),
+          });
           return;
         }
-        let markdown = getDocumentMarkdown(tiptapEditor, activeDocument.content);
+        let path = originalPath;
+        const renamedPath = resolveRenamedDocumentPath(
+          path,
+          liveDoc.title || liveDoc.postTitle,
+        );
+        if (renamedPath) {
+          const exists = await invoke<boolean>("path_exists", { path: renamedPath });
+          if (exists) {
+            window.alert(
+              `"${fileNameFromPath(renamedPath)}" already exists at this location.`,
+            );
+            return;
+          }
+          await invoke("rename_fs_path", { fromPath: path, toPath: renamedPath });
+          await renameDocumentNotesSidecar(path, renamedPath);
+          await renameDocumentCriteriaSidecar(path, renamedPath);
+          path = renamedPath;
+        }
+        let markdown = getDocumentMarkdown(tiptapEditor, liveDoc.content);
         const folderContext = getProjectStructure({
-          notes: activeDocument.notes,
-          criteria: activeDocument.criteria,
+          notes: liveDoc.notes,
+          criteria: liveDoc.criteria,
           editor: tiptapEditor,
           documentMarkdown: markdown,
         });
@@ -1651,31 +1783,54 @@ export function AppShell() {
 
         await invoke("write_text_file", {
           path: outPath,
-          contents: markdownForDisk(markdown, activeDocument),
+          contents: markdownForDisk(markdown, liveDoc),
         });
-        await saveDocumentNotes(outPath, activeDocument.notes);
-        await saveDocumentCriteria(outPath, activeDocument.criteria);
-        if (outPath !== path) {
+        await saveDocumentNotes(outPath, liveDoc.notes);
+        await saveDocumentCriteria(outPath, liveDoc.criteria);
+        if (outPath !== originalPath) {
           finalizeSavedPath(outPath, markdown);
           await reloadWorkspaceTree();
         } else {
-          setOpenDocuments((prev) => ({
-            ...prev,
-            [activeTabId]: {
-              ...prev[activeTabId]!,
-              content: markdown,
-              lastSavedContent: markdown,
-              lastSavedPostTitle: activeDocument.postTitle,
-              lastSavedSubtitle: activeDocument.subtitle,
-              lastSavedNotes: activeDocument.notes,
-              lastSavedCriteria: activeDocument.criteria,
-            },
-          }));
+          setOpenDocuments((prev) => {
+            const current = prev[docId] ?? prev[activeTabId!];
+            if (!current) return prev;
+            return {
+              ...prev,
+              [current.id]: {
+                ...current,
+                content: markdown,
+                lastSavedContent: markdown,
+                lastSavedPostTitle: liveDoc.postTitle,
+                lastSavedSubtitle: liveDoc.subtitle,
+                lastSavedNotes: liveDoc.notes,
+                lastSavedCriteria: liveDoc.criteria,
+              },
+            };
+          });
         }
         return;
       }
       if (openTabIds.length === 0) {
-        if (scratchDiskPath) {
+        const originalDiskPath = flushed.sourcePath || scratchDiskPath;
+        if (originalDiskPath) {
+          let diskPath = originalDiskPath;
+          const renamedScratchPath = resolveRenamedDocumentPath(
+            diskPath,
+            flushed.title ?? scratchDocumentTitleRef.current,
+          );
+          if (renamedScratchPath) {
+            const exists = await invoke<boolean>("path_exists", { path: renamedScratchPath });
+            if (exists) {
+              window.alert(
+                `"${fileNameFromPath(renamedScratchPath)}" already exists at this location.`,
+              );
+              return;
+            }
+            await invoke("rename_fs_path", { fromPath: diskPath, toPath: renamedScratchPath });
+            diskPath = renamedScratchPath;
+            scratchDiskPathRef.current = renamedScratchPath;
+            setScratchDiskPath(renamedScratchPath);
+          }
           let markdown = getDocumentMarkdown(tiptapEditor, scratchDraftContent);
           const folderContext = getProjectStructure({
             notes: "",
@@ -1683,11 +1838,11 @@ export function AppShell() {
             editor: tiptapEditor,
             documentMarkdown: markdown,
           });
-          let outPath = scratchDiskPath;
+          let outPath = diskPath;
           if (folderContext.hasImages && workspaceRootPath) {
-            let projectDir = resolveProjectDirectory(scratchDiskPath);
+            let projectDir = resolveProjectDirectory(diskPath);
             if (!projectDir) {
-              openSaveAsModal();
+              await openSaveAsModal();
               return;
             }
             const { replacements } = await packageDocumentImages({
@@ -1696,16 +1851,27 @@ export function AppShell() {
               sources: collectEmbeddedImageSrcs(tiptapEditor, markdown),
             });
             markdown = applyImageSrcRewrites(tiptapEditor, markdown, replacements);
-            outPath = scratchDiskPath;
+            outPath = diskPath;
           }
           await invoke("write_text_file", {
             path: outPath,
-            contents: markdownForDisk(markdown, null),
+            contents: markdownForDisk(markdown, {
+              postTitle: flushed.postTitle ?? currentTitleBase,
+              subtitle: "",
+            }),
           });
           setScratchLastSavedContent(markdown);
           setScratchDraftContent(markdown);
+          if (outPath !== originalDiskPath) {
+            await reloadWorkspaceTree();
+          }
         } else {
-          openSaveAsModal();
+          await openSaveAsModal({
+            fileName: suggestedSaveAsFileName({
+              fileTitle: flushed.title,
+              postTitle: flushed.postTitle,
+            }),
+          });
         }
       }
     } catch (e) {
@@ -1725,6 +1891,8 @@ export function AppShell() {
     workspaceRootPath,
     finalizeSavedPath,
     reloadWorkspaceTree,
+    flushPendingTitleRename,
+    currentTitleRenameSnapshot,
   ]);
 
   /** Keep sidebar selection aligned with the open tab’s file; virtual tabs use browse/root, not the synthetic id. */
@@ -1795,7 +1963,7 @@ export function AppShell() {
     const onKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
-      if (isEditableKeyboardTarget(e.target)) return;
+      if (isEditableKeyboardTarget(e.target) && !isDocumentNameKeyboardTarget(e.target)) return;
       const el = e.target as HTMLElement | null;
       if (el?.closest('[role="dialog"]')) return;
       if (el?.closest("[data-floating-text-menu]")) return;
@@ -2145,8 +2313,6 @@ export function AppShell() {
     ? documentTitleBaseFromSaveAsFileName(saveAsLiveFileName)
     : splitFileBaseAndExtension(editorTitle).base || "Untitled";
 
-  /** Inline rename draft so Notes pop-out can follow typing before commit. */
-  const [titleRenameDraft, setTitleRenameDraft] = useState<string | null>(null);
   const notesDocumentTitle =
     titleRenameDraft !== null
       ? titleRenameDraft.trim() || "Untitled"
@@ -2438,27 +2604,55 @@ export function AppShell() {
     [tiptapEditor, editorEditable],
   );
 
-  const commitActiveDocumentTitleRename = useCallback(
-    async (rawBase: string): Promise<boolean> => {
-      if (openTabIds.length === 0) {
-        const displayLabel = scratchDocumentTitle.trim() || "Untitled";
+  const applyActiveDocumentTitleRename = useCallback(
+    async (rawBase: string): Promise<TitleRenameResult> => {
+      if (openTabIdsRef.current.length === 0) {
+        const displayLabel = scratchDocumentTitleRef.current.trim() || "Untitled";
         const { base: displayBase, extWithDot } = splitFileBaseAndExtension(displayLabel);
         let nextBase = sanitizeFileBasename(rawBase);
         if (!nextBase) nextBase = "Untitled";
-        if (nextBase === displayBase) return true;
+        const diskPath = scratchDiskPathRef.current;
+        if (nextBase === displayBase) {
+          return {
+            ok: true,
+            id: "",
+            title: displayLabel,
+            sourcePath: diskPath ?? "",
+            postTitle: nextBase,
+          };
+        }
         const nameErr = validateFolderName(nextBase);
         if (nameErr) {
           window.alert(nameErr);
-          return false;
+          return { ok: false };
         }
         const newTitle = extWithDot ? `${nextBase}${extWithDot}` : nextBase;
+        let nextPath = diskPath ?? "";
+        if (isTauriRuntime() && diskPath) {
+          const pathBasename = fileNameFromPath(diskPath);
+          const { extWithDot: diskExt } = splitFileBaseAndExtension(pathBasename);
+          const newFileName = diskExt ? `${nextBase}${diskExt}` : nextBase;
+          const targetPath = joinPath(parentDirectory(diskPath), newFileName);
+          if (targetPath !== diskPath) {
+            try {
+              await invoke("rename_fs_path", { fromPath: diskPath, toPath: targetPath });
+            } catch (e) {
+              window.alert(e instanceof Error ? e.message : String(e));
+              return { ok: false };
+            }
+            nextPath = targetPath;
+            scratchDiskPathRef.current = targetPath;
+            setScratchDiskPath(targetPath);
+          }
+        }
+        scratchDocumentTitleRef.current = newTitle;
         setScratchDocumentTitle(newTitle);
-        return true;
+        return { ok: true, id: "", title: newTitle, sourcePath: nextPath, postTitle: nextBase };
       }
 
-      const id = activeTabId;
-      const doc = id ? openDocuments[id] : null;
-      if (!id || !doc) return false;
+      const id = activeTabIdRef.current;
+      const doc = id ? openDocumentsRef.current[id] : null;
+      if (!id || !doc) return { ok: false };
 
       const pathBasename = doc.sourcePath.trim()
         ? fileNameFromPath(doc.sourcePath)
@@ -2469,21 +2663,30 @@ export function AppShell() {
       let nextBase = sanitizeFileBasename(rawBase);
       if (!nextBase) nextBase = "Untitled";
       if (nextBase === displayBase) {
-        // File/tab name already matches; still keep in-document Title aligned.
         if (doc.postTitle !== nextBase) {
+          const aligned = { ...doc, postTitle: nextBase };
+          openDocumentsRef.current = { ...openDocumentsRef.current, [id]: aligned };
           setOpenDocuments((prev) => {
             const d = prev[id];
             if (!d) return prev;
-            return { ...prev, [id]: { ...d, postTitle: nextBase } };
+            const next = { ...prev, [id]: { ...d, postTitle: nextBase } };
+            openDocumentsRef.current = next;
+            return next;
           });
         }
-        return true;
+        return {
+          ok: true,
+          id,
+          title: displayLabel,
+          sourcePath: doc.sourcePath,
+          postTitle: nextBase,
+        };
       }
 
       const nameErr = validateFolderName(nextBase);
       if (nameErr) {
         window.alert(nameErr);
-        return false;
+        return { ok: false };
       }
 
       const canRenameOnDisk = isTauriRuntime() && Boolean(doc.sourcePath.trim());
@@ -2491,12 +2694,18 @@ export function AppShell() {
       if (!canRenameOnDisk) {
         const { extWithDot: displayExt } = splitFileBaseAndExtension(displayLabel);
         const newTitle = displayExt ? `${nextBase}${displayExt}` : nextBase;
+        openDocumentsRef.current = {
+          ...openDocumentsRef.current,
+          [id]: { ...doc, title: newTitle, postTitle: nextBase },
+        };
         setOpenDocuments((prev) => {
           const d = prev[id];
-          if (!d || (d.title === newTitle && d.postTitle === nextBase)) return prev;
-          return { ...prev, [id]: { ...d, title: newTitle, postTitle: nextBase } };
+          if (!d) return prev;
+          const next = { ...prev, [id]: { ...d, title: newTitle, postTitle: nextBase } };
+          openDocumentsRef.current = next;
+          return next;
         });
-        return true;
+        return { ok: true, id, title: newTitle, sourcePath: doc.sourcePath, postTitle: nextBase };
       }
 
       const { extWithDot } = splitFileBaseAndExtension(pathBasename || displayLabel);
@@ -2504,7 +2713,9 @@ export function AppShell() {
       const sourcePath = doc.sourcePath;
       const parent = parentDirectory(sourcePath);
       const targetPath = joinPath(parent, newFileName);
-      if (targetPath === sourcePath) return true;
+      if (targetPath === sourcePath) {
+        return { ok: true, id, title: doc.title, sourcePath, postTitle: nextBase };
+      }
 
       try {
         await invoke("rename_fs_path", { fromPath: sourcePath, toPath: targetPath });
@@ -2512,9 +2723,22 @@ export function AppShell() {
         await renameDocumentCriteriaSidecar(sourcePath, targetPath);
       } catch (e) {
         window.alert(e instanceof Error ? e.message : String(e));
-        return false;
+        return { ok: false };
       }
 
+      const savedTitle = fileNameFromPath(targetPath);
+      const { [id]: _removed, ...rest } = openDocumentsRef.current;
+      openDocumentsRef.current = {
+        ...rest,
+        [targetPath]: {
+          ...doc,
+          id: targetPath,
+          sourcePath: targetPath,
+          title: savedTitle,
+          postTitle: nextBase,
+        },
+      };
+      activeTabIdRef.current = targetPath;
       setOpenDocuments((prev) => {
         const d = prev[id];
         if (!d) return prev;
@@ -2522,27 +2746,36 @@ export function AppShell() {
           ...d,
           id: targetPath,
           sourcePath: targetPath,
-          title: fileNameFromPath(targetPath),
+          title: savedTitle,
           postTitle: nextBase,
         };
-        const { [id]: _removed, ...rest } = prev;
-        return { ...rest, [targetPath]: nextDoc };
+        const { [id]: _drop, ...nextRest } = prev;
+        const next = { ...nextRest, [targetPath]: nextDoc };
+        openDocumentsRef.current = next;
+        return next;
       });
-      setOpenTabIds((prev) => prev.map((tabId) => (tabId === id ? targetPath : tabId)));
+      setOpenTabIds((prev) => {
+        const next = prev.map((tabId) => (tabId === id ? targetPath : tabId));
+        openTabIdsRef.current = next;
+        return next;
+      });
+      activeTabIdRef.current = targetPath;
       setActiveTabId((cur) => (cur === id ? targetPath : cur));
       setSelectedPath((p) => (p === id ? targetPath : p));
-      if (scratchDiskPath === id) setScratchDiskPath(targetPath);
+      if (scratchDiskPathRef.current === id) {
+        scratchDiskPathRef.current = targetPath;
+        setScratchDiskPath(targetPath);
+      }
       await reloadWorkspaceTree();
-      return true;
+      return { ok: true, id: targetPath, title: savedTitle, sourcePath: targetPath, postTitle: nextBase };
     },
-    [
-      activeTabId,
-      openDocuments,
-      openTabIds.length,
-      reloadWorkspaceTree,
-      scratchDiskPath,
-      scratchDocumentTitle,
-    ],
+    [reloadWorkspaceTree],
+  );
+  applyTitleRenameRef.current = applyActiveDocumentTitleRename;
+
+  const commitActiveDocumentTitleRename = useCallback(
+    async (rawBase: string) => (await applyActiveDocumentTitleRename(rawBase)).ok,
+    [applyActiveDocumentTitleRename],
   );
 
   const workspaceSidebarPanel = (

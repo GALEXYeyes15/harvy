@@ -2,6 +2,7 @@ import type { Editor } from "@tiptap/core";
 import { editorHtmlToMarkdown } from "../editor/documentMarkdown";
 import {
   joinPath,
+  parentDirectory,
   splitFileBaseAndExtension,
   validateFolderName,
 } from "../workspace/folderNaming";
@@ -42,6 +43,37 @@ export function defaultSaveFileName(documentTitle: string): string {
   const trimmed = documentTitle.replace(/[/\\?%*:|"<>]/g, "-").trim() || "Untitled";
   const base = trimmed.replace(/\.[^.\\/]+$/, "");
   return `${base || "Untitled"}.md`;
+}
+
+/** Prefer the header/file name (including an in-progress rename) over in-document Title. */
+export function suggestedSaveAsFileName(input: {
+  pendingRenameBase?: string | null;
+  fileTitle?: string;
+  postTitle?: string;
+}): string {
+  const pending = input.pendingRenameBase?.trim() ?? "";
+  const fileBase = splitFileBaseAndExtension((input.fileTitle ?? "").trim()).base;
+  const post = (input.postTitle ?? "").trim();
+  return defaultSaveFileName(pending || fileBase || post || "Untitled");
+}
+
+/**
+ * If the in-memory document name no longer matches the file on disk, return the
+ * path the file should be renamed to. Otherwise null.
+ */
+export function resolveRenamedDocumentPath(
+  sourcePath: string,
+  nextFileTitle: string,
+): string | null {
+  const from = sourcePath.trim();
+  if (!from) return null;
+  const currentLeaf = fileNameFromPath(from);
+  const { extWithDot } = splitFileBaseAndExtension(currentLeaf);
+  const nextBase = splitFileBaseAndExtension(nextFileTitle.trim() || currentLeaf).base;
+  if (!nextBase || validateFolderName(nextBase)) return null;
+  const newLeaf = extWithDot ? `${nextBase}${extWithDot}` : defaultSaveFileName(nextBase);
+  const to = joinPath(parentDirectory(from), newLeaf);
+  return to === from ? null : to;
 }
 
 export function defaultPdfFileName(documentTitle: string): string {
