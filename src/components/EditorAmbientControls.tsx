@@ -2,6 +2,7 @@ import { Clock } from "lucide-react";
 import { SidebarLayoutIcon } from "./SidebarLayoutIcon";
 import { EditorExportMenu } from "./EditorExportMenu";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
+import { formatHotkeyChord } from "../features/settings/hotkeys";
 
 /** Idle wait (ms) before starting the 1s reveal animation. */
 const IDLE_BEFORE_REVEAL_MS = 2000;
@@ -117,8 +118,8 @@ export function EditorAmbientControls({
           <button
             type="button"
             className={ICON_BTN}
-            aria-label="Toggle sidebars"
-            title="Toggle sidebars"
+            aria-label={`Toggle sidebars (${formatHotkeyChord(["Option", "ArrowDown"])})`}
+            title={`Toggle sidebars (${formatHotkeyChord(["Option", "ArrowDown"])})`}
             onClick={onToggleBothSidebars}
           >
             <SidebarLayoutIcon size={ICON_SIZE} strokeWidth={ICON_STROKE} />

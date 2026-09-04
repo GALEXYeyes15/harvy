@@ -1,4 +1,4 @@
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Link } from "lucide-react";
 import { useEffect, useState } from "react";
 import { openSafeExternalUrl } from "../features/editor/openExternalUrl";
 import type { QuickLink } from "../features/quick-links/quickLinks";
@@ -69,10 +69,8 @@ export function QuickLinksSidebarPanel() {
                       <button
                         type="button"
                         onClick={() => void handleCopy(link)}
-                        className={`flex h-6 w-6 items-center justify-center rounded-md transition-opacity hover:bg-ink/[0.06] ${
-                          justCopied
-                            ? "text-accent opacity-100"
-                            : "text-muted/55 opacity-0 group-hover:opacity-100 hover:text-ink"
+                        className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-ink/[0.06] ${
+                          justCopied ? "text-accent" : "text-muted/55 hover:text-ink"
                         }`}
                         aria-label={justCopied ? `Copied ${link.title}` : `Copy ${link.title} link`}
                         title={justCopied ? "Copied" : "Copy link"}
@@ -80,7 +78,20 @@ export function QuickLinksSidebarPanel() {
                         {justCopied ? (
                           <Check size={12} strokeWidth={1.75} aria-hidden />
                         ) : (
-                          <Copy size={12} strokeWidth={1.75} aria-hidden />
+                          <>
+                            <Link
+                              size={12}
+                              strokeWidth={1.75}
+                              aria-hidden
+                              className="group-hover:hidden"
+                            />
+                            <Copy
+                              size={12}
+                              strokeWidth={1.75}
+                              aria-hidden
+                              className="hidden group-hover:block"
+                            />
+                          </>
                         )}
                       </button>
                     </td>

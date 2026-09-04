@@ -82,6 +82,7 @@ import { setFileMenuHandlers } from "../features/menu/fileMenuBridge";
 import { setupNativeAppMenu } from "../features/menu/setupNativeAppMenu";
 import { setupWindowDragRegions } from "../features/window/setupWindowDragRegions";
 import { isEditableKeyboardTarget } from "../lib/isEditableKeyboardTarget";
+import { formatHotkeyChord, matchSidebarToggleHotkey } from "../features/settings/hotkeys";
 import {
   emitNotesPopoutState,
   listenNotesPopoutRequest,
@@ -665,8 +666,17 @@ export function AppShell() {
     editorTypingActivityHandlerRef.current?.();
   }, [bothSidebarsClosed]);
 
-  /** Bottom bar: snap both rails to the same state — both on unless both already on, then both off. */
+  const toggleLeftSidebar = useCallback(() => {
+    if (focusModeActive) return;
+    setIsWorkspaceSidebarOpen((open) => !open);
+  }, [focusModeActive]);
 
+  const toggleRightSidebar = useCallback(() => {
+    if (focusModeActive) return;
+    setReadabilityPanelOpen((open) => !open);
+  }, [focusModeActive]);
+
+  /** Bottom bar: snap both rails to the same state — both on unless both already on, then both off. */
   const toggleBothSidebars = useCallback(() => {
     if (focusModeActive) return;
     if (isWorkspaceSidebarOpen && readabilityPanelOpen) {
@@ -677,6 +687,23 @@ export function AppShell() {
       setReadabilityPanelOpen(true);
     }
   }, [focusModeActive, isWorkspaceSidebarOpen, readabilityPanelOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const action = matchSidebarToggleHotkey(event);
+      if (!action) return;
+      const el = event.target as HTMLElement | null;
+      if (el?.closest('[role="dialog"]')) return;
+      if (el?.closest("[data-floating-text-menu]")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (action === "left") toggleLeftSidebar();
+      else if (action === "right") toggleRightSidebar();
+      else toggleBothSidebars();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [toggleLeftSidebar, toggleRightSidebar, toggleBothSidebars]);
 
   const startFocusMode = useCallback(() => {
     setIsWorkspaceSidebarOpen(false);
@@ -2906,12 +2933,10 @@ export function AppShell() {
         <ChromeSidebarToggleButton
           icon={PanelLeft}
           open={isWorkspaceSidebarOpen}
-          onClick={() => {
-            if (focusModeActive) return;
-            setIsWorkspaceSidebarOpen((v) => !v);
-          }}
+          onClick={toggleLeftSidebar}
           ariaLabelOpen="Hide sidebar"
           ariaLabelClosed="Show sidebar"
+          shortcutHint={formatHotkeyChord(["Option", "ArrowLeft"])}
         />
       </div>
 
@@ -2937,12 +2962,10 @@ export function AppShell() {
           <ChromeSidebarToggleButton
             icon={PanelRight}
             open={readabilityPanelOpen}
-            onClick={() => {
-              if (focusModeActive) return;
-              setReadabilityPanelOpen((v) => !v);
-            }}
+            onClick={toggleRightSidebar}
             ariaLabelOpen="Hide tools panel"
             ariaLabelClosed="Show tools panel"
+            shortcutHint={formatHotkeyChord(["Option", "ArrowRight"])}
           />
         </div>
       </div>

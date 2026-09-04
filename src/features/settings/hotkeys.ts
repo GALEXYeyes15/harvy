@@ -26,6 +26,20 @@ export const HOTKEY_GROUPS: HotkeyGroup[] = [
     ],
   },
   {
+    id: "view",
+    title: "View",
+    items: [
+      { id: "toggle-left-sidebar", action: "Toggle left sidebar", keys: ["Option", "ArrowLeft"] },
+      { id: "toggle-right-sidebar", action: "Toggle right sidebar", keys: ["Option", "ArrowRight"] },
+      {
+        id: "toggle-both-sidebars",
+        action: "Toggle both sidebars",
+        keys: ["Option", "ArrowDown"],
+        note: "Same on/off switch as the bottom-bar control",
+      },
+    ],
+  },
+  {
     id: "edit",
     title: "Edit",
     items: [
@@ -151,6 +165,14 @@ function symbolForKey(key: string, mac: boolean): string {
       return "Tab";
     case "Space":
       return "Space";
+    case "ArrowLeft":
+      return "←";
+    case "ArrowRight":
+      return "→";
+    case "ArrowDown":
+      return "↓";
+    case "ArrowUp":
+      return "↑";
     default:
       return key;
   }
@@ -159,4 +181,29 @@ function symbolForKey(key: string, mac: boolean): string {
 /** Human-readable key labels for the current platform. */
 export function formatHotkeyKeys(keys: string[], mac = isMacOSPlatform()): string[] {
   return keys.map((key) => symbolForKey(key, mac));
+}
+
+/** Compact chord for titles and aria hints, e.g. ⌥← or Alt+←. */
+export function formatHotkeyChord(keys: string[], mac = isMacOSPlatform()): string {
+  const labels = formatHotkeyKeys(keys, mac);
+  return mac ? labels.join("") : labels.join("+");
+}
+
+export type SidebarToggleHotkey = "left" | "right" | "both";
+
+/** Option/Alt + arrow sidebar toggles. Ignores repeats and other modifiers. */
+export function matchSidebarToggleHotkey(event: {
+  key: string;
+  altKey: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  repeat?: boolean;
+}): SidebarToggleHotkey | null {
+  if (event.repeat) return null;
+  if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return null;
+  if (event.key === "ArrowLeft") return "left";
+  if (event.key === "ArrowRight") return "right";
+  if (event.key === "ArrowDown") return "both";
+  return null;
 }

@@ -11,6 +11,7 @@ type ChromeSidebarToggleButtonProps = {
   onClick: () => void;
   ariaLabelOpen: string;
   ariaLabelClosed: string;
+  shortcutHint?: string;
 };
 
 export function ChromeSidebarToggleButton({
@@ -19,12 +20,16 @@ export function ChromeSidebarToggleButton({
   onClick,
   ariaLabelOpen,
   ariaLabelClosed,
+  shortcutHint,
 }: ChromeSidebarToggleButtonProps) {
+  const label = open ? ariaLabelOpen : ariaLabelClosed;
+  const titled = shortcutHint ? `${label} (${shortcutHint})` : label;
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={open ? ariaLabelOpen : ariaLabelClosed}
+      aria-label={titled}
+      title={titled}
       aria-expanded={open}
       className={CHROME_SIDEBAR_TOGGLE_CLASS}
     >
