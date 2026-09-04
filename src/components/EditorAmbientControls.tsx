@@ -29,6 +29,8 @@ type EditorAmbientControlsProps = {
   focusRemainingLabel?: string;
   /** Copy full document to clipboard (rich HTML + plain text when supported). */
   onCopyDocument: () => Promise<boolean>;
+  onPublish?: () => void | Promise<void>;
+  publishEnabled?: boolean;
   onPodcastNotesPdf: () => void | Promise<void>;
   onSaveAsPdf: () => void | Promise<void>;
   onPrint: () => void | Promise<void>;
@@ -50,6 +52,8 @@ export function EditorAmbientControls({
   focusModeActive = false,
   focusRemainingLabel,
   onCopyDocument,
+  onPublish,
+  publishEnabled = false,
   onPodcastNotesPdf,
   onSaveAsPdf,
   onPrint,
@@ -149,6 +153,8 @@ export function EditorAmbientControls({
         {focusModeActive ? null : (
           <EditorExportMenu
             onCopyDocument={onCopyDocument}
+            onPublish={onPublish}
+            publishEnabled={publishEnabled}
             onPodcastNotesPdf={onPodcastNotesPdf}
             onSaveAsPdf={onSaveAsPdf}
             onPrint={onPrint}

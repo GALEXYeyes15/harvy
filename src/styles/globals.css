@@ -909,7 +909,7 @@
   }
 
   .harvy-context-menu-item--with-icon {
-    display: inline-flex;
+    display: flex;
     width: 100%;
     align-items: center;
     justify-content: space-between;
@@ -934,7 +934,7 @@
   }
 
   .harvy-context-menu-item--disabled.harvy-context-menu-item--with-icon {
-    display: inline-flex;
+    display: flex;
     width: 100%;
     align-items: center;
     justify-content: space-between;

@@ -1,7 +1,8 @@
-import { Upload, Zap } from "lucide-react";
+import { SquareArrowOutUpRight, Upload, Zap } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  HARVY_CONTEXT_MENU_DIVIDER_CLASS,
   HARVY_CONTEXT_MENU_ITEM_CLASS,
   HARVY_CONTEXT_MENU_ITEM_DISABLED_CLASS,
 } from "../features/editor/harvyContextMenu";
@@ -15,6 +16,8 @@ const ICON_BTN =
 
 type EditorExportMenuProps = {
   onCopyDocument: () => Promise<boolean>;
+  onPublish?: () => void | Promise<void>;
+  publishEnabled?: boolean;
   onPodcastNotesPdf: () => void | Promise<void>;
   onSaveAsPdf: () => void | Promise<void>;
   onPrint: () => void | Promise<void>;
@@ -44,6 +47,8 @@ function placeExportMenu(menuEl: HTMLElement, anchorEl: HTMLElement): void {
 
 export function EditorExportMenu({
   onCopyDocument,
+  onPublish,
+  publishEnabled = false,
   onPodcastNotesPdf,
   onSaveAsPdf,
   onPrint,
@@ -130,6 +135,45 @@ export function EditorExportMenu({
               <button
                 type="button"
                 role="menuitem"
+                className={HARVY_CONTEXT_MENU_ITEM_CLASS}
+                onClick={() => runAction(onSaveAsPdf)}
+              >
+                Save as PDF
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={HARVY_CONTEXT_MENU_ITEM_CLASS}
+                onClick={() => runAction(onPrint)}
+              >
+                Print
+              </button>
+              <div className={HARVY_CONTEXT_MENU_DIVIDER_CLASS} role="separator" />
+              <button
+                type="button"
+                role="menuitem"
+                className={`${
+                  publishEnabled && onPublish
+                    ? HARVY_CONTEXT_MENU_ITEM_CLASS
+                    : HARVY_CONTEXT_MENU_ITEM_DISABLED_CLASS
+                } harvy-context-menu-item--with-icon`}
+                disabled={!publishEnabled || !onPublish}
+                title={
+                  publishEnabled
+                    ? "Copy the post and open your publish link in the browser"
+                    : "Add a publish link in Settings → Export"
+                }
+                onClick={() => {
+                  if (!publishEnabled || !onPublish) return;
+                  runAction(onPublish);
+                }}
+              >
+                <span className="min-w-0 flex-1">Copy + Publish</span>
+                <SquareArrowOutUpRight size={14} strokeWidth={2} aria-hidden className="shrink-0" />
+              </button>
+              <button
+                type="button"
+                role="menuitem"
                 className={`${
                   !podcastNotesEnabled || podcastNotesRunning
                     ? HARVY_CONTEXT_MENU_ITEM_DISABLED_CLASS
@@ -150,22 +194,6 @@ export function EditorExportMenu({
                   {podcastNotesRunning ? "Export Podcast Notes…" : "Export Podcast Notes"}
                 </span>
                 <Zap size={14} strokeWidth={2} aria-hidden className="shrink-0" />
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={HARVY_CONTEXT_MENU_ITEM_CLASS}
-                onClick={() => runAction(onSaveAsPdf)}
-              >
-                Save as PDF
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={HARVY_CONTEXT_MENU_ITEM_CLASS}
-                onClick={() => runAction(onPrint)}
-              >
-                Print
               </button>
             </HarvyContextMenuShell>,
             document.body,

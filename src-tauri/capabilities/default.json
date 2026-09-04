@@ -23,6 +23,6 @@
     "core:webview:allow-create-webview-window",
     "dialog:default",
     "dialog:allow-open",
-    "opener:allow-default-urls"
+    "opener:default"
   ]
 }

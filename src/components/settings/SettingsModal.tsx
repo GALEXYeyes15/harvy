@@ -127,6 +127,8 @@ type SettingsModalProps = {
   onShowAiCheckChange: (enabled: boolean) => void;
   criteria: string;
   onCriteriaChange: (value: string) => void;
+  publishUrl: string;
+  onPublishUrlChange: (value: string) => void;
   spellcheckEnabled: boolean;
   onSpellcheckChange: (enabled: boolean) => void;
   focusVisibilityPrefs: FocusVisibilityPrefs;
@@ -167,6 +169,8 @@ export function SettingsModal({
   onShowAiCheckChange,
   criteria,
   onCriteriaChange,
+  publishUrl,
+  onPublishUrlChange,
   spellcheckEnabled,
   onSpellcheckChange,
   focusVisibilityPrefs,
@@ -253,6 +257,9 @@ export function SettingsModal({
                 parametersPrefs={parametersPrefs}
                 onParametersPrefsChange={onParametersPrefsChange}
               />
+            ) : null}
+            {activeSection === "export" ? (
+              <ExportPanel publishUrl={publishUrl} onPublishUrlChange={onPublishUrlChange} />
             ) : null}
             {activeSection === "collect" ? (
               <CollectSettingsPanel
@@ -2112,6 +2119,45 @@ function CriteriaExpandableSettings({
           />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ExportPanel({
+  publishUrl,
+  onPublishUrlChange,
+}: {
+  publishUrl: string;
+  onPublishUrlChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <SettingsSectionHeader
+        title="Export"
+        description="Copy + Publish copies the current post and opens this link in your browser so you can paste."
+      />
+      <div>
+        <p className="mb-2 text-[12px] italic leading-snug text-muted/75">Copy + Publish</p>
+        <div className={SETTINGS_BOX_PAD}>
+          <label htmlFor="export-publish-url" className="block text-[13px] font-medium text-ink">
+            Publish link
+          </label>
+          <p className="mt-1 mb-2 text-[11px] leading-snug text-muted/75">
+            Used by Copy + Publish in the export menu.
+          </p>
+          <input
+            id="export-publish-url"
+            type="url"
+            inputMode="url"
+            autoComplete="url"
+            aria-label="Publish link"
+            value={publishUrl}
+            onChange={(event) => onPublishUrlChange(event.target.value)}
+            placeholder="https://…"
+            className={`w-full ${SETTINGS_FIELD_INPUT}`}
+          />
+        </div>
+      </div>
     </div>
   );
 }

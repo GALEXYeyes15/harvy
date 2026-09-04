@@ -66,6 +66,7 @@ import {
   readQuickLinksSettings,
   writeQuickLinksSettings,
 } from "../features/quick-links/quickLinksSettings";
+import { normalizeQuickLinkUrl } from "../features/quick-links/quickLinks";
 import {
   readAiCheckSidebarSettings,
   writeAiCheckSidebarSettings,
@@ -92,6 +93,7 @@ import { runEditorFormat, type LinkFormatOptions } from "../features/editor/edit
 import { calculateEditorStats } from "../features/editor/stats";
 import { pickAndImportWorkspaceImage } from "../features/editor/imageAssets";
 import { copyDocumentToClipboard } from "../features/editor/documentClipboard";
+import { openSafeExternalUrl } from "../features/editor/openExternalUrl";
 import { printDocumentFromEditor } from "../features/editor/documentPrint";
 import type { HarvyImageLoadAttrs } from "../features/editor/harvyImageAttribution";
 import {
@@ -372,6 +374,9 @@ export function AppShell() {
   const [showCriteria, setShowCriteria] = useState(
     () => readCriteriaSidebarSettings().showCriteria,
   );
+  const [publishUrl, setPublishUrl] = useState(
+    () => readCriteriaSidebarSettings().publishUrl,
+  );
   const [showAiCheck, setShowAiCheck] = useState(
     () => readAiCheckSidebarSettings().showAiCheck,
   );
@@ -527,6 +532,11 @@ export function AppShell() {
     if (!next.showCriteria) {
       setMode((current) => (current === "criteria" ? "notes" : current));
     }
+  }, []);
+
+  const handlePublishUrlChange = useCallback((value: string) => {
+    const next = writeCriteriaSidebarSettings({ publishUrl: value });
+    setPublishUrl(next.publishUrl);
   }, []);
 
   const handleShowAiCheckChange = useCallback((enabled: boolean) => {
@@ -2343,6 +2353,18 @@ export function AppShell() {
     return copyDocumentToClipboard(tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath);
   }, [tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath]);
 
+  const handlePublishDocument = useCallback(async () => {
+    const destination = normalizeQuickLinkUrl(publishUrl);
+    if (!destination) return;
+    // Open on the click itself so the system browser is not blocked by clipboard work.
+    openSafeExternalUrl(destination);
+    try {
+      await copyDocumentToClipboard(tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath);
+    } catch {
+      // The destination is already opening; paste if the copy succeeds in the background.
+    }
+  }, [publishUrl, tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath]);
+
   const handlePrintDocument = useCallback(() => {
     printDocumentFromEditor(tiptapEditor, copyDocumentFallbackMarkdown, editorTitleBase);
   }, [tiptapEditor, copyDocumentFallbackMarkdown, editorTitleBase]);
@@ -2716,6 +2738,8 @@ export function AppShell() {
                 focusModeActive ? formatFocusRemaining(focusRemainingMs) : undefined
               }
               onCopyDocument={handleCopyDocument}
+              onPublish={handlePublishDocument}
+              publishEnabled={Boolean(normalizeQuickLinkUrl(publishUrl))}
               onPodcastNotesPdf={performExportPodcastNotesPdf}
               onSaveAsPdf={performExportPdf}
               onPrint={handlePrintDocument}
@@ -2924,6 +2948,8 @@ export function AppShell() {
         onShowAiCheckChange={handleShowAiCheckChange}
         criteria={activeCriteria}
         onCriteriaChange={updateActiveDocumentCriteria}
+        publishUrl={publishUrl}
+        onPublishUrlChange={handlePublishUrlChange}
         spellcheckEnabled={writingAssistancePrefs.spellcheck}
         onSpellcheckChange={handleSpellcheckPref}
         focusVisibilityPrefs={focusVisibilityPrefs}
