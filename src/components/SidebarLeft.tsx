@@ -80,6 +80,8 @@ type SidebarLeftProps = {
   isLoading: boolean;
   loadError: string | null;
   selectedPath: string | null;
+  /** Deepest visible folder or file on the way to the open document. */
+  openDocumentTrailPath?: string | null;
   expandedPaths: Set<string>;
   searchQuery: string;
   onSearchChange: (value: string) => void;
@@ -110,6 +112,7 @@ export function SidebarLeft({
   isLoading,
   loadError,
   selectedPath,
+  openDocumentTrailPath = null,
   expandedPaths,
   searchQuery,
   onSearchChange,
@@ -268,6 +271,7 @@ export function SidebarLeft({
                     depth={0}
                     expandedPaths={expandedPaths}
                     selectedPath={selectedPath}
+                    openDocumentTrailPath={openDocumentTrailPath}
                     hoveredRowPath={hoveredWorkspaceRowPath}
                     onWorkspaceRowPointerEnter={onWorkspaceRowPointerEnter}
                     onWorkspaceRowPointerLeave={onWorkspaceRowPointerLeave}

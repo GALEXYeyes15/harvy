@@ -7,7 +7,7 @@ export type AiCheckSidebarSettings = {
   showAiCheck: boolean;
   /** When on, Export Podcast Notes is available. */
   showPodcastNotes: boolean;
-  /** When on, Suggest titles appears under Notes. */
+  /** When on, two-finger click Title or Subtitle to suggest titles. */
   showTitleGeneration: boolean;
 };
 

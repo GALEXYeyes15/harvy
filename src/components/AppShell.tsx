@@ -124,6 +124,10 @@ import {
 } from "../features/workspace/tree";
 import { isPathUnderWorkspaceRoot, normalizeFsPath } from "../features/workspace/workspacePaths";
 import {
+  resolveOpenDocumentPath,
+  visibleOpenDocumentTrailPath,
+} from "../features/workspace/openDocumentTrail";
+import {
   loadDocumentNotes,
   renameDocumentNotesSidecar,
   resolveProjectDirectory,
@@ -1107,6 +1111,28 @@ export function AppShell() {
   const activeDocument = activeTabId ? openDocuments[activeTabId] : null;
   const scratchEditorBody =
     activeDocument?.content ?? (openTabIds.length === 0 ? scratchDraftContent : "");
+
+  const openDocumentPath = useMemo(
+    () =>
+      resolveOpenDocumentPath({
+        sourcePath: activeDocument?.sourcePath,
+        tabId: activeTabId,
+        scratchDiskPath,
+        isVirtualTabId: isVirtualDocumentTabId,
+      }),
+    [activeDocument?.sourcePath, activeTabId, scratchDiskPath],
+  );
+
+  const openDocumentTrailPath = useMemo(
+    () =>
+      visibleOpenDocumentTrailPath(
+        workspaceListRoots,
+        expandedPaths,
+        openDocumentPath,
+        workspaceRootPath,
+      ),
+    [workspaceListRoots, expandedPaths, openDocumentPath, workspaceRootPath],
+  );
 
   const isDirty = useMemo(() => {
     const editorTitleBase = splitFileBaseAndExtension(
@@ -2572,11 +2598,11 @@ export function AppShell() {
 
   const handleGenerateHeadlines = useCallback(async () => {
     if (!isTauriRuntime()) {
-      window.alert("Headline suggestions are only available in the Harvy desktop app.");
+      setHeadlinePairsError("Headline suggestions are only available in the Harvy desktop app.");
       return;
     }
     if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
-      window.alert("Enable AI check and add an API key in Settings → Sidebars first.");
+      setHeadlinePairsError("Enable AI and add an API key in Settings → Sidebars first.");
       return;
     }
     const essay = tiptapEditor
@@ -2856,6 +2882,7 @@ export function AppShell() {
       isLoading={isLoadingTree}
       loadError={workspaceError}
       selectedPath={selectedPath}
+      openDocumentTrailPath={openDocumentTrailPath}
       expandedPaths={expandedPaths}
       searchQuery={searchQuery}
       onSearchChange={setSearchQuery}
@@ -2918,16 +2945,6 @@ export function AppShell() {
       aiCheckCostLabel={aiCheckCostDisplay}
       aiCheckError={aiCheckError}
       onRunAiCheck={handleRunAiCheck}
-      showHeadlines={showTitleGeneration}
-      headlinesEnabled={Boolean(
-        showTitleGeneration && aiCheckConfig?.enabled && aiCheckConfig.hasApiKey,
-      )}
-      headlinesRunning={headlinePairsRunning}
-      headlinesError={headlinePairsError}
-      headlinePairs={headlinePairs}
-      selectedHeadlineIndex={selectedHeadlineIndex}
-      onGenerateHeadlines={handleGenerateHeadlines}
-      onSelectHeadlinePair={handleSelectHeadlinePair}
     />
   );
 
@@ -3074,6 +3091,13 @@ export function AppShell() {
               pickLocalImage={pickLocalImage}
               loadImageAt={loadImageAtPos}
               onInsertImage={editorEditable ? () => void handleInsertImage() : undefined}
+              showTitleGeneration={showTitleGeneration}
+              headlinesRunning={headlinePairsRunning}
+              headlinesError={headlinePairsError}
+              headlinePairs={headlinePairs}
+              selectedHeadlineIndex={selectedHeadlineIndex}
+              onGenerateHeadlines={handleGenerateHeadlines}
+              onSelectHeadlinePair={handleSelectHeadlinePair}
               onChangeText={updateActiveDocumentContent}
               onEditorReady={handleEditorReady}
               onTypingActivity={emitEditorTypingActivity}

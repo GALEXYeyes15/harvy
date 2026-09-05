@@ -226,6 +226,30 @@ export function placeHarvyContextMenu(
   menuEl.style.top = `${Math.max(0, top)}px`;
 }
 
+/** Position a menu below an HTMLElement (title/subtitle fields, etc.). */
+export function placeHarvyContextMenuForElement(
+  menuEl: HTMLElement,
+  mount: HTMLElement,
+  element: HTMLElement,
+): void {
+  const rect = element.getBoundingClientRect();
+  const menuWidth = menuEl.offsetWidth;
+  const under = viewportToMountLocal(mount, rect.left, rect.bottom + 4);
+  let left = under.left;
+  const top = under.top;
+
+  if (menuWidth > 0) {
+    const maxRight = popupMaxRightViewport();
+    if (rect.left + menuWidth > maxRight) {
+      const rightAligned = viewportToMountLocal(mount, rect.right, rect.bottom + 4);
+      left = rightAligned.left - menuWidth;
+    }
+  }
+
+  menuEl.style.left = `${Math.max(0, left)}px`;
+  menuEl.style.top = `${Math.max(0, top)}px`;
+}
+
 export function createHarvyContextMenuElement(): HTMLDivElement {
   const el = document.createElement("div");
   el.className = HARVY_CONTEXT_MENU_CLASS;

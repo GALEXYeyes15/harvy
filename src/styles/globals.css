@@ -1048,6 +1048,25 @@
     text-align: left;
   }
 
+  .harvy-context-menu--headlines {
+    min-width: 14rem;
+    max-width: min(22rem, calc(100% - 1.5rem));
+    max-height: min(24rem, 70vh);
+    overflow-y: auto;
+  }
+
+  .harvy-context-menu-item__kicker {
+    display: block;
+    margin-top: 0.125rem;
+    font-size: 11px;
+    line-height: 1.35;
+    color: color-mix(in oklab, var(--color-muted) 80%, transparent);
+  }
+
+  .harvy-context-menu-item--selected {
+    background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  }
+
   .harvy-context-menu__link-panel {
     margin-top: 0.5rem;
     display: flex;

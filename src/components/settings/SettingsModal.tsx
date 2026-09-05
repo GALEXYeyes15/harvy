@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight, Minus, Plus, SquareArrowOutUpRight, SquarePen } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Minus, Plus, SquareArrowOutUpRight, SquarePen, Zap } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
 import type { DocumentHeaderPrefs } from "../../features/editor/documentHeaderSettings";
 import type { FocusVisibilityPrefs } from "../../features/editor/focusVisibilitySettings";
@@ -2337,7 +2337,12 @@ function AiCheckExpandableSettings({
       <ul>
         <ToggleRow
           id="enable-artificial-intelligence"
-          label="Artificial Intelligence"
+          label={
+            <span className="inline-flex items-center gap-1.5">
+              <Zap size={14} strokeWidth={2} aria-hidden className="shrink-0" />
+              Artificial Intelligence
+            </span>
+          }
           checked={Boolean(aiConfig?.enabled)}
           onChange={onAiEnabledChange}
           disabled={!isTauriRuntime()}
@@ -2523,7 +2528,7 @@ function ToggleRow({
   expandLabel,
 }: {
   id: string;
-  label: string;
+  label: ReactNode;
   description?: string;
   checked: boolean;
   onChange: (v: boolean) => void;

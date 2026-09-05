@@ -11,11 +11,16 @@ import type { FileNode } from "../features/workspace/types";
 export const WORKSPACE_ROW_SHELL_UNSELECTED =
   "flex w-full min-w-0 items-center rounded-md px-2 py-[5px] text-[12px] text-muted/90 transition-colors duration-100 ease-out hover:bg-ink/[0.035] hover:text-ink";
 
+const WORKSPACE_ROW_SHELL_SELECTED =
+  "relative flex w-full min-w-0 items-center rounded-md bg-muted/[0.14] px-2 py-[5px] text-[12px] text-muted/90";
+
 type WorkspaceTreeProps = {
   node: FileNode;
   depth?: number;
   expandedPaths: Set<string>;
   selectedPath: string | null;
+  /** Deepest visible folder or file on the way to the open document. */
+  openDocumentTrailPath?: string | null;
   /** Path of the row currently hovered in the workspace list (lifted to sidebar for single-source truth). */
   hoveredRowPath: string | null;
   onWorkspaceRowPointerEnter: (path: string) => void;
@@ -33,12 +38,15 @@ type WorkspaceTreeProps = {
 };
 
 const DEPTH_STEP = 14;
+/** Extra inset so the open-document bar isn’t flush against the icon column. */
+const ICON_GUTTER = 6;
 
 export function WorkspaceTree({
   node,
   depth = 0,
   expandedPaths,
   selectedPath,
+  openDocumentTrailPath = null,
   hoveredRowPath,
   onWorkspaceRowPointerEnter,
   onWorkspaceRowPointerLeave,
@@ -54,12 +62,13 @@ export function WorkspaceTree({
   const isDirectory = node.kind === "directory";
   const isExpanded = isDirectory ? expandedPaths.has(node.path) : false;
   const isSelected = selectedPath === node.path;
+  const isOpenDocumentTrail = openDocumentTrailPath === node.path;
   const isRenaming = Boolean(isDirectory && renamingPath === node.path);
   const isDraggableImage = !isDirectory && isImagePreviewable(node.path);
   const displayName = posixSegmentToFinderName(node.name);
 
-  const rowShell = isSelected
-    ? "relative flex w-full min-w-0 items-center overflow-hidden rounded-md bg-ink/[0.045] px-2 py-[5px] text-[12px] text-ink"
+  const rowShell = isOpenDocumentTrail
+    ? WORKSPACE_ROW_SHELL_SELECTED
     : `relative overflow-hidden ${WORKSPACE_ROW_SHELL_UNSELECTED}`;
 
   const renameShell = `${rowShell} ring-1 ring-ink/12 ring-offset-0 ring-offset-transparent dark:ring-white/[0.08]`;
@@ -74,7 +83,7 @@ export function WorkspaceTree({
     el.select();
   }, [isRenaming]);
 
-  const paddingLeft = depth * DEPTH_STEP;
+  const paddingLeft = depth * DEPTH_STEP + ICON_GUTTER;
 
   return (
     <li>
@@ -86,7 +95,7 @@ export function WorkspaceTree({
         >
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <span className="relative inline-flex size-[13px] shrink-0 items-center justify-center">
-              <WorkspaceNodeIcon node={node} isExpanded={isExpanded} selected={isSelected} />
+              <WorkspaceNodeIcon node={node} isExpanded={isExpanded} />
             </span>
             <input
               ref={renameInputRef}
@@ -118,8 +127,15 @@ export function WorkspaceTree({
           onMouseEnter={() => onWorkspaceRowPointerEnter(node.path)}
           onMouseLeave={() => onWorkspaceRowPointerLeave(node.path)}
         >
+          {isOpenDocumentTrail ? (
+            <span
+              className="pointer-events-none absolute inset-y-1 left-0 w-[2.5px] rounded-full bg-muted"
+              aria-hidden
+            />
+          ) : null}
           <button
             type="button"
+            aria-current={isOpenDocumentTrail ? "true" : undefined}
             // HTML5 drag works in the browser; desktop uses pointer drag (Tauri blocks HTML5 drops).
             draggable={isDraggableImage && !isTauriRuntime()}
             onDragStart={(event) => {
@@ -146,7 +162,7 @@ export function WorkspaceTree({
                     isThisRowHovered ? "opacity-0" : "opacity-100"
                   }`}
                 >
-                  <WorkspaceNodeIcon node={node} isExpanded={isExpanded} selected={isSelected} />
+                  <WorkspaceNodeIcon node={node} isExpanded={isExpanded} />
                 </span>
                 <span
                   className={`absolute inset-0 flex items-center justify-center font-mono text-[11px] leading-none transition-[opacity,transform] duration-75 ease-out ${
@@ -160,9 +176,13 @@ export function WorkspaceTree({
                 </span>
               </span>
             ) : (
-              <WorkspaceNodeIcon node={node} isExpanded={isExpanded} selected={isSelected} />
+              <WorkspaceNodeIcon node={node} isExpanded={isExpanded} />
             )}
-            <span className="min-w-0 flex-1 truncate leading-snug">{displayName}</span>
+            <span
+              className={`min-w-0 flex-1 truncate leading-snug ${isOpenDocumentTrail ? "font-medium" : ""}`}
+            >
+              {displayName}
+            </span>
           </button>
           <div className="flex h-6 w-10 shrink-0 items-center justify-end">
             {isDirectory && onOpenFolder ? (
@@ -196,6 +216,7 @@ export function WorkspaceTree({
               depth={depth + 1}
               expandedPaths={expandedPaths}
               selectedPath={selectedPath}
+              openDocumentTrailPath={openDocumentTrailPath}
               hoveredRowPath={hoveredRowPath}
               onWorkspaceRowPointerEnter={onWorkspaceRowPointerEnter}
               onWorkspaceRowPointerLeave={onWorkspaceRowPointerLeave}
