@@ -19,6 +19,7 @@ import { formatFetchedAgo } from "../features/outliers/outlierPosts";
 import { isTauriRuntime } from "../features/save/saveRuntime";
 import { AvatarView } from "./AvatarView";
 import { CollectItemModal } from "./CollectItemModal";
+import { HeadlinesView } from "./HeadlinesView";
 import { OutliersView } from "./OutliersView";
 import { WorkspaceSectionMainContent } from "./WorkspaceSectionMainContent";
 
@@ -28,7 +29,7 @@ const SELECTION_ACTION_BUTTON =
 const SUB_VIEW_TAB =
   "border-0 bg-transparent p-0 text-[1.375rem] font-semibold leading-none tracking-[-0.02em]";
 
-export type CollectSubView = "outliers" | "collect" | "avatar";
+export type CollectSubView = "outliers" | "collect" | "headlines" | "avatar";
 
 function CollectRowCheckbox({
   checked,
@@ -96,12 +97,14 @@ function CollectSubViewTabs({
   onViewChange,
   showOutliersView,
   showCollectView,
+  showHeadlinesView,
   showAvatarView,
 }: {
   activeView: CollectSubView;
   onViewChange: (view: CollectSubView) => void;
   showOutliersView: boolean;
   showCollectView: boolean;
+  showHeadlinesView: boolean;
   showAvatarView: boolean;
 }) {
   return (
@@ -132,6 +135,19 @@ function CollectSubViewTabs({
           Ideas
         </button>
       ) : null}
+      {showHeadlinesView ? (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeView === "headlines"}
+          className={`${SUB_VIEW_TAB} text-ink ${
+            activeView === "headlines" ? "opacity-100" : "opacity-40"
+          }`}
+          onClick={() => onViewChange("headlines")}
+        >
+          Headlines
+        </button>
+      ) : null}
       {showAvatarView ? (
         <button
           type="button"
@@ -152,21 +168,27 @@ function CollectSubViewTabs({
 function soleCollectViewTitle(views: {
   showOutliersView: boolean;
   showCollectView: boolean;
+  showHeadlinesView: boolean;
   showAvatarView: boolean;
 }): string {
-  if (views.showOutliersView && !views.showCollectView && !views.showAvatarView) return "Outliers";
-  if (views.showCollectView && !views.showOutliersView && !views.showAvatarView) return "Ideas";
-  if (views.showAvatarView && !views.showOutliersView && !views.showCollectView) return "Avatar";
-  return "Research";
+  const labels = [
+    views.showOutliersView ? "Outliers" : null,
+    views.showCollectView ? "Ideas" : null,
+    views.showHeadlinesView ? "Headlines" : null,
+    views.showAvatarView ? "Avatar" : null,
+  ].filter((label): label is string => Boolean(label));
+  return labels.length === 1 ? labels[0]! : "Research";
 }
 
 function firstEnabledCollectView(views: {
   showOutliersView: boolean;
   showCollectView: boolean;
+  showHeadlinesView: boolean;
   showAvatarView: boolean;
 }): CollectSubView {
   if (views.showCollectView) return "collect";
   if (views.showOutliersView) return "outliers";
+  if (views.showHeadlinesView) return "headlines";
   return "avatar";
 }
 
@@ -175,11 +197,13 @@ function isCollectViewEnabled(
   views: {
     showOutliersView: boolean;
     showCollectView: boolean;
+    showHeadlinesView: boolean;
     showAvatarView: boolean;
   },
 ): boolean {
   if (view === "outliers") return views.showOutliersView;
   if (view === "collect") return views.showCollectView;
+  if (view === "headlines") return views.showHeadlinesView;
   return views.showAvatarView;
 }
 
@@ -190,6 +214,7 @@ type CollectPanelProps = {
   onStartWriting?: (item: CollectItem) => void | Promise<void>;
   showOutliersView?: boolean;
   showCollectView?: boolean;
+  showHeadlinesView?: boolean;
   showAvatarView?: boolean;
   workspaceSidebarOpen?: boolean;
   toolsSidebarOpen?: boolean;
@@ -202,13 +227,17 @@ export function CollectPanel({
   onStartWriting,
   showOutliersView = true,
   showCollectView = true,
+  showHeadlinesView = true,
   showAvatarView = true,
   workspaceSidebarOpen = true,
   toolsSidebarOpen = true,
 }: CollectPanelProps) {
-  const views = { showOutliersView, showCollectView, showAvatarView };
+  const views = { showOutliersView, showCollectView, showHeadlinesView, showAvatarView };
   const enabledCount =
-    Number(showOutliersView) + Number(showCollectView) + Number(showAvatarView);
+    Number(showOutliersView) +
+    Number(showCollectView) +
+    Number(showHeadlinesView) +
+    Number(showAvatarView);
 
   const [activeCollectView, setActiveCollectView] = useState<CollectSubView>(() =>
     firstEnabledCollectView(views),
@@ -228,7 +257,7 @@ export function CollectPanel({
     if (!isCollectViewEnabled(activeCollectView, views)) {
       setActiveCollectView(firstEnabledCollectView(views));
     }
-  }, [activeCollectView, showOutliersView, showCollectView, showAvatarView]);
+  }, [activeCollectView, showOutliersView, showCollectView, showHeadlinesView, showAvatarView]);
 
   const syncFromNotion = useCallback(async () => {
     if (!isTauriRuntime()) return;
@@ -346,6 +375,7 @@ export function CollectPanel({
               onViewChange={setActiveCollectView}
               showOutliersView={showOutliersView}
               showCollectView={showCollectView}
+              showHeadlinesView={showHeadlinesView}
               showAvatarView={showAvatarView}
             />
           ) : (
@@ -357,6 +387,11 @@ export function CollectPanel({
 
         {activeCollectView === "avatar" && showAvatarView ? (
           <AvatarView />
+        ) : activeCollectView === "headlines" && showHeadlinesView ? (
+          <HeadlinesView
+            workspaceSidebarOpen={workspaceSidebarOpen}
+            toolsSidebarOpen={toolsSidebarOpen}
+          />
         ) : activeCollectView === "collect" && showCollectView ? (
         <div className="harvy-notion-db mt-7">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -499,6 +534,11 @@ export function CollectPanel({
         ) : showOutliersView ? (
           <OutliersView
             onAddToNotes={onAddPreviewToNotes}
+            workspaceSidebarOpen={workspaceSidebarOpen}
+            toolsSidebarOpen={toolsSidebarOpen}
+          />
+        ) : showHeadlinesView ? (
+          <HeadlinesView
             workspaceSidebarOpen={workspaceSidebarOpen}
             toolsSidebarOpen={toolsSidebarOpen}
           />

@@ -1049,8 +1049,8 @@
   }
 
   .harvy-context-menu--headlines {
-    min-width: 14rem;
-    max-width: min(22rem, calc(100% - 1.5rem));
+    min-width: 17.5rem;
+    max-width: min(24rem, calc(100% - 1.5rem));
     max-height: min(24rem, 70vh);
     overflow-y: auto;
   }
@@ -2363,6 +2363,23 @@
     transition:
       flex-grow 500ms ease-in-out,
       opacity 140ms ease;
+  }
+
+  .harvy-headline-masonry {
+    column-gap: 1rem;
+    transition: opacity 140ms ease;
+  }
+
+  .harvy-headline-masonry[data-reflowing="true"] {
+    opacity: 0.28;
+    transition-duration: 120ms;
+  }
+
+  .harvy-headline-card {
+    break-inside: avoid;
+    margin-bottom: 1rem;
+    display: inline-block;
+    width: 100%;
   }
 
   .harvy-outlier-card {

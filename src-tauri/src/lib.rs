@@ -82,6 +82,10 @@ pub fn run() {
             commands::get_volume_display_name_for_path,
             commands::read_workspace_text_file,
             commands::import_workspace_image,
+            commands::import_headline_screenshot,
+            commands::write_headline_screenshot,
+            commands::delete_headline_screenshot,
+            commands::read_headline_screenshot,
             commands::write_text_file,
             commands::copy_file_into_directory,
             commands::write_bytes_into_directory,
@@ -121,6 +125,7 @@ pub fn run() {
             commands::ai_check::ai_check_run,
             commands::ai_check::ai_check_podcast_notes,
             commands::ai_check::ai_check_headline_pairs,
+            commands::ai_check::ai_check_headline_pairs_from_shots,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

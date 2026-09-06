@@ -15,6 +15,7 @@ type WorkspaceSectionSwitcherProps = {
   /** When only one Research sub-view is enabled, the rail label uses that name. */
   showOutliersView?: boolean;
   showCollectView?: boolean;
+  showHeadlinesView?: boolean;
   showAvatarView?: boolean;
   /** Shared with top chrome (tabs, header, ambient controls) during distraction-free writing. */
   chromeHidden?: boolean;
@@ -28,6 +29,7 @@ export function WorkspaceSectionSwitcher({
   sections,
   showOutliersView = true,
   showCollectView = true,
+  showHeadlinesView = true,
   showAvatarView = true,
   chromeHidden = false,
   className,
@@ -72,7 +74,12 @@ export function WorkspaceSectionSwitcher({
                 active ? "text-ink" : ""
               }`}
             >
-              {workspaceSectionLabel(section, { showOutliersView, showCollectView, showAvatarView })}
+              {workspaceSectionLabel(section, {
+                showOutliersView,
+                showCollectView,
+                showHeadlinesView,
+                showAvatarView,
+              })}
             </span>
           </button>
         );

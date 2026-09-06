@@ -216,6 +216,7 @@ import {
   formatAiCheckCostUsd,
   formatAiModelDisplayName,
   generateHeadlinePairs,
+  generateHeadlinePairsFromShots,
   generatePodcastNotes,
   getAiCheckConfig,
   locateAiIssuesInText,
@@ -225,6 +226,7 @@ import {
 } from "../features/aiCheck/aiCheck";
 import { syncAiCheckPopoverPrefs } from "../features/aiCheck/aiCheckPopoverPrefs";
 import { readHeadlineStylePrompt } from "../features/aiCheck/headlinePromptSettings";
+import { loadHeadlineShotsForVision } from "../features/headlines/headlineScreenshotAssets";
 import { ensureUserRulesFile, loadEditorRules } from "../features/writing-assistance/editorRules";
 
 /** Formatting toolbar (Bold, H1, etc.): hidden for distraction-free writing; set true to restore for Edit chrome. */
@@ -379,6 +381,9 @@ export function AppShell() {
   const [showAvatarView, setShowAvatarView] = useState(
     () => readWorkspaceSettings().showAvatarView,
   );
+  const [showHeadlinesView, setShowHeadlinesView] = useState(
+    () => readWorkspaceSettings().showHeadlinesView,
+  );
   const [collectItems, setCollectItems] = useState<CollectItem[]>(() => loadPersistedCollectItems());
   const [isWorkspaceSidebarOpen, setIsWorkspaceSidebarOpen] = useState(true);
   /** `null` = browse at the selected workspace root. */
@@ -466,6 +471,7 @@ export function AppShell() {
   const [aiCheckError, setAiCheckError] = useState<string | null>(null);
   const [headlinePairs, setHeadlinePairs] = useState<HeadlinePair[]>([]);
   const [headlinePairsRunning, setHeadlinePairsRunning] = useState(false);
+  const [headlinePairsFromShots, setHeadlinePairsFromShots] = useState(false);
   const [headlinePairsError, setHeadlinePairsError] = useState<string | null>(null);
   const [selectedHeadlineIndex, setSelectedHeadlineIndex] = useState<number | null>(null);
   const aiProofreadIssuesRef = useRef<ProofreadIssue[]>([]);
@@ -548,10 +554,12 @@ export function AppShell() {
   const applyCollectViewVisibility = useCallback((next: {
     showOutliersView: boolean;
     showCollectView: boolean;
+    showHeadlinesView: boolean;
     showAvatarView: boolean;
   }) => {
     setShowOutliersView(next.showOutliersView);
     setShowCollectView(next.showCollectView);
+    setShowHeadlinesView(next.showHeadlinesView);
     setShowAvatarView(next.showAvatarView);
   }, []);
 
@@ -572,6 +580,13 @@ export function AppShell() {
   const handleShowAvatarViewChange = useCallback(
     (enabled: boolean) => {
       applyCollectViewVisibility(writeWorkspaceSettings({ showAvatarView: enabled }));
+    },
+    [applyCollectViewVisibility],
+  );
+
+  const handleShowHeadlinesViewChange = useCallback(
+    (enabled: boolean) => {
+      applyCollectViewVisibility(writeWorkspaceSettings({ showHeadlinesView: enabled }));
     },
     [applyCollectViewVisibility],
   );
@@ -2613,6 +2628,7 @@ export function AppShell() {
       return;
     }
     setHeadlinePairsRunning(true);
+    setHeadlinePairsFromShots(false);
     setHeadlinePairsError(null);
     try {
       const result = await generateHeadlinePairs(essay, readHeadlineStylePrompt());
@@ -2622,6 +2638,46 @@ export function AppShell() {
       setHeadlinePairsError(e instanceof Error ? e.message : String(e));
     } finally {
       setHeadlinePairsRunning(false);
+    }
+  }, [aiCheckConfig?.enabled, aiCheckConfig?.hasApiKey, editorText, tiptapEditor]);
+
+  const handleGenerateHeadlinesFromShots = useCallback(async () => {
+    if (!isTauriRuntime()) {
+      setHeadlinePairsError("Headline suggestions are only available in the Harvy desktop app.");
+      return;
+    }
+    if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
+      setHeadlinePairsError("Enable AI and add an API key in Settings → Sidebars first.");
+      return;
+    }
+    const essay = tiptapEditor
+      ? proofreadPlainTextAndPositions(tiptapEditor.state.doc).text
+      : editorText;
+    if (!essay.trim()) {
+      setHeadlinePairsError("Nothing to title — the document is empty.");
+      return;
+    }
+    setHeadlinePairsRunning(true);
+    setHeadlinePairsFromShots(true);
+    setHeadlinePairsError(null);
+    try {
+      const images = await loadHeadlineShotsForVision();
+      if (images.length === 0) {
+        setHeadlinePairsError("Add screenshots in Research → Headlines first.");
+        return;
+      }
+      const result = await generateHeadlinePairsFromShots(
+        essay,
+        images,
+        readHeadlineStylePrompt(),
+      );
+      setHeadlinePairs(result.pairs);
+      setSelectedHeadlineIndex(null);
+    } catch (e) {
+      setHeadlinePairsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setHeadlinePairsRunning(false);
+      setHeadlinePairsFromShots(false);
     }
   }, [aiCheckConfig?.enabled, aiCheckConfig?.hasApiKey, editorText, tiptapEditor]);
 
@@ -3042,6 +3098,7 @@ export function AppShell() {
               onStartWriting={handleStartWritingFromIdea}
               showOutliersView={showOutliersView}
               showCollectView={showCollectView}
+              showHeadlinesView={showHeadlinesView}
               showAvatarView={showAvatarView}
               workspaceSidebarOpen={isWorkspaceSidebarOpen}
               toolsSidebarOpen={readabilityPanelOpen}
@@ -3093,10 +3150,12 @@ export function AppShell() {
               onInsertImage={editorEditable ? () => void handleInsertImage() : undefined}
               showTitleGeneration={showTitleGeneration}
               headlinesRunning={headlinePairsRunning}
+              headlinesRunningFromHeadlines={headlinePairsFromShots}
               headlinesError={headlinePairsError}
               headlinePairs={headlinePairs}
               selectedHeadlineIndex={selectedHeadlineIndex}
               onGenerateHeadlines={handleGenerateHeadlines}
+              onGenerateHeadlinesFromShots={handleGenerateHeadlinesFromShots}
               onSelectHeadlinePair={handleSelectHeadlinePair}
               onChangeText={updateActiveDocumentContent}
               onEditorReady={handleEditorReady}
@@ -3177,6 +3236,7 @@ export function AppShell() {
               sections={workspaceSections}
               showOutliersView={showOutliersView}
               showCollectView={showCollectView}
+              showHeadlinesView={showHeadlinesView}
               showAvatarView={showAvatarView}
               chromeHidden={hideWorkspaceSectionRail}
               className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
@@ -3227,6 +3287,7 @@ export function AppShell() {
                 sections={workspaceSections}
                 showOutliersView={showOutliersView}
                 showCollectView={showCollectView}
+                showHeadlinesView={showHeadlinesView}
                 showAvatarView={showAvatarView}
                 chromeHidden={hideWorkspaceSectionRail}
                 className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
@@ -3345,9 +3406,11 @@ export function AppShell() {
         onEnableCollectChange={handleEnableCollectChange}
         showOutliersView={showOutliersView}
         showCollectView={showCollectView}
+        showHeadlinesView={showHeadlinesView}
         showAvatarView={showAvatarView}
         onShowOutliersViewChange={handleShowOutliersViewChange}
         onShowCollectViewChange={handleShowCollectViewChange}
+        onShowHeadlinesViewChange={handleShowHeadlinesViewChange}
         onShowAvatarViewChange={handleShowAvatarViewChange}
         encouragementPrefs={encouragementPrefs}
         onEncouragementPrefsChange={handleEncouragementPrefsChange}

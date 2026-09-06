@@ -152,9 +152,11 @@ type SettingsModalProps = {
   onEnableCollectChange: (enabled: boolean) => void;
   showOutliersView: boolean;
   showCollectView: boolean;
+  showHeadlinesView: boolean;
   showAvatarView: boolean;
   onShowOutliersViewChange: (enabled: boolean) => void;
   onShowCollectViewChange: (enabled: boolean) => void;
+  onShowHeadlinesViewChange: (enabled: boolean) => void;
   onShowAvatarViewChange: (enabled: boolean) => void;
   encouragementPrefs: EncouragementPrefs;
   onEncouragementPrefsChange: (partial: Partial<EncouragementPrefs>) => void;
@@ -200,9 +202,11 @@ export function SettingsModal({
   onEnableCollectChange,
   showOutliersView,
   showCollectView,
+  showHeadlinesView,
   showAvatarView,
   onShowOutliersViewChange,
   onShowCollectViewChange,
+  onShowHeadlinesViewChange,
   onShowAvatarViewChange,
   encouragementPrefs,
   onEncouragementPrefsChange,
@@ -292,9 +296,11 @@ export function SettingsModal({
                 onEnableCollectChange={onEnableCollectChange}
                 showOutliersView={showOutliersView}
                 showCollectView={showCollectView}
+                showHeadlinesView={showHeadlinesView}
                 showAvatarView={showAvatarView}
                 onShowOutliersViewChange={onShowOutliersViewChange}
                 onShowCollectViewChange={onShowCollectViewChange}
+                onShowHeadlinesViewChange={onShowHeadlinesViewChange}
                 onShowAvatarViewChange={onShowAvatarViewChange}
               />
             ) : null}
@@ -378,18 +384,22 @@ function CollectSettingsPanel({
   onEnableCollectChange,
   showOutliersView,
   showCollectView,
+  showHeadlinesView,
   showAvatarView,
   onShowOutliersViewChange,
   onShowCollectViewChange,
+  onShowHeadlinesViewChange,
   onShowAvatarViewChange,
 }: {
   enableCollect: boolean;
   onEnableCollectChange: (enabled: boolean) => void;
   showOutliersView: boolean;
   showCollectView: boolean;
+  showHeadlinesView: boolean;
   showAvatarView: boolean;
   onShowOutliersViewChange: (enabled: boolean) => void;
   onShowCollectViewChange: (enabled: boolean) => void;
+  onShowHeadlinesViewChange: (enabled: boolean) => void;
   onShowAvatarViewChange: (enabled: boolean) => void;
 }) {
   const [fetchIntervalMinutes, setFetchIntervalMinutes] = useState(
@@ -400,15 +410,18 @@ function CollectSettingsPanel({
   );
 
   const enabledViewCount =
-    Number(showOutliersView) + Number(showCollectView) + Number(showAvatarView);
+    Number(showOutliersView) +
+    Number(showCollectView) +
+    Number(showHeadlinesView) +
+    Number(showAvatarView);
 
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
         title="Research"
-        description="Outliers, Ideas, and Avatar in the workspace rail."
+        description="Outliers, Ideas, Headlines, and Avatar in the workspace rail."
       />
-      <SettingsGroup hint="Keep at least one Research view on (Outliers, Ideas, or Avatar).">
+      <SettingsGroup hint="Keep at least one Research view on (Outliers, Ideas, Headlines, or Avatar).">
         <ToggleRow
           id="enable-collect"
           label="Enable Research"
@@ -428,6 +441,13 @@ function CollectSettingsPanel({
           checked={showCollectView}
           onChange={onShowCollectViewChange}
           disabled={!enableCollect || (showCollectView && enabledViewCount === 1)}
+        />
+        <ToggleRow
+          id="show-headlines-view"
+          label="Show Headlines"
+          checked={showHeadlinesView}
+          onChange={onShowHeadlinesViewChange}
+          disabled={!enableCollect || (showHeadlinesView && enabledViewCount === 1)}
         />
         <ToggleRow
           id="show-avatar-view"

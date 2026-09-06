@@ -599,6 +599,187 @@ pub fn import_workspace_image(app: AppHandle, source_path: String) -> Result<Str
     Ok(format!(".harvy/assets/{}", filename))
 }
 
+fn headlines_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app_config_dir(app)?.join("headlines");
+    fs::create_dir_all(&dir).map_err(|e| {
+        format!(
+            "Could not create headlines folder '{}': {}",
+            dir.display(),
+            e
+        )
+    })?;
+    Ok(dir)
+}
+
+fn allowed_headline_image_ext(ext: &str) -> bool {
+    matches!(
+        ext,
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "heic" | "heif" | "bmp" | "tif" | "tiff"
+    )
+}
+
+fn unique_headline_dest(dir: &Path, ext: &str) -> Result<PathBuf, String> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    for suffix in 0u32..10_000 {
+        let name = if suffix == 0 {
+            format!("hl_{}.{}", stamp, ext)
+        } else {
+            format!("hl_{}_{}.{}", stamp, suffix, ext)
+        };
+        let dest = dir.join(name);
+        if !dest.exists() {
+            return Ok(dest);
+        }
+    }
+    Err("Could not find an available headline screenshot file name.".to_string())
+}
+
+fn ensure_within_headlines_dir(app: &AppHandle, requested: &Path) -> Result<PathBuf, String> {
+    let root = canonical(&headlines_dir(app)?)?;
+    if !requested.exists() {
+        let requested_abs = if requested.is_absolute() {
+            requested.to_path_buf()
+        } else {
+            root.join(requested)
+        };
+        if requested_abs.starts_with(&root) {
+            return Ok(requested_abs);
+        }
+        return Err("Path is outside headlines storage.".to_string());
+    }
+    let canonical_requested = canonical(requested)?;
+    if !canonical_requested.starts_with(&root) {
+        return Err("Path is outside headlines storage.".to_string());
+    }
+    Ok(canonical_requested)
+}
+
+fn headline_ext_from_source(source: &Path, fallback: &str) -> String {
+    source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .filter(|e| allowed_headline_image_ext(e))
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+/// Copy a user-selected image into the app headlines folder and return its absolute path.
+#[tauri::command]
+pub fn import_headline_screenshot(app: AppHandle, source_path: String) -> Result<String, String> {
+    let source = PathBuf::from(source_path.trim());
+    if !source.is_file() {
+        return Err("Selected file is not a readable image.".to_string());
+    }
+
+    let dir = headlines_dir(&app)?;
+    let ext = headline_ext_from_source(&source, "png");
+    let dest = unique_headline_dest(&dir, &ext)?;
+
+    fs::copy(&source, &dest).map_err(|e| {
+        format!(
+            "Could not copy screenshot to '{}': {}",
+            dest.display(),
+            e
+        )
+    })?;
+
+    Ok(dest.to_string_lossy().to_string())
+}
+
+/// Write screenshot bytes into the app headlines folder and return the absolute path.
+#[tauri::command]
+pub fn write_headline_screenshot(
+    app: AppHandle,
+    extension: String,
+    contents: Vec<u8>,
+) -> Result<String, String> {
+    if contents.is_empty() {
+        return Err("Screenshot data is empty.".to_string());
+    }
+    let ext = extension.trim().to_ascii_lowercase();
+    let ext = if allowed_headline_image_ext(&ext) {
+        ext
+    } else {
+        "png".to_string()
+    };
+
+    let dir = headlines_dir(&app)?;
+    let dest = unique_headline_dest(&dir, &ext)?;
+    fs::write(&dest, contents).map_err(|e| {
+        format!(
+            "Could not save screenshot to '{}': {}",
+            dest.display(),
+            e
+        )
+    })?;
+
+    Ok(dest.to_string_lossy().to_string())
+}
+
+/// Delete a screenshot that lives in the app headlines folder.
+#[tauri::command]
+pub fn delete_headline_screenshot(app: AppHandle, path: String) -> Result<(), String> {
+    let requested = PathBuf::from(path.trim());
+    if requested.as_os_str().is_empty() {
+        return Err("Empty path.".to_string());
+    }
+    let safe = ensure_within_headlines_dir(&app, &requested)?;
+    if safe.exists() {
+        fs::remove_file(&safe).map_err(|e| format!("Could not delete screenshot: {}", e))?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeadlineScreenshotData {
+    pub mime_type: String,
+    pub data_base64: String,
+}
+
+fn mime_type_for_headline_ext(ext: &str) -> &'static str {
+    match ext {
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "tif" | "tiff" => "image/tiff",
+        _ => "image/png",
+    }
+}
+
+/// Read a screenshot from the app headlines folder as base64 (for model vision).
+#[tauri::command]
+pub fn read_headline_screenshot(app: AppHandle, path: String) -> Result<HeadlineScreenshotData, String> {
+    let requested = PathBuf::from(path.trim());
+    if requested.as_os_str().is_empty() {
+        return Err("Empty path.".to_string());
+    }
+    let safe = ensure_within_headlines_dir(&app, &requested)?;
+    if !safe.is_file() {
+        return Err("Screenshot file is missing.".to_string());
+    }
+    let bytes = fs::read(&safe).map_err(|e| format!("Could not read screenshot: {}", e))?;
+    if bytes.is_empty() {
+        return Err("Screenshot file is empty.".to_string());
+    }
+    let ext = safe
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_else(|| "png".to_string());
+    Ok(HeadlineScreenshotData {
+        mime_type: mime_type_for_headline_ext(&ext).to_string(),
+        data_base64: {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        },
+    })
+}
+
 #[tauri::command]
 pub fn write_text_file(app: AppHandle, path: String, contents: String) -> Result<(), String> {
     let p = PathBuf::from(&path);

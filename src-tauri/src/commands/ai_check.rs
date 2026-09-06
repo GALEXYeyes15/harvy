@@ -430,12 +430,119 @@ Rules:
 const HEADLINE_JSON_CONTRACT: &str = r#"Return ONLY valid JSON (no markdown fences, no preamble) with this shape:
 {"pairs":[{"title":"<headline>","subtitle":"<one-sentence dek>"}]}"#;
 
+const HEADLINE_SHOTS_INSTRUCTION: &str = r#"The user attached screenshots of headlines they like.
+Study those examples for voice, rhythm, length, and framing.
+Write 5 new title+subtitle pairs for THIS essay in that spirit.
+Do not copy an example headline unless it genuinely fits this essay."#;
+
+const MAX_HEADLINE_VISION_IMAGES: usize = 8;
+const MAX_HEADLINE_VISION_BYTES: usize = 1_500_000;
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeadlineVisionImage {
+    pub mime_type: String,
+    pub data_base64: String,
+}
+
 fn compose_headline_system_prompt(style_prompt: Option<&str>) -> String {
     let style = style_prompt
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or(HEADLINE_STYLE_PROMPT_DEFAULT);
     format!("{}\n\n{}", style, HEADLINE_JSON_CONTRACT)
+}
+
+fn compose_headline_from_shots_system_prompt(style_prompt: Option<&str>) -> String {
+    let style = style_prompt
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(HEADLINE_STYLE_PROMPT_DEFAULT);
+    format!(
+        "{}\n\n{}\n\n{}",
+        style, HEADLINE_SHOTS_INSTRUCTION, HEADLINE_JSON_CONTRACT
+    )
+}
+
+fn normalize_vision_images(images: Vec<HeadlineVisionImage>) -> Result<Vec<HeadlineVisionImage>, String> {
+    if images.is_empty() {
+        return Err("Add screenshots in Research → Headlines first.".to_string());
+    }
+    let mut out = Vec::new();
+    for image in images.into_iter().take(MAX_HEADLINE_VISION_IMAGES) {
+        let mime = image.mime_type.trim().to_ascii_lowercase();
+        let mime = match mime.as_str() {
+            "image/jpg" => "image/jpeg".to_string(),
+            "image/jpeg" | "image/png" | "image/gif" | "image/webp" => mime,
+            _ => {
+                return Err(format!(
+                    "Unsupported screenshot type '{}'. Use PNG, JPEG, GIF, or WebP.",
+                    image.mime_type
+                ));
+            }
+        };
+        let data = image
+            .data_base64
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect::<String>();
+        if data.is_empty() {
+            continue;
+        }
+        let approx_bytes = (data.len() * 3) / 4;
+        if approx_bytes > MAX_HEADLINE_VISION_BYTES {
+            return Err("A headline screenshot is too large to send to the model.".to_string());
+        }
+        out.push(HeadlineVisionImage {
+            mime_type: mime,
+            data_base64: data,
+        });
+    }
+    if out.is_empty() {
+        return Err("Add screenshots in Research → Headlines first.".to_string());
+    }
+    Ok(out)
+}
+
+fn openai_headline_user_content(essay: &str, images: &[HeadlineVisionImage]) -> Value {
+    if images.is_empty() {
+        return json!(format!("Essay to title:\n\n{}", essay));
+    }
+    let mut parts = vec![json!({
+        "type": "text",
+        "text": format!("Essay to title:\n\n{}", essay)
+    })];
+    for image in images {
+        parts.push(json!({
+            "type": "image_url",
+            "image_url": {
+                "url": format!("data:{};base64,{}", image.mime_type, image.data_base64)
+            }
+        }));
+    }
+    json!(parts)
+}
+
+fn anthropic_headline_user_content(essay: &str, images: &[HeadlineVisionImage]) -> Value {
+    if images.is_empty() {
+        return json!(format!("Essay to title:\n\n{}", essay));
+    }
+    let mut parts = Vec::new();
+    for image in images {
+        parts.push(json!({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": image.mime_type,
+                "data": image.data_base64
+            }
+        }));
+    }
+    parts.push(json!({
+        "type": "text",
+        "text": format!("Essay to title:\n\n{}", essay)
+    }));
+    json!(parts)
 }
 
 fn strip_markdown_fences(raw: &str) -> String {
@@ -1045,6 +1152,7 @@ fn run_openai_headline_pairs(
     model: &str,
     essay: &str,
     system_prompt: &str,
+    images: &[HeadlineVisionImage],
 ) -> Result<ModelCheckResponse, String> {
     let body = json!({
         "model": model,
@@ -1052,7 +1160,7 @@ fn run_openai_headline_pairs(
         "response_format": { "type": "json_object" },
         "messages": [
             { "role": "system", "content": system_prompt },
-            { "role": "user", "content": format!("Essay to title:\n\n{}", essay) }
+            { "role": "user", "content": openai_headline_user_content(essay, images) }
         ]
     });
     let response = client
@@ -1098,6 +1206,7 @@ fn run_anthropic_headline_pairs(
     model: &str,
     essay: &str,
     system_prompt: &str,
+    images: &[HeadlineVisionImage],
 ) -> Result<ModelCheckResponse, String> {
     let body = json!({
         "model": model,
@@ -1105,7 +1214,7 @@ fn run_anthropic_headline_pairs(
         "temperature": 0.7,
         "system": system_prompt,
         "messages": [
-            { "role": "user", "content": format!("Essay to title:\n\n{}", essay) }
+            { "role": "user", "content": anthropic_headline_user_content(essay, images) }
         ]
     });
     let response = client
@@ -1184,6 +1293,7 @@ pub fn ai_check_headline_pairs(
             &config.model,
             essay,
             &system_prompt,
+            &[],
         )?,
         AiProvider::Anthropic => run_anthropic_headline_pairs(
             &client,
@@ -1191,6 +1301,56 @@ pub fn ai_check_headline_pairs(
             &config.model,
             essay,
             &system_prompt,
+            &[],
+        )?,
+    };
+    let pairs = parse_headline_pairs_from_model_text(&generated.text)?;
+    Ok(HeadlinePairsResult {
+        pairs,
+        model: config.model,
+        provider: config.provider,
+        usage: generated.usage,
+    })
+}
+
+#[tauri::command]
+pub fn ai_check_headline_pairs_from_shots(
+    app: AppHandle,
+    essay: String,
+    style_prompt: Option<String>,
+    images: Vec<HeadlineVisionImage>,
+) -> Result<HeadlinePairsResult, String> {
+    let config = require_ai_config_for_generation(&app)?;
+    let essay = essay.trim();
+    if essay.is_empty() {
+        return Err("Nothing to title — the document is empty.".to_string());
+    }
+    if essay.chars().count() > MAX_ESSAY_CHARS {
+        return Err(format!(
+            "Essay is too long for headline suggestions (max {} characters).",
+            MAX_ESSAY_CHARS
+        ));
+    }
+
+    let images = normalize_vision_images(images)?;
+    let system_prompt = compose_headline_from_shots_system_prompt(style_prompt.as_deref());
+    let client = http_client()?;
+    let generated = match config.provider {
+        AiProvider::Openai => run_openai_headline_pairs(
+            &client,
+            &config.api_key,
+            &config.model,
+            essay,
+            &system_prompt,
+            &images,
+        )?,
+        AiProvider::Anthropic => run_anthropic_headline_pairs(
+            &client,
+            &config.api_key,
+            &config.model,
+            essay,
+            &system_prompt,
+            &images,
         )?,
     };
     let pairs = parse_headline_pairs_from_model_text(&generated.text)?;
@@ -1262,5 +1422,34 @@ mod tests {
         let fallback = compose_headline_system_prompt(Some("  "));
         assert!(fallback.starts_with("You write titles and subtitles"));
         assert!(fallback.contains("\"pairs\""));
+    }
+
+    #[test]
+    fn composes_shots_prompt_with_style_examples() {
+        let prompt = compose_headline_from_shots_system_prompt(Some("Punchy news headlines."));
+        assert!(prompt.starts_with("Punchy news headlines."));
+        assert!(prompt.contains("screenshots of headlines they like"));
+        assert!(prompt.contains("\"pairs\""));
+    }
+
+    #[test]
+    fn rejects_empty_vision_images() {
+        assert!(normalize_vision_images(vec![]).is_err());
+    }
+
+    #[test]
+    fn openai_user_content_is_text_without_images() {
+        let content = openai_headline_user_content("Hello essay", &[]);
+        assert_eq!(content, json!("Essay to title:\n\nHello essay"));
+    }
+
+    #[test]
+    fn openai_user_content_includes_data_urls() {
+        let images = vec![HeadlineVisionImage {
+            mime_type: "image/jpeg".to_string(),
+            data_base64: "abc".to_string(),
+        }];
+        let content = openai_headline_user_content("Hello essay", &images);
+        assert_eq!(content[1]["image_url"]["url"], "data:image/jpeg;base64,abc");
     }
 }

@@ -1,11 +1,13 @@
 const STORAGE_ENABLE_COLLECT = "harvy:enable-collect";
 const STORAGE_SHOW_OUTLIERS_VIEW = "harvy:show-outliers-view";
 const STORAGE_SHOW_COLLECT_VIEW = "harvy:show-collect-view";
+const STORAGE_SHOW_HEADLINES_VIEW = "harvy:show-headlines-view";
 const STORAGE_SHOW_AVATAR_VIEW = "harvy:show-avatar-view";
 
 export type CollectSubViewVisibility = {
   showOutliersView: boolean;
   showCollectView: boolean;
+  showHeadlinesView: boolean;
   showAvatarView: boolean;
 };
 
@@ -17,6 +19,7 @@ const defaultSettings: WorkspaceSettings = {
   enableCollect: true,
   showOutliersView: true,
   showCollectView: true,
+  showHeadlinesView: true,
   showAvatarView: true,
 };
 
@@ -30,6 +33,7 @@ function countEnabledViews(views: CollectSubViewVisibility): number {
   return (
     Number(views.showOutliersView) +
     Number(views.showCollectView) +
+    Number(views.showHeadlinesView) +
     Number(views.showAvatarView)
   );
 }
@@ -55,6 +59,7 @@ export function readWorkspaceSettings(): WorkspaceSettings {
   const visibility = applyCollectSubViewVisibility(defaultSettings, {
     showOutliersView: readBool(STORAGE_SHOW_OUTLIERS_VIEW, true),
     showCollectView: readBool(STORAGE_SHOW_COLLECT_VIEW, true),
+    showHeadlinesView: readBool(STORAGE_SHOW_HEADLINES_VIEW, true),
     showAvatarView: readBool(STORAGE_SHOW_AVATAR_VIEW, true),
   });
 
@@ -63,6 +68,7 @@ export function readWorkspaceSettings(): WorkspaceSettings {
       ? {
           showOutliersView: defaultSettings.showOutliersView,
           showCollectView: defaultSettings.showCollectView,
+          showHeadlinesView: defaultSettings.showHeadlinesView,
           showAvatarView: defaultSettings.showAvatarView,
         }
       : visibility;
@@ -80,6 +86,7 @@ export function writeWorkspaceSettings(partial: Partial<WorkspaceSettings>): Wor
   if (
     partial.showOutliersView !== undefined ||
     partial.showCollectView !== undefined ||
+    partial.showHeadlinesView !== undefined ||
     partial.showAvatarView !== undefined
   ) {
     next = {
@@ -87,6 +94,7 @@ export function writeWorkspaceSettings(partial: Partial<WorkspaceSettings>): Wor
       ...applyCollectSubViewVisibility(current, {
         showOutliersView: next.showOutliersView,
         showCollectView: next.showCollectView,
+        showHeadlinesView: next.showHeadlinesView,
         showAvatarView: next.showAvatarView,
       }),
     };
@@ -99,10 +107,12 @@ export function writeWorkspaceSettings(partial: Partial<WorkspaceSettings>): Wor
     if (
       partial.showOutliersView !== undefined ||
       partial.showCollectView !== undefined ||
+      partial.showHeadlinesView !== undefined ||
       partial.showAvatarView !== undefined
     ) {
       localStorage.setItem(STORAGE_SHOW_OUTLIERS_VIEW, next.showOutliersView ? "true" : "false");
       localStorage.setItem(STORAGE_SHOW_COLLECT_VIEW, next.showCollectView ? "true" : "false");
+      localStorage.setItem(STORAGE_SHOW_HEADLINES_VIEW, next.showHeadlinesView ? "true" : "false");
       localStorage.setItem(STORAGE_SHOW_AVATAR_VIEW, next.showAvatarView ? "true" : "false");
     }
   }

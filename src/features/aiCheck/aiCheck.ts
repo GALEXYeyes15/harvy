@@ -143,6 +143,24 @@ export async function generateHeadlinePairs(
   });
 }
 
+export type HeadlineVisionImageInput = {
+  mimeType: string;
+  dataBase64: string;
+};
+
+export async function generateHeadlinePairsFromShots(
+  essay: string,
+  images: HeadlineVisionImageInput[],
+  stylePrompt?: string,
+): Promise<HeadlinePairsResult> {
+  requireTauri();
+  return invoke<HeadlinePairsResult>("ai_check_headline_pairs_from_shots", {
+    essay,
+    stylePrompt: stylePrompt?.trim() ? stylePrompt : null,
+    images,
+  });
+}
+
 export function providerLabel(provider: AiProvider | null | undefined): string {
   if (provider === "openai") return "OpenAI";
   if (provider === "anthropic") return "Anthropic";

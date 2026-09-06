@@ -17,10 +17,12 @@ type HeadlineSuggestMenuProps = {
   anchorEl: HTMLElement | null;
   mountEl: HTMLElement | null;
   running: boolean;
+  runningFromHeadlines?: boolean;
   error: string | null;
   pairs: HeadlinePair[];
   selectedIndex: number | null;
   onGenerate: () => void;
+  onGenerateFromHeadlines?: () => void;
   onSelectPair: (pair: HeadlinePair, index: number) => void;
   onClose: () => void;
 };
@@ -30,10 +32,12 @@ export function HeadlineSuggestMenu({
   anchorEl,
   mountEl,
   running,
+  runningFromHeadlines = false,
   error,
   pairs,
   selectedIndex,
   onGenerate,
+  onGenerateFromHeadlines,
   onSelectPair,
   onClose,
 }: HeadlineSuggestMenuProps) {
@@ -47,7 +51,7 @@ export function HeadlineSuggestMenu({
   useLayoutEffect(() => {
     if (!open || !anchorEl || !mountEl || !menuRef.current) return;
     placeHarvyContextMenuForElement(menuRef.current, mountEl, anchorEl);
-  }, [open, anchorEl, mountEl, running, error, pairs]);
+  }, [open, anchorEl, mountEl, running, runningFromHeadlines, error, pairs]);
 
   useEffect(() => {
     if (!open || !anchorEl || !mountEl) return;
@@ -109,9 +113,30 @@ export function HeadlineSuggestMenu({
       >
         <span className="flex items-center gap-1.5">
           <Zap size={14} strokeWidth={2} aria-hidden className="shrink-0" />
-          {running ? "Suggesting..." : "Suggest titles"}
+          {running && !runningFromHeadlines ? "Suggesting..." : "Suggest titles"}
         </span>
       </button>
+      {onGenerateFromHeadlines ? (
+        <button
+          type="button"
+          role="menuitem"
+          disabled={running}
+          className={running ? HARVY_CONTEXT_MENU_ITEM_DISABLED_CLASS : HARVY_CONTEXT_MENU_ITEM_CLASS}
+          onPointerDown={(event) => {
+            if (event.button !== 0 || running) return;
+            event.preventDefault();
+            event.stopPropagation();
+            onGenerateFromHeadlines();
+          }}
+        >
+          <span className="flex items-center gap-1.5">
+            <Zap size={14} strokeWidth={2} aria-hidden className="shrink-0" />
+            {running && runningFromHeadlines
+              ? "Suggesting..."
+              : "Suggest Titles from 'Headlines'"}
+          </span>
+        </button>
+      ) : null}
       {error ? (
         <p className="harvy-context-menu__note harvy-context-menu__note--left" role="alert">
           {error}

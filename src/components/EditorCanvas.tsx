@@ -112,10 +112,12 @@ type EditorCanvasProps = {
   /** When on, two-finger click (context menu) on Title or Subtitle opens Suggest titles. */
   showTitleGeneration?: boolean;
   headlinesRunning?: boolean;
+  headlinesRunningFromHeadlines?: boolean;
   headlinesError?: string | null;
   headlinePairs?: HeadlinePair[];
   selectedHeadlineIndex?: number | null;
   onGenerateHeadlines?: () => void | Promise<void>;
+  onGenerateHeadlinesFromShots?: () => void | Promise<void>;
   onSelectHeadlinePair?: (pair: HeadlinePair, index: number) => void;
   /** Visual inactive mode — hides caret/selection until user clicks the writing surface. */
   editorVisuallyInactive?: boolean;
@@ -152,10 +154,12 @@ export function EditorCanvas({
   onInsertImage,
   showTitleGeneration = false,
   headlinesRunning = false,
+  headlinesRunningFromHeadlines = false,
   headlinesError = null,
   headlinePairs = [],
   selectedHeadlineIndex = null,
   onGenerateHeadlines,
+  onGenerateHeadlinesFromShots,
   onSelectHeadlinePair,
   editorVisuallyInactive = false,
   editorFocusSuppressedRef,
@@ -691,12 +695,20 @@ export function EditorCanvas({
           anchorEl={headlineAnchorEl}
           mountEl={headlineMountEl}
           running={headlinesRunning}
+          runningFromHeadlines={headlinesRunningFromHeadlines}
           error={headlinesError}
           pairs={headlinePairs}
           selectedIndex={selectedHeadlineIndex}
           onGenerate={() => {
             void onGenerateHeadlines?.();
           }}
+          onGenerateFromHeadlines={
+            onGenerateHeadlinesFromShots
+              ? () => {
+                  void onGenerateHeadlinesFromShots();
+                }
+              : undefined
+          }
           onSelectPair={(pair, index) => {
             closeHeadlineMenu();
             onSelectHeadlinePair?.(pair, index);
