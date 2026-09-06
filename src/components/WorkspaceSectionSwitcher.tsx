@@ -66,7 +66,7 @@ export function WorkspaceSectionSwitcher({
             <span
               aria-hidden
               className={`pointer-events-none absolute inset-y-0 left-0 w-[2px] rounded-full transition-colors duration-150 ${
-                active ? "bg-accent" : "bg-transparent group-hover:bg-accent/35"
+                active ? "bg-current" : "bg-transparent group-hover:bg-current"
               }`}
             />
             <span
