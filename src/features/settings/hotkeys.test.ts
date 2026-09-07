@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatHotkeyChord, formatHotkeyKeys, matchSidebarToggleHotkey } from "./hotkeys";
+import {
+  formatHotkeyChord,
+  formatHotkeyKeys,
+  matchSidebarToggleHotkey,
+  matchViewHotkey,
+} from "./hotkeys";
 
 describe("formatHotkeyKeys", () => {
   it("uses option and arrow symbols on macOS", () => {
@@ -40,5 +45,30 @@ describe("matchSidebarToggleHotkey", () => {
     expect(matchSidebarToggleHotkey({ ...optionLeft, metaKey: true })).toBeNull();
     expect(matchSidebarToggleHotkey({ ...optionLeft, altKey: false })).toBeNull();
     expect(matchSidebarToggleHotkey({ ...optionLeft, key: "ArrowUp" })).toBeNull();
+  });
+});
+
+describe("matchViewHotkey", () => {
+  const cmdN = {
+    key: "n",
+    altKey: false,
+    metaKey: true,
+    ctrlKey: false,
+    shiftKey: false,
+  };
+
+  it("maps command keys to Notes, Write, and Research", () => {
+    expect(matchViewHotkey(cmdN)).toBe("notes");
+    expect(matchViewHotkey({ ...cmdN, key: "w" })).toBe("write");
+    expect(matchViewHotkey({ ...cmdN, key: "r" })).toBe("research");
+    expect(matchViewHotkey({ ...cmdN, metaKey: false, ctrlKey: true, key: "n" })).toBe("notes");
+  });
+
+  it("ignores repeats, extra modifiers, and other keys", () => {
+    expect(matchViewHotkey({ ...cmdN, repeat: true })).toBeNull();
+    expect(matchViewHotkey({ ...cmdN, shiftKey: true })).toBeNull();
+    expect(matchViewHotkey({ ...cmdN, altKey: true })).toBeNull();
+    expect(matchViewHotkey({ ...cmdN, metaKey: false })).toBeNull();
+    expect(matchViewHotkey({ ...cmdN, key: "s" })).toBeNull();
   });
 });

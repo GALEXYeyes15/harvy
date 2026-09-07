@@ -33,7 +33,6 @@ type EditorAmbientControlsProps = {
   onPublish?: () => void | Promise<void>;
   publishEnabled?: boolean;
   onPodcastNotesPdf: () => void | Promise<void>;
-  onSaveAsPdf: () => void | Promise<void>;
   onPrint: () => void | Promise<void>;
   podcastNotesEnabled?: boolean;
   podcastNotesRunning?: boolean;
@@ -56,7 +55,6 @@ export function EditorAmbientControls({
   onPublish,
   publishEnabled = false,
   onPodcastNotesPdf,
-  onSaveAsPdf,
   onPrint,
   podcastNotesEnabled = false,
   podcastNotesRunning = false,
@@ -157,7 +155,6 @@ export function EditorAmbientControls({
             onPublish={onPublish}
             publishEnabled={publishEnabled}
             onPodcastNotesPdf={onPodcastNotesPdf}
-            onSaveAsPdf={onSaveAsPdf}
             onPrint={onPrint}
             podcastNotesEnabled={podcastNotesEnabled}
             podcastNotesRunning={podcastNotesRunning}

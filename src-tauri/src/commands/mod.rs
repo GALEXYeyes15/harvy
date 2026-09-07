@@ -13,6 +13,7 @@ pub mod color_picker;
 pub mod notion;
 pub mod ai_check;
 mod pdf_export;
+pub mod print;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "lowercase")]

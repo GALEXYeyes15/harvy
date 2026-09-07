@@ -29,6 +29,7 @@ image = { version = "0.24", default-features = false, features = ["jpeg", "png",
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = "0.3"
-objc2-app-kit = { version = "0.3", features = ["NSColor", "NSColorSampler", "NSColorSpace"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSURL"] }
+objc2-app-kit = { version = "0.3", features = ["NSColor", "NSColorSampler", "NSColorSpace", "NSPrintInfo", "NSPrintOperation"] }
+objc2-pdf-kit = { version = "0.3", features = ["PDFDocument", "objc2-app-kit"] }
 block2 = "0.6"

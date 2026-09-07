@@ -23,12 +23,21 @@ export const HOTKEY_GROUPS: HotkeyGroup[] = [
       { id: "save", action: "Save", keys: ["Mod", "S"] },
       { id: "save-as", action: "Save As…", keys: ["Mod", "Shift", "S"] },
       { id: "export-pdf", action: "Export as PDF…", keys: ["Mod", "Shift", "E"] },
+      { id: "print", action: "Print…", keys: ["Mod", "P"] },
     ],
   },
   {
     id: "view",
     title: "View",
     items: [
+      { id: "open-notes", action: "Open Notes window", keys: ["Mod", "N"] },
+      { id: "open-write", action: "Open Write", keys: ["Mod", "W"] },
+      {
+        id: "open-research",
+        action: "Open Research",
+        keys: ["Mod", "R"],
+        note: "When Research is enabled in Settings",
+      },
       { id: "toggle-left-sidebar", action: "Toggle left sidebar", keys: ["Option", "ArrowLeft"] },
       { id: "toggle-right-sidebar", action: "Toggle right sidebar", keys: ["Option", "ArrowRight"] },
       {
@@ -187,6 +196,27 @@ export function formatHotkeyKeys(keys: string[], mac = isMacOSPlatform()): strin
 export function formatHotkeyChord(keys: string[], mac = isMacOSPlatform()): string {
   const labels = formatHotkeyKeys(keys, mac);
   return mac ? labels.join("") : labels.join("+");
+}
+
+export type ViewHotkey = "notes" | "write" | "research";
+
+/** Cmd/Ctrl + N / W / R. Ignores repeats and extra modifiers. */
+export function matchViewHotkey(event: {
+  key: string;
+  altKey: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  repeat?: boolean;
+}): ViewHotkey | null {
+  if (event.repeat) return null;
+  if (event.altKey || event.shiftKey) return null;
+  if (!(event.metaKey || event.ctrlKey)) return null;
+  const key = event.key.toLowerCase();
+  if (key === "n") return "notes";
+  if (key === "w") return "write";
+  if (key === "r") return "research";
+  return null;
 }
 
 export type SidebarToggleHotkey = "left" | "right" | "both";

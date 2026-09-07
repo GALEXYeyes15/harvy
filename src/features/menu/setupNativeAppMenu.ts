@@ -1,6 +1,7 @@
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getFileMenuHandlers } from "./fileMenuBridge";
+import { getViewMenuHandlers } from "./viewMenuBridge";
 
 function isLikelyMac(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -64,6 +65,15 @@ export async function setupNativeAppMenu(): Promise<void> {
           void getFileMenuHandlers().exportPdf();
         },
       }),
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      await MenuItem.new({
+        id: "file-print",
+        text: "Print…",
+        accelerator: "CmdOrCtrl+P",
+        action: () => {
+          void getFileMenuHandlers().print();
+        },
+      }),
     ],
   });
 
@@ -80,7 +90,37 @@ export async function setupNativeAppMenu(): Promise<void> {
     ],
   });
 
-  const menu = await Menu.new({ items: [harvy, file, edit] });
+  const view = await Submenu.new({
+    text: "View",
+    items: [
+      await MenuItem.new({
+        id: "view-notes",
+        text: "Notes",
+        accelerator: "CmdOrCtrl+N",
+        action: () => {
+          void getViewMenuHandlers().openNotes();
+        },
+      }),
+      await MenuItem.new({
+        id: "view-write",
+        text: "Write",
+        accelerator: "CmdOrCtrl+W",
+        action: () => {
+          getViewMenuHandlers().openWrite();
+        },
+      }),
+      await MenuItem.new({
+        id: "view-research",
+        text: "Research",
+        accelerator: "CmdOrCtrl+R",
+        action: () => {
+          getViewMenuHandlers().openResearch();
+        },
+      }),
+    ],
+  });
+
+  const menu = await Menu.new({ items: [harvy, file, edit, view] });
 
   if (isLikelyMac()) {
     await menu.setAsAppMenu();

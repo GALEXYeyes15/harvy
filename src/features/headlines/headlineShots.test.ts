@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseHeadlineShots } from "./headlineShots";
-import { parseHeadlineDataUrl } from "./headlineScreenshotAssets";
+import { imagePathsFromFiles, parseHeadlineDataUrl } from "./headlineScreenshotAssets";
 
 describe("parseHeadlineShots", () => {
   it("keeps valid screenshot records", () => {
@@ -41,5 +41,14 @@ describe("parseHeadlineDataUrl", () => {
       mimeType: "image/jpeg",
       dataBase64: "abcd",
     });
+  });
+});
+
+describe("imagePathsFromFiles", () => {
+  it("keeps image files that include a filesystem path", () => {
+    const png = { name: "shot.png", path: "/tmp/shot.png" } as File & { path?: string };
+    const txt = { name: "notes.txt", path: "/tmp/notes.txt" } as File & { path?: string };
+    const noPath = { name: "clip.png" } as File & { path?: string };
+    expect(imagePathsFromFiles([png, txt, noPath])).toEqual(["/tmp/shot.png"]);
   });
 });

@@ -1,10 +1,18 @@
 import { Plus, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  HARVY_SIDEBAR_IMAGE_DROP_EVENT,
+  isSidebarImageDragActive,
+  type SidebarImageDropDetail,
+} from "../features/editor/imageDrop";
 import {
   deleteHeadlineScreenshotFile,
   imageFilesFromClipboard,
-  imageFilesFromDataTransfer,
   importHeadlineScreenshotFiles,
+  importHeadlineScreenshotsFromDataTransfer,
+  importHeadlineScreenshotsFromPaths,
+  imagePathsFromFiles,
   pickAndImportHeadlineScreenshots,
   resolveHeadlineShotSrc,
   transferLooksLikeFiles,
@@ -14,6 +22,7 @@ import {
   saveHeadlineShots,
   type HeadlineShot,
 } from "../features/headlines/headlineShots";
+import { isTauriRuntime } from "../features/save/saveRuntime";
 import { useOutlierColumnCount } from "../features/outliers/useOutlierColumnCount";
 import { CenteredOverlayModal } from "./overlay/CenteredOverlayModal";
 
@@ -23,6 +32,11 @@ const ADD_BUTTON =
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return Boolean(target.closest("textarea, input, [contenteditable='true']"));
+}
+
+function isOverHeadlinesPage(clientX: number, clientY: number): boolean {
+  const el = document.elementFromPoint(clientX, clientY);
+  return Boolean(el?.closest("#harvy-editor-panel"));
 }
 
 function HeadlineShotCard({
@@ -79,7 +93,7 @@ export function HeadlinesView({
   const [searchQuery, setSearchQuery] = useState("");
   const [activeShot, setActiveShot] = useState<HeadlineShot | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const dragDepthRef = useRef(0);
+  const dropInFlightRef = useRef(false);
   const { columnCount, isReflowing } = useOutlierColumnCount({
     workspaceSidebarOpen,
     toolsSidebarOpen,
@@ -118,6 +132,20 @@ export function HeadlinesView({
     [addShots],
   );
 
+  const importIncoming = useCallback(
+    async (incoming: Promise<HeadlineShot[]>) => {
+      if (dropInFlightRef.current) return;
+      dropInFlightRef.current = true;
+      try {
+        addShots(await incoming);
+      } finally {
+        dropInFlightRef.current = false;
+        setIsDragging(false);
+      }
+    },
+    [addShots],
+  );
+
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
       if (isTypingTarget(event.target)) return;
@@ -130,36 +158,125 @@ export function HeadlinesView({
     return () => window.removeEventListener("paste", onPaste);
   }, [handleDropFiles]);
 
+  useEffect(() => {
+    const onDragOver = (event: DragEvent) => {
+      if (!transferLooksLikeFiles(event.dataTransfer) && !isSidebarImageDragActive()) return;
+      if (!isOverHeadlinesPage(event.clientX, event.clientY)) {
+        setIsDragging(false);
+        return;
+      }
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      setIsDragging(true);
+    };
+    const onDragLeave = (event: DragEvent) => {
+      if (event.relatedTarget) return;
+      setIsDragging(false);
+    };
+    const onDrop = (event: DragEvent) => {
+      if (!isOverHeadlinesPage(event.clientX, event.clientY)) {
+        setIsDragging(false);
+        return;
+      }
+      if (!event.dataTransfer) return;
+      event.preventDefault();
+      if (isTauriRuntime() && imagePathsFromFiles(event.dataTransfer.files).length === 0) {
+        // OS file drops are handled by Tauri's drag-drop event.
+        return;
+      }
+      void importIncoming(importHeadlineScreenshotsFromDataTransfer(event.dataTransfer));
+    };
+    const onDragEnd = () => setIsDragging(false);
+
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("drop", onDrop);
+    window.addEventListener("dragend", onDragEnd);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("drop", onDrop);
+      window.removeEventListener("dragend", onDragEnd);
+    };
+  }, [importIncoming]);
+
+  useEffect(() => {
+    const onPointerMove = (event: PointerEvent) => {
+      if (!isSidebarImageDragActive()) return;
+      setIsDragging(isOverHeadlinesPage(event.clientX, event.clientY));
+    };
+    const onSidebarDrop = (event: Event) => {
+      const detail = (event as CustomEvent<SidebarImageDropDetail>).detail;
+      if (!detail?.path) return;
+      if (!isOverHeadlinesPage(detail.clientX, detail.clientY)) {
+        setIsDragging(false);
+        return;
+      }
+      void importIncoming(importHeadlineScreenshotsFromPaths([detail.path]));
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener(HARVY_SIDEBAR_IMAGE_DROP_EVENT, onSidebarDrop);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener(HARVY_SIDEBAR_IMAGE_DROP_EVENT, onSidebarDrop);
+    };
+  }, [importIncoming]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void getCurrentWindow()
+      .onDragDropEvent((event) => {
+        if (cancelled) return;
+        if (event.payload.type === "leave") {
+          setIsDragging(false);
+          return;
+        }
+
+        void (async () => {
+          const scale = await getCurrentWindow().scaleFactor();
+          if (cancelled) return;
+          const position =
+            event.payload.type === "enter" ||
+            event.payload.type === "over" ||
+            event.payload.type === "drop"
+              ? event.payload.position
+              : null;
+          if (!position) return;
+          const clientX = position.x / scale;
+          const clientY = position.y / scale;
+          const over = isOverHeadlinesPage(clientX, clientY);
+
+          if (event.payload.type === "enter" || event.payload.type === "over") {
+            setIsDragging(over);
+            return;
+          }
+          if (event.payload.type !== "drop") return;
+          setIsDragging(false);
+          if (!over || event.payload.paths.length === 0) return;
+          void importIncoming(importHeadlineScreenshotsFromPaths(event.payload.paths));
+        })();
+      })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [importIncoming]);
+
   const activeSrc = activeShot ? resolveHeadlineShotSrc(activeShot.src) : "";
 
   return (
     <div
-      className={`relative mt-7 min-h-0 flex-1 ${
+      className={`relative mt-7 flex min-h-0 flex-1 flex-col ${
         isDragging ? "rounded-xl ring-1 ring-accent/35 ring-offset-0" : ""
       }`}
-      onDragEnter={(event) => {
-        if (!transferLooksLikeFiles(event.dataTransfer)) return;
-        event.preventDefault();
-        dragDepthRef.current += 1;
-        setIsDragging(true);
-      }}
-      onDragOver={(event) => {
-        if (!transferLooksLikeFiles(event.dataTransfer)) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "copy";
-      }}
-      onDragLeave={() => {
-        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-        if (dragDepthRef.current === 0) setIsDragging(false);
-      }}
-      onDrop={(event) => {
-        const files = imageFilesFromDataTransfer(event.dataTransfer);
-        event.preventDefault();
-        dragDepthRef.current = 0;
-        setIsDragging(false);
-        if (files.length === 0) return;
-        void handleDropFiles(files);
-      }}
     >
       <div className="harvy-outlier-search-bar w-full">
         <Search

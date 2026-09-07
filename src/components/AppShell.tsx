@@ -36,6 +36,7 @@ import {
 } from "../features/focus/focusModeWindowLock";
 import { EditorCanvas } from "./EditorCanvas";
 import { ImagePreviewModal, type ImagePreviewTarget } from "./ImagePreviewModal";
+import { PodcastNotesPreviewModal } from "./PodcastNotesPreviewModal";
 import { FloatingTextMenu } from "./FloatingTextMenu";
 import { setSpellingDocumentKey } from "../features/proofread/mechanics/spellingDictionary";
 import { syncSpellingContextMenuRef } from "../features/proofread/spellingContextMenuRef";
@@ -61,6 +62,7 @@ import {
   readWorkspaceSettings,
   writeWorkspaceSettings,
 } from "../features/workspace/workspaceSettings";
+import type { CollectSubView } from "../features/workspace/collectViews";
 import { useOutliersAutoRefresh } from "../features/outliers/useOutliersAutoRefresh";
 import {
   readQuickLinksSettings,
@@ -79,14 +81,16 @@ import { SaveAsModal, type SaveAsOrganizeMode } from "./SaveAsModal";
 import type { EditorCommand } from "../features/editor/commands";
 import { documentTextForStats, ingestTextFileContent } from "../features/editor/documentMarkdown";
 import { setFileMenuHandlers } from "../features/menu/fileMenuBridge";
+import { setViewMenuHandlers } from "../features/menu/viewMenuBridge";
 import { setupNativeAppMenu } from "../features/menu/setupNativeAppMenu";
 import { setupWindowDragRegions } from "../features/window/setupWindowDragRegions";
 import { isDocumentNameKeyboardTarget, isEditableKeyboardTarget } from "../lib/isEditableKeyboardTarget";
-import { formatHotkeyChord, matchSidebarToggleHotkey } from "../features/settings/hotkeys";
+import { formatHotkeyChord, matchSidebarToggleHotkey, matchViewHotkey } from "../features/settings/hotkeys";
 import {
   emitNotesPopoutState,
   listenNotesPopoutRequest,
   listenNotesPopoutUpdate,
+  openNotesPopoutWindow,
   toggleNotesPopoutWindow,
 } from "../features/notes/notesPopout";
 import { visuallyDeactivateEditor } from "../features/editor/editorCanvasFocus";
@@ -95,7 +99,7 @@ import { calculateEditorStats } from "../features/editor/stats";
 import { pickAndImportWorkspaceImage } from "../features/editor/imageAssets";
 import { copyDocumentToClipboard } from "../features/editor/documentClipboard";
 import { openSafeExternalUrl } from "../features/editor/openExternalUrl";
-import { printDocumentFromEditor } from "../features/editor/documentPrint";
+import { printDocumentFromEditor, printMarkdownDocument } from "../features/editor/documentPrint";
 import type { HarvyImageLoadAttrs } from "../features/editor/harvyImageAttribution";
 import {
   insertHarvyImagePlaceholderAtCursor,
@@ -384,6 +388,9 @@ export function AppShell() {
   const [showHeadlinesView, setShowHeadlinesView] = useState(
     () => readWorkspaceSettings().showHeadlinesView,
   );
+  const [collectViewOrder, setCollectViewOrder] = useState<CollectSubView[]>(
+    () => readWorkspaceSettings().collectViewOrder,
+  );
   const [collectItems, setCollectItems] = useState<CollectItem[]>(() => loadPersistedCollectItems());
   const [isWorkspaceSidebarOpen, setIsWorkspaceSidebarOpen] = useState(true);
   /** `null` = browse at the selected workspace root. */
@@ -405,6 +412,10 @@ export function AppShell() {
   const [saveAsSubmitting, setSaveAsSubmitting] = useState(false);
   /** Regular document Save As vs podcast-notes export (forces Folder + writes PDF to Exports). */
   const [saveAsPurpose, setSaveAsPurpose] = useState<"document" | "podcast-notes">("document");
+  const [podcastNotesPreviewOpen, setPodcastNotesPreviewOpen] = useState(false);
+  const [podcastNotesMarkdown, setPodcastNotesMarkdown] = useState<string | null>(null);
+  const [podcastNotesPreviewError, setPodcastNotesPreviewError] = useState<string | null>(null);
+  const podcastNotesGenerationRef = useRef(0);
   const [isTopChromeHidden, setIsTopChromeHidden] = useState(false);
   const [readabilityPanelOpen, setReadabilityPanelOpen] = useState(true);
   const [showQuickLinks, setShowQuickLinks] = useState(
@@ -467,6 +478,7 @@ export function AppShell() {
   const [aiProofreadIssues, setAiProofreadIssues] = useState<ProofreadIssue[]>([]);
   const [aiCheckRunning, setAiCheckRunning] = useState(false);
   const [podcastNotesRunning, setPodcastNotesRunning] = useState(false);
+  const exportOverlayOpen = saveAsModalOpen || podcastNotesPreviewOpen;
   const [aiCheckCostLabel, setAiCheckCostLabel] = useState<string | null>(null);
   const [aiCheckError, setAiCheckError] = useState<string | null>(null);
   const [headlinePairs, setHeadlinePairs] = useState<HeadlinePair[]>([]);
@@ -503,6 +515,7 @@ export function AppShell() {
   const [editorVisuallyInactive, setEditorVisuallyInactive] = useState(false);
   const editorFocusSuppressedRef = useRef(false);
   const editorFocusBeforeSaveAsRef = useRef<boolean | null>(null);
+  const printDocumentRef = useRef<() => void>(() => {});
 
   const setEditorInactive = useCallback((inactive: boolean) => {
     editorFocusSuppressedRef.current = inactive;
@@ -591,6 +604,11 @@ export function AppShell() {
     [applyCollectViewVisibility],
   );
 
+  const handleCollectViewOrderChange = useCallback((order: CollectSubView[]) => {
+    const next = writeWorkspaceSettings({ collectViewOrder: order });
+    setCollectViewOrder(next.collectViewOrder);
+  }, []);
+
   const handleShowQuickLinksChange = useCallback((enabled: boolean) => {
     const next = writeQuickLinksSettings({ showQuickLinks: enabled });
     setShowQuickLinks(next.showQuickLinks);
@@ -652,7 +670,7 @@ export function AppShell() {
   useEffect(() => {
     if (activeWorkspaceSection !== "write") return;
     if (!editorFocusSuppressedRef.current) return;
-    if (saveAsModalOpen) return;
+    if (exportOverlayOpen) return;
 
     const ed = tiptapEditor;
     if (!ed) return;
@@ -665,7 +683,7 @@ export function AppShell() {
       cancelAnimationFrame(raf);
       clearTimeout(timer);
     };
-  }, [activeWorkspaceSection, tiptapEditor, saveAsModalOpen]);
+  }, [activeWorkspaceSection, tiptapEditor, exportOverlayOpen]);
 
   const handleSpellcheckPref = useCallback((spellcheck: boolean) => {
     setWritingAssistancePrefs(writeWritingAssistancePrefs({ spellcheck }));
@@ -816,6 +834,32 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [toggleLeftSidebar, toggleRightSidebar, toggleBothSidebars]);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const action = matchViewHotkey(event);
+      if (!action) return;
+      const el = event.target as HTMLElement | null;
+      if (el?.closest('[role="dialog"]')) return;
+      if (el?.closest("[data-floating-text-menu]")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (action === "notes") {
+        void openNotesPopoutWindow().catch((err) => {
+          console.error("Notes pop-out failed:", err);
+          window.alert(err instanceof Error ? err.message : String(err));
+        });
+        return;
+      }
+      if (action === "write") {
+        handleWorkspaceSectionChange("write");
+        return;
+      }
+      if (enableCollect) handleWorkspaceSectionChange("collect");
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [enableCollect, handleWorkspaceSectionChange]);
+
   const startFocusMode = useCallback(() => {
     setIsWorkspaceSidebarOpen(false);
     setReadabilityPanelOpen(false);
@@ -864,7 +908,7 @@ export function AppShell() {
     if (!focusModeActive) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        if (isFocusModeOpen || isSettingsOpen || isAboutOpen || saveAsModalOpen) return;
+        if (isFocusModeOpen || isSettingsOpen || isAboutOpen || exportOverlayOpen) return;
         event.preventDefault();
         endFocusMode();
         return;
@@ -873,8 +917,8 @@ export function AppShell() {
       const mod = event.metaKey || event.ctrlKey;
       if (!mod) return;
       const key = event.key.toLowerCase();
-      // Soft-block in-app quit/hide/close shortcuts (OS Cmd+Tab still works).
-      if (key === "w" || key === "q" || key === "h" || key === "m") {
+      // Soft-block in-app quit/hide/minimize shortcuts (OS Cmd+Tab still works).
+      if (key === "q" || key === "h" || key === "m") {
         event.preventDefault();
         event.stopPropagation();
       }
@@ -886,7 +930,7 @@ export function AppShell() {
     isFocusModeOpen,
     isSettingsOpen,
     isAboutOpen,
-    saveAsModalOpen,
+    exportOverlayOpen,
     endFocusMode,
   ]);
 
@@ -1414,33 +1458,35 @@ export function AppShell() {
     async (opts?: { purpose?: "document" | "podcast-notes"; fileName?: string }) => {
       if (!isTauriRuntime()) {
         window.alert("Save As is only available in the Harvy desktop app.");
-        return;
+        return false;
       }
       if (!hasWorkspaceFolder) {
         window.alert("Choose a workspace folder before saving files.");
-        return;
+        return false;
       }
-      if (!editorEditable) return;
+      if (!editorEditable) return false;
       const purpose = opts?.purpose ?? "document";
       if (purpose === "podcast-notes") {
         if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
           window.alert("Enable AI check and add an API key in Settings → Sidebars first.");
-          return;
+          return false;
         }
         if (!showPodcastNotes) {
           window.alert("Turn on Podcast Notes in Settings → Sidebars → Artificial Intelligence.");
-          return;
+          return false;
         }
       }
       const flushed = await flushPendingTitleRename();
-      if (!flushed.ok) return;
+      if (!flushed.ok) return false;
       const suggestedFileName =
         opts?.fileName ??
         suggestedSaveAsFileName({
           fileTitle: flushed.title,
           postTitle: flushed.postTitle,
         });
-      editorFocusBeforeSaveAsRef.current = editorFocusSuppressedRef.current;
+      if (editorFocusBeforeSaveAsRef.current === null) {
+        editorFocusBeforeSaveAsRef.current = editorFocusSuppressedRef.current;
+      }
       visuallyDeactivateEditor(tiptapEditor);
       setEditorInactive(true);
       setSaveAsPurpose(purpose);
@@ -1448,6 +1494,7 @@ export function AppShell() {
       setSaveAsLiveFileName(suggestedFileName);
       setSaveAsDestinationPath(workspaceBrowsePath ?? supportedTree?.path ?? null);
       setSaveAsModalOpen(true);
+      return true;
     },
     [
       editorEditable,
@@ -1463,17 +1510,21 @@ export function AppShell() {
     ],
   );
 
-  const finishSaveAsModal = useCallback(() => {
-    setSaveAsModalOpen(false);
-    setSaveAsLiveFileName("");
-    setSaveAsPurpose("document");
-    setPodcastNotesRunning(false);
-    const wasSuppressedBeforeOpen = editorFocusBeforeSaveAsRef.current;
-    editorFocusBeforeSaveAsRef.current = null;
-    if (wasSuppressedBeforeOpen === false) {
-      setEditorInactive(false);
-    }
-  }, [setEditorInactive]);
+  const finishSaveAsModal = useCallback(
+    (opts?: { restoreEditor?: boolean }) => {
+      setSaveAsModalOpen(false);
+      setSaveAsLiveFileName("");
+      setSaveAsPurpose("document");
+      setPodcastNotesRunning(false);
+      if (opts?.restoreEditor === false) return;
+      const wasSuppressedBeforeOpen = editorFocusBeforeSaveAsRef.current;
+      editorFocusBeforeSaveAsRef.current = null;
+      if (wasSuppressedBeforeOpen === false) {
+        setEditorInactive(false);
+      }
+    },
+    [setEditorInactive],
+  );
 
   const handleSaveAsFileNameChange = useCallback((fileName: string) => {
     setSaveAsLiveFileName(fileName);
@@ -1481,8 +1532,13 @@ export function AppShell() {
 
   const closeSaveAsModal = useCallback(() => {
     if (saveAsSubmitting) return;
-    finishSaveAsModal();
-  }, [saveAsSubmitting, finishSaveAsModal]);
+    const returnToPodcastPreview =
+      saveAsPurpose === "podcast-notes" && Boolean(podcastNotesMarkdown?.trim());
+    finishSaveAsModal({ restoreEditor: !returnToPodcastPreview });
+    if (returnToPodcastPreview) {
+      setPodcastNotesPreviewOpen(true);
+    }
+  }, [saveAsSubmitting, finishSaveAsModal, saveAsPurpose, podcastNotesMarkdown]);
 
   const pickSaveAsDestination = useCallback(async () => {
     if (!workspaceRootPath) {
@@ -1594,14 +1650,17 @@ export function AppShell() {
           if (!projectDir) {
             throw new Error("Podcast notes require a project folder.");
           }
-          const { text } = tiptapEditor
-            ? proofreadPlainTextAndPositions(tiptapEditor.state.doc)
-            : { text: activeDocument?.content ?? scratchDraftContent };
-          const essay = text.trim();
-          if (!essay) {
-            throw new Error("Nothing to export — the document is empty.");
+          let notesMarkdown = podcastNotesMarkdown?.trim() ?? "";
+          if (!notesMarkdown) {
+            const { text } = tiptapEditor
+              ? proofreadPlainTextAndPositions(tiptapEditor.state.doc)
+              : { text: activeDocument?.content ?? scratchDraftContent };
+            const essay = text.trim();
+            if (!essay) {
+              throw new Error("Nothing to export — the document is empty.");
+            }
+            notesMarkdown = (await generatePodcastNotes(essay)).markdown;
           }
-          const notes = await generatePodcastNotes(essay);
           const exportsDir = await invoke<string>("ensure_directory", {
             parentPath: projectDir,
             folderName: "Exports",
@@ -1609,7 +1668,10 @@ export function AppShell() {
           const pdfPath = normalizePdfSavePath(
             joinPath(exportsDir, defaultPodcastNotesPdfFileName(folderBase)),
           );
-          await invoke("export_markdown_pdf", { path: pdfPath, markdown: notes.markdown });
+          await invoke("export_markdown_pdf", { path: pdfPath, markdown: notesMarkdown });
+          setPodcastNotesPreviewOpen(false);
+          setPodcastNotesMarkdown(null);
+          setPodcastNotesPreviewError(null);
         }
 
         finalizeSavedPath(outPath, markdown);
@@ -1632,6 +1694,7 @@ export function AppShell() {
       finalizeSavedPath,
       reloadWorkspaceTree,
       finishSaveAsModal,
+      podcastNotesMarkdown,
     ],
   );
 
@@ -1726,10 +1789,117 @@ export function AppShell() {
     workspaceRootPath,
   ]);
 
-  const performExportPodcastNotesPdf = useCallback(() => {
+  const closePodcastNotesPreview = useCallback(() => {
+    podcastNotesGenerationRef.current += 1;
+    setPodcastNotesPreviewOpen(false);
+    setPodcastNotesMarkdown(null);
+    setPodcastNotesPreviewError(null);
+    setPodcastNotesRunning(false);
+    const wasSuppressedBeforeOpen = editorFocusBeforeSaveAsRef.current;
+    editorFocusBeforeSaveAsRef.current = null;
+    if (wasSuppressedBeforeOpen === false) {
+      setEditorInactive(false);
+    }
+  }, [setEditorInactive]);
+
+  const runPodcastNotesGeneration = useCallback(async (essay: string) => {
+    const generationId = ++podcastNotesGenerationRef.current;
+    setPodcastNotesMarkdown(null);
+    setPodcastNotesPreviewError(null);
+    setPodcastNotesRunning(true);
+    try {
+      const notes = await generatePodcastNotes(essay);
+      if (podcastNotesGenerationRef.current !== generationId) return;
+      setPodcastNotesMarkdown(notes.markdown);
+    } catch (e) {
+      if (podcastNotesGenerationRef.current !== generationId) return;
+      setPodcastNotesPreviewError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (podcastNotesGenerationRef.current === generationId) {
+        setPodcastNotesRunning(false);
+      }
+    }
+  }, []);
+
+  const performExportPodcastNotesPdf = useCallback(async () => {
+    if (podcastNotesRunning || saveAsSubmitting || podcastNotesPreviewOpen) return;
+    if (!isTauriRuntime()) {
+      window.alert("Export Podcast Notes is only available in the Harvy desktop app.");
+      return;
+    }
+    if (!hasWorkspaceFolder) {
+      window.alert("Choose a workspace folder before saving files.");
+      return;
+    }
+    if (!editorEditable) return;
+    if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
+      window.alert("Enable AI check and add an API key in Settings → Sidebars first.");
+      return;
+    }
+    if (!showPodcastNotes) {
+      window.alert("Turn on Podcast Notes in Settings → Sidebars → Artificial Intelligence.");
+      return;
+    }
+    const { text } = tiptapEditor
+      ? proofreadPlainTextAndPositions(tiptapEditor.state.doc)
+      : { text: activeDocument?.content ?? scratchDraftContent };
+    const essay = text.trim();
+    if (!essay) {
+      window.alert("Nothing to export — the document is empty.");
+      return;
+    }
+
+    if (editorFocusBeforeSaveAsRef.current === null) {
+      editorFocusBeforeSaveAsRef.current = editorFocusSuppressedRef.current;
+    }
+    visuallyDeactivateEditor(tiptapEditor);
+    setEditorInactive(true);
+    setPodcastNotesPreviewOpen(true);
+    await runPodcastNotesGeneration(essay);
+  }, [
+    podcastNotesRunning,
+    saveAsSubmitting,
+    podcastNotesPreviewOpen,
+    hasWorkspaceFolder,
+    editorEditable,
+    aiCheckConfig?.enabled,
+    aiCheckConfig?.hasApiKey,
+    showPodcastNotes,
+    tiptapEditor,
+    activeDocument,
+    scratchDraftContent,
+    setEditorInactive,
+    runPodcastNotesGeneration,
+  ]);
+
+  const retryPodcastNotesPreview = useCallback(() => {
     if (podcastNotesRunning || saveAsSubmitting) return;
-    openSaveAsModal({ purpose: "podcast-notes" });
-  }, [openSaveAsModal, podcastNotesRunning, saveAsSubmitting]);
+    const { text } = tiptapEditor
+      ? proofreadPlainTextAndPositions(tiptapEditor.state.doc)
+      : { text: activeDocument?.content ?? scratchDraftContent };
+    const essay = text.trim();
+    if (!essay) {
+      setPodcastNotesPreviewError("Nothing to export — the document is empty.");
+      return;
+    }
+    void runPodcastNotesGeneration(essay);
+  }, [
+    podcastNotesRunning,
+    saveAsSubmitting,
+    tiptapEditor,
+    activeDocument,
+    scratchDraftContent,
+    runPodcastNotesGeneration,
+  ]);
+
+  const confirmPodcastNotesExport = useCallback(async () => {
+    if (!podcastNotesMarkdown?.trim() || podcastNotesRunning || saveAsSubmitting) return;
+    setPodcastNotesPreviewOpen(false);
+    const opened = await openSaveAsModal({ purpose: "podcast-notes" });
+    if (!opened) {
+      setPodcastNotesPreviewOpen(true);
+    }
+  }, [podcastNotesMarkdown, podcastNotesRunning, saveAsSubmitting, openSaveAsModal]);
 
   const performSave = useCallback(async () => {
     if (!isTauriRuntime()) {
@@ -1982,9 +2152,24 @@ export function AppShell() {
       save: () => void performSave(),
       saveAs: () => void openSaveAsModal(),
       exportPdf: () => void performExportPdf(),
+      print: () => printDocumentRef.current(),
       newMarkdownFile: () => void handleCreateMarkdownFileRef.current(),
     });
   }, [performSave, openSaveAsModal, performExportPdf]);
+
+  useEffect(() => {
+    setViewMenuHandlers({
+      openNotes: () =>
+        openNotesPopoutWindow().catch((err) => {
+          console.error("Notes pop-out failed:", err);
+          window.alert(err instanceof Error ? err.message : String(err));
+        }),
+      openWrite: () => handleWorkspaceSectionChange("write"),
+      openResearch: () => {
+        if (enableCollect) handleWorkspaceSectionChange("collect");
+      },
+    });
+  }, [enableCollect, handleWorkspaceSectionChange]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -2447,7 +2632,9 @@ export function AppShell() {
 
   /** Inline rename for an open file tab, or for the scratch buffer when no tabs are open. */
   const titleRenameEnabled =
-    (Boolean(activeTabId && activeDocument) || openTabIds.length === 0) && !saveAsModalOpen;
+    (Boolean(activeTabId && activeDocument) || openTabIds.length === 0) &&
+    !saveAsModalOpen &&
+    !podcastNotesPreviewOpen;
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -2728,8 +2915,15 @@ export function AppShell() {
   }, [publishUrl, tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath]);
 
   const handlePrintDocument = useCallback(() => {
-    printDocumentFromEditor(tiptapEditor, copyDocumentFallbackMarkdown, editorTitleBase);
+    void printDocumentFromEditor(
+      tiptapEditor,
+      copyDocumentFallbackMarkdown,
+      editorTitleBase,
+    ).catch((e) => {
+      window.alert(`Print failed: ${e instanceof Error ? e.message : String(e)}`);
+    });
   }, [tiptapEditor, copyDocumentFallbackMarkdown, editorTitleBase]);
+  printDocumentRef.current = handlePrintDocument;
 
   const handleInsertImage = useCallback(() => {
     if (!tiptapEditor || !editorEditable) return;
@@ -3100,6 +3294,7 @@ export function AppShell() {
               showCollectView={showCollectView}
               showHeadlinesView={showHeadlinesView}
               showAvatarView={showAvatarView}
+              collectViewOrder={collectViewOrder}
               workspaceSidebarOpen={isWorkspaceSidebarOpen}
               toolsSidebarOpen={readabilityPanelOpen}
             />
@@ -3181,12 +3376,15 @@ export function AppShell() {
               onPublish={handlePublishDocument}
               publishEnabled={Boolean(normalizeQuickLinkUrl(publishUrl))}
               onPodcastNotesPdf={performExportPodcastNotesPdf}
-              onSaveAsPdf={performExportPdf}
               onPrint={handlePrintDocument}
               podcastNotesEnabled={Boolean(
                 showPodcastNotes && aiCheckConfig?.enabled && aiCheckConfig.hasApiKey,
               )}
-              podcastNotesRunning={podcastNotesRunning}
+              podcastNotesRunning={
+                podcastNotesRunning ||
+                podcastNotesPreviewOpen ||
+                (saveAsModalOpen && saveAsPurpose === "podcast-notes")
+              }
               syncWithChrome
               chromeHidden={hideBottomToolsWhileTyping && !focusModeActive}
             />
@@ -3412,6 +3610,8 @@ export function AppShell() {
         onShowCollectViewChange={handleShowCollectViewChange}
         onShowHeadlinesViewChange={handleShowHeadlinesViewChange}
         onShowAvatarViewChange={handleShowAvatarViewChange}
+        collectViewOrder={collectViewOrder}
+        onCollectViewOrderChange={handleCollectViewOrderChange}
         encouragementPrefs={encouragementPrefs}
         onEncouragementPrefsChange={handleEncouragementPrefsChange}
         onTestEncouragement={testEncouragement}
@@ -3434,6 +3634,21 @@ export function AppShell() {
         onSave={(payload) => void commitSaveAsFromModal(payload)}
         onFileNameChange={handleSaveAsFileNameChange}
         folderPreviewContext={saveAsFolderPreviewContext}
+      />
+      <PodcastNotesPreviewModal
+        open={podcastNotesPreviewOpen}
+        markdown={podcastNotesMarkdown}
+        generating={podcastNotesRunning}
+        error={podcastNotesPreviewError}
+        onClose={closePodcastNotesPreview}
+        onExport={() => void confirmPodcastNotesExport()}
+        onPrint={() => {
+          if (!podcastNotesMarkdown?.trim()) return;
+          void printMarkdownDocument("Podcast Notes", podcastNotesMarkdown).catch((e) => {
+            window.alert(`Print failed: ${e instanceof Error ? e.message : String(e)}`);
+          });
+        }}
+        onRetry={retryPodcastNotesPreview}
       />
       <AboutModal open={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
       <FocusModeModal

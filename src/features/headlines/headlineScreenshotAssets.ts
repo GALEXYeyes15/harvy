@@ -1,8 +1,14 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { IMAGE_EXTENSIONS } from "../workspace/tree";
+import {
+  getActiveSidebarImageDragPath,
+  getWorkspaceImagePathFromDataTransfer,
+} from "../editor/imageDrop";
+import { IMAGE_EXTENSIONS, isImagePreviewable } from "../workspace/tree";
 import { isTauriRuntime } from "../save/saveRuntime";
 import { createHeadlineShotId, loadHeadlineShots, type HeadlineShot } from "./headlineShots";
+
+type FileWithOptionalPath = File & { path?: string };
 
 const MIME_TO_EXT: Record<string, string> = {
   "image/png": "png",
@@ -137,6 +143,50 @@ export async function importHeadlineScreenshotFiles(files: File[]): Promise<Head
   return shots;
 }
 
+export function imagePathsFromFiles(files: ArrayLike<File>): string[] {
+  const paths: string[] = [];
+  for (const file of Array.from(files)) {
+    const path = (file as FileWithOptionalPath).path?.trim();
+    if (path && isImagePreviewable(path)) paths.push(path);
+  }
+  return paths;
+}
+
+/** Copy Finder / workspace image paths into headline storage. */
+export async function importHeadlineScreenshotsFromPaths(paths: string[]): Promise<HeadlineShot[]> {
+  const shots: HeadlineShot[] = [];
+  for (const path of paths) {
+    if (!isImagePreviewable(path)) continue;
+    try {
+      shots.push(isTauriRuntime() ? await importTauriPath(path) : shotFromSrc(path));
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : String(err));
+    }
+  }
+  return shots;
+}
+
+/** Resolve an HTML5 drop (browser files, path-bearing files, or sidebar image). */
+export async function importHeadlineScreenshotsFromDataTransfer(
+  data: DataTransfer,
+): Promise<HeadlineShot[]> {
+  const workspacePath =
+    getWorkspaceImagePathFromDataTransfer(data) ?? getActiveSidebarImageDragPath();
+  if (workspacePath) {
+    return importHeadlineScreenshotsFromPaths([workspacePath]);
+  }
+
+  const paths = imagePathsFromFiles(data.files);
+  if (paths.length > 0) {
+    return importHeadlineScreenshotsFromPaths(paths);
+  }
+
+  // Finder/OS drops in the desktop app arrive via Tauri's drag-drop event, not FileList.
+  if (isTauriRuntime()) return [];
+
+  return importHeadlineScreenshotFiles(Array.from(data.files));
+}
+
 export async function deleteHeadlineScreenshotFile(src: string): Promise<void> {
   if (!src || /^(https?:|blob:|data:)/i.test(src) || !isTauriRuntime()) return;
   try {
@@ -148,7 +198,15 @@ export async function deleteHeadlineScreenshotFile(src: string): Promise<void> {
 
 export function imageFilesFromDataTransfer(data: DataTransfer | null): File[] {
   if (!data) return [];
-  return Array.from(data.files).filter(isImageFile);
+  const fromFiles = Array.from(data.files).filter(isImageFile);
+  if (fromFiles.length > 0) return fromFiles;
+  const fromItems: File[] = [];
+  for (const item of Array.from(data.items ?? [])) {
+    if (item.kind !== "file") continue;
+    const file = item.getAsFile();
+    if (file && isImageFile(file)) fromItems.push(file);
+  }
+  return fromItems;
 }
 
 export function transferLooksLikeFiles(data: DataTransfer | null): boolean {

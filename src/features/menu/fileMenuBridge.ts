@@ -3,6 +3,7 @@ export type FileMenuHandlers = {
   /** Opens Harvy’s in-app Save As sheet. */
   saveAs: () => void | Promise<void>;
   exportPdf: () => void | Promise<void>;
+  print: () => void | Promise<void>;
   /** Create a new Markdown file in the current browse folder (desktop). */
   newMarkdownFile: () => void | Promise<void>;
 };
@@ -11,6 +12,7 @@ let handlers: FileMenuHandlers = {
   save: () => {},
   saveAs: () => {},
   exportPdf: () => {},
+  print: () => {},
   newMarkdownFile: () => {},
 };
 

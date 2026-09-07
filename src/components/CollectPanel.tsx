@@ -9,6 +9,13 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type CollectItem } from "../features/collect/collectItems";
 import {
+  COLLECT_SUB_VIEW_LABELS,
+  enabledCollectViews,
+  firstEnabledCollectView,
+  isCollectViewEnabled,
+  type CollectSubView,
+} from "../features/workspace/collectViews";
+import {
   getNotionIdeasConfig,
   mergeNotionIdeasIntoCollectItems,
   queryNotionIdeaPages,
@@ -29,7 +36,7 @@ const SELECTION_ACTION_BUTTON =
 const SUB_VIEW_TAB =
   "border-0 bg-transparent p-0 text-[1.375rem] font-semibold leading-none tracking-[-0.02em]";
 
-export type CollectSubView = "outliers" | "collect" | "headlines" | "avatar";
+export type { CollectSubView };
 
 function CollectRowCheckbox({
   checked,
@@ -95,72 +102,35 @@ function CollectSelectionActions({
 function CollectSubViewTabs({
   activeView,
   onViewChange,
-  showOutliersView,
-  showCollectView,
-  showHeadlinesView,
-  showAvatarView,
+  views,
+  collectViewOrder,
 }: {
   activeView: CollectSubView;
   onViewChange: (view: CollectSubView) => void;
-  showOutliersView: boolean;
-  showCollectView: boolean;
-  showHeadlinesView: boolean;
-  showAvatarView: boolean;
+  views: {
+    showOutliersView: boolean;
+    showCollectView: boolean;
+    showHeadlinesView: boolean;
+    showAvatarView: boolean;
+  };
+  collectViewOrder: CollectSubView[];
 }) {
   return (
     <div className="flex items-baseline gap-7" role="tablist" aria-label="Research views">
-      {showOutliersView ? (
+      {enabledCollectViews(views, collectViewOrder).map((view) => (
         <button
+          key={view}
           type="button"
           role="tab"
-          aria-selected={activeView === "outliers"}
+          aria-selected={activeView === view}
           className={`${SUB_VIEW_TAB} text-ink ${
-            activeView === "outliers" ? "opacity-100" : "opacity-40"
+            activeView === view ? "opacity-100" : "opacity-40"
           }`}
-          onClick={() => onViewChange("outliers")}
+          onClick={() => onViewChange(view)}
         >
-          Outliers
+          {COLLECT_SUB_VIEW_LABELS[view]}
         </button>
-      ) : null}
-      {showCollectView ? (
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeView === "collect"}
-          className={`${SUB_VIEW_TAB} text-ink ${
-            activeView === "collect" ? "opacity-100" : "opacity-40"
-          }`}
-          onClick={() => onViewChange("collect")}
-        >
-          Ideas
-        </button>
-      ) : null}
-      {showHeadlinesView ? (
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeView === "headlines"}
-          className={`${SUB_VIEW_TAB} text-ink ${
-            activeView === "headlines" ? "opacity-100" : "opacity-40"
-          }`}
-          onClick={() => onViewChange("headlines")}
-        >
-          Headlines
-        </button>
-      ) : null}
-      {showAvatarView ? (
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeView === "avatar"}
-          className={`${SUB_VIEW_TAB} text-ink ${
-            activeView === "avatar" ? "opacity-100" : "opacity-40"
-          }`}
-          onClick={() => onViewChange("avatar")}
-        >
-          Avatar
-        </button>
-      ) : null}
+      ))}
     </div>
   );
 }
@@ -171,40 +141,8 @@ function soleCollectViewTitle(views: {
   showHeadlinesView: boolean;
   showAvatarView: boolean;
 }): string {
-  const labels = [
-    views.showOutliersView ? "Outliers" : null,
-    views.showCollectView ? "Ideas" : null,
-    views.showHeadlinesView ? "Headlines" : null,
-    views.showAvatarView ? "Avatar" : null,
-  ].filter((label): label is string => Boolean(label));
+  const labels = enabledCollectViews(views).map((view) => COLLECT_SUB_VIEW_LABELS[view]);
   return labels.length === 1 ? labels[0]! : "Research";
-}
-
-function firstEnabledCollectView(views: {
-  showOutliersView: boolean;
-  showCollectView: boolean;
-  showHeadlinesView: boolean;
-  showAvatarView: boolean;
-}): CollectSubView {
-  if (views.showCollectView) return "collect";
-  if (views.showOutliersView) return "outliers";
-  if (views.showHeadlinesView) return "headlines";
-  return "avatar";
-}
-
-function isCollectViewEnabled(
-  view: CollectSubView,
-  views: {
-    showOutliersView: boolean;
-    showCollectView: boolean;
-    showHeadlinesView: boolean;
-    showAvatarView: boolean;
-  },
-): boolean {
-  if (view === "outliers") return views.showOutliersView;
-  if (view === "collect") return views.showCollectView;
-  if (view === "headlines") return views.showHeadlinesView;
-  return views.showAvatarView;
 }
 
 type CollectPanelProps = {
@@ -216,6 +154,7 @@ type CollectPanelProps = {
   showCollectView?: boolean;
   showHeadlinesView?: boolean;
   showAvatarView?: boolean;
+  collectViewOrder?: CollectSubView[];
   workspaceSidebarOpen?: boolean;
   toolsSidebarOpen?: boolean;
 };
@@ -229,6 +168,7 @@ export function CollectPanel({
   showCollectView = true,
   showHeadlinesView = true,
   showAvatarView = true,
+  collectViewOrder,
   workspaceSidebarOpen = true,
   toolsSidebarOpen = true,
 }: CollectPanelProps) {
@@ -240,7 +180,7 @@ export function CollectPanel({
     Number(showAvatarView);
 
   const [activeCollectView, setActiveCollectView] = useState<CollectSubView>(() =>
-    firstEnabledCollectView(views),
+    firstEnabledCollectView(views, collectViewOrder),
   );
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -255,9 +195,9 @@ export function CollectPanel({
 
   useEffect(() => {
     if (!isCollectViewEnabled(activeCollectView, views)) {
-      setActiveCollectView(firstEnabledCollectView(views));
+      setActiveCollectView(firstEnabledCollectView(views, collectViewOrder));
     }
-  }, [activeCollectView, showOutliersView, showCollectView, showHeadlinesView, showAvatarView]);
+  }, [activeCollectView, collectViewOrder, showOutliersView, showCollectView, showHeadlinesView, showAvatarView]);
 
   const syncFromNotion = useCallback(async () => {
     if (!isTauriRuntime()) return;
@@ -373,10 +313,8 @@ export function CollectPanel({
             <CollectSubViewTabs
               activeView={activeCollectView}
               onViewChange={setActiveCollectView}
-              showOutliersView={showOutliersView}
-              showCollectView={showCollectView}
-              showHeadlinesView={showHeadlinesView}
-              showAvatarView={showAvatarView}
+              views={views}
+              collectViewOrder={collectViewOrder ?? []}
             />
           ) : (
             <h2 className="text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-ink">

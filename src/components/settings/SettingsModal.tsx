@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight, Minus, Plus, SquareArrowOutUpRight, SquarePen, Zap } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, GripVertical, Minus, Plus, SquareArrowOutUpRight, SquarePen, Zap } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
 import type { DocumentHeaderPrefs } from "../../features/editor/documentHeaderSettings";
 import type { FocusVisibilityPrefs } from "../../features/editor/focusVisibilitySettings";
@@ -96,6 +96,12 @@ import {
   writeHeadlineStylePrompt,
 } from "../../features/aiCheck/headlinePromptSettings";
 import { isTauriRuntime } from "../../features/save/saveRuntime";
+import {
+  COLLECT_SUB_VIEW_LABELS,
+  moveCollectView,
+  normalizeCollectViewOrder,
+  type CollectSubView,
+} from "../../features/workspace/collectViews";
 
 
 /** macOS System Settings–like window: ~1150×800, capped at 90vw / 90vh. */
@@ -158,6 +164,8 @@ type SettingsModalProps = {
   onShowCollectViewChange: (enabled: boolean) => void;
   onShowHeadlinesViewChange: (enabled: boolean) => void;
   onShowAvatarViewChange: (enabled: boolean) => void;
+  collectViewOrder: CollectSubView[];
+  onCollectViewOrderChange: (order: CollectSubView[]) => void;
   encouragementPrefs: EncouragementPrefs;
   onEncouragementPrefsChange: (partial: Partial<EncouragementPrefs>) => void;
   onTestEncouragement?: () => void;
@@ -208,6 +216,8 @@ export function SettingsModal({
   onShowCollectViewChange,
   onShowHeadlinesViewChange,
   onShowAvatarViewChange,
+  collectViewOrder,
+  onCollectViewOrderChange,
   encouragementPrefs,
   onEncouragementPrefsChange,
   onTestEncouragement,
@@ -302,6 +312,8 @@ export function SettingsModal({
                 onShowCollectViewChange={onShowCollectViewChange}
                 onShowHeadlinesViewChange={onShowHeadlinesViewChange}
                 onShowAvatarViewChange={onShowAvatarViewChange}
+                collectViewOrder={collectViewOrder}
+                onCollectViewOrderChange={onCollectViewOrderChange}
               />
             ) : null}
             {activeSection === "appearance" ? (
@@ -379,6 +391,22 @@ function SettingsGroup({
   );
 }
 
+function researchRowShift(
+  index: number,
+  originIndex: number,
+  overIndex: number,
+  rowHeight: number,
+): number {
+  if (originIndex === overIndex) return 0;
+  if (originIndex < overIndex && index > originIndex && index <= overIndex) {
+    return -rowHeight;
+  }
+  if (originIndex > overIndex && index >= overIndex && index < originIndex) {
+    return rowHeight;
+  }
+  return 0;
+}
+
 function CollectSettingsPanel({
   enableCollect,
   onEnableCollectChange,
@@ -390,6 +418,8 @@ function CollectSettingsPanel({
   onShowCollectViewChange,
   onShowHeadlinesViewChange,
   onShowAvatarViewChange,
+  collectViewOrder,
+  onCollectViewOrderChange,
 }: {
   enableCollect: boolean;
   onEnableCollectChange: (enabled: boolean) => void;
@@ -401,6 +431,8 @@ function CollectSettingsPanel({
   onShowCollectViewChange: (enabled: boolean) => void;
   onShowHeadlinesViewChange: (enabled: boolean) => void;
   onShowAvatarViewChange: (enabled: boolean) => void;
+  collectViewOrder: CollectSubView[];
+  onCollectViewOrderChange: (order: CollectSubView[]) => void;
 }) {
   const [fetchIntervalMinutes, setFetchIntervalMinutes] = useState(
     () => readOutliersSettings().fetchIntervalMinutes,
@@ -409,11 +441,125 @@ function CollectSettingsPanel({
     () => readOutliersSettings().autoFetchEnabled,
   );
 
+  const [viewsExpanded, setViewsExpanded] = useState(false);
+  const [drag, setDrag] = useState<{
+    view: CollectSubView;
+    originIndex: number;
+    overIndex: number;
+    startY: number;
+    deltaY: number;
+    rowHeight: number;
+  } | null>(null);
+  const [settle, setSettle] = useState<{ view: CollectSubView; offset: number } | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const dragRef = useRef<typeof drag>(null);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  dragRef.current = drag;
+
   const enabledViewCount =
     Number(showOutliersView) +
     Number(showCollectView) +
     Number(showHeadlinesView) +
     Number(showAvatarView);
+
+  const orderedViews = normalizeCollectViewOrder(collectViewOrder);
+  const viewChecked: Record<CollectSubView, boolean> = {
+    outliers: showOutliersView,
+    collect: showCollectView,
+    headlines: showHeadlinesView,
+    avatar: showAvatarView,
+  };
+  const viewOnChange: Record<CollectSubView, (enabled: boolean) => void> = {
+    outliers: onShowOutliersViewChange,
+    collect: onShowCollectViewChange,
+    headlines: onShowHeadlinesViewChange,
+    avatar: onShowAvatarViewChange,
+  };
+
+  const overIndexFromY = (clientY: number, rowHeight: number): number => {
+    const list = listRef.current;
+    if (!list || rowHeight <= 0) return 0;
+    const top = list.getBoundingClientRect().top;
+    return Math.max(0, Math.min(orderedViews.length - 1, Math.floor((clientY - top) / rowHeight)));
+  };
+
+  const onGripPointerDown = (event: React.PointerEvent<HTMLButtonElement>, view: CollectSubView) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const row = event.currentTarget.closest("li");
+    const rowHeight = row?.getBoundingClientRect().height ?? 44;
+    const originIndex = orderedViews.indexOf(view);
+    if (originIndex < 0) return;
+    if (settleTimerRef.current) {
+      clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = null;
+    }
+    setSettle(null);
+    const next = {
+      view,
+      originIndex,
+      overIndex: originIndex,
+      startY: event.clientY,
+      deltaY: 0,
+      rowHeight,
+    };
+    dragRef.current = next;
+    setDrag(next);
+  };
+
+  const onGripPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const session = dragRef.current;
+    if (!session) return;
+    const deltaY = event.clientY - session.startY;
+    const overIndex = overIndexFromY(event.clientY, session.rowHeight);
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const current = dragRef.current;
+      if (!current) return;
+      const next = { ...current, deltaY, overIndex };
+      dragRef.current = next;
+      setDrag(next);
+    });
+  };
+
+  const endGripDrag = () => {
+    const session = dragRef.current;
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (!session) return;
+    const settleOffset =
+      session.originIndex * session.rowHeight + session.deltaY - session.overIndex * session.rowHeight;
+    if (session.originIndex !== session.overIndex) {
+      onCollectViewOrderChange(moveCollectView(orderedViews, session.originIndex, session.overIndex));
+    }
+    dragRef.current = null;
+    setDrag(null);
+    setSettle({ view: session.view, offset: settleOffset });
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setSettle((current) => (current ? { ...current, offset: 0 } : null));
+      });
+    });
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = setTimeout(() => {
+      setSettle(null);
+      settleTimerRef.current = null;
+    }, 220);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    };
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -421,42 +567,79 @@ function CollectSettingsPanel({
         title="Research"
         description="Outliers, Ideas, Headlines, and Avatar in the workspace rail."
       />
-      <SettingsGroup hint="Keep at least one Research view on (Outliers, Ideas, Headlines, or Avatar).">
-        <ToggleRow
-          id="enable-collect"
-          label="Enable Research"
-          checked={enableCollect}
-          onChange={onEnableCollectChange}
-        />
-        <ToggleRow
-          id="show-outliers-view"
-          label="Show Outliers"
-          checked={showOutliersView}
-          onChange={onShowOutliersViewChange}
-          disabled={!enableCollect || (showOutliersView && enabledViewCount === 1)}
-        />
-        <ToggleRow
-          id="show-collect-view"
-          label="Show Ideas"
-          checked={showCollectView}
-          onChange={onShowCollectViewChange}
-          disabled={!enableCollect || (showCollectView && enabledViewCount === 1)}
-        />
-        <ToggleRow
-          id="show-headlines-view"
-          label="Show Headlines"
-          checked={showHeadlinesView}
-          onChange={onShowHeadlinesViewChange}
-          disabled={!enableCollect || (showHeadlinesView && enabledViewCount === 1)}
-        />
-        <ToggleRow
-          id="show-avatar-view"
-          label="Show Avatar"
-          checked={showAvatarView}
-          onChange={onShowAvatarViewChange}
-          disabled={!enableCollect || (showAvatarView && enabledViewCount === 1)}
-        />
-      </SettingsGroup>
+      <div className={`rounded-xl bg-mist ${drag ? "overflow-visible" : "overflow-hidden"}`}>
+        <ul>
+          <ToggleRow
+            id="enable-collect"
+            label="Research"
+            checked={enableCollect}
+            onChange={onEnableCollectChange}
+            expanded={viewsExpanded}
+            onExpandToggle={() => setViewsExpanded((current) => !current)}
+            expandLabel="Research views"
+          />
+        </ul>
+        {viewsExpanded ? (
+          <div className="pb-3">
+            <ul
+              ref={listRef}
+              className={`relative rounded-lg bg-page/70 ${SETTINGS_DIVIDE_Y} ${
+                drag ? "select-none overflow-visible" : "overflow-hidden"
+              }`}
+            >
+              {orderedViews.map((view, index) => {
+                const isDragging = drag?.view === view;
+                const isSettling = settle?.view === view;
+                let offsetY = 0;
+                let scale = 1;
+                if (isDragging && drag) {
+                  offsetY = drag.deltaY;
+                  scale = 1.02;
+                } else if (isSettling && settle) {
+                  offsetY = settle.offset;
+                  scale = settle.offset === 0 ? 1 : 1.02;
+                } else if (drag) {
+                  offsetY = researchRowShift(index, drag.originIndex, drag.overIndex, drag.rowHeight);
+                }
+                return (
+                  <ToggleRow
+                    key={view}
+                    id={`show-${view}-view`}
+                    label={COLLECT_SUB_VIEW_LABELS[view]}
+                    checked={viewChecked[view]}
+                    onChange={viewOnChange[view]}
+                    disabled={!enableCollect || (viewChecked[view] && enabledViewCount === 1)}
+                    dataResearchView={view}
+                    rowClassName={`harvy-research-reorder-row${
+                      isDragging ? " harvy-research-reorder-row--dragging" : ""
+                    }${isSettling ? " harvy-research-reorder-row--settling" : ""}${
+                      drag && !isDragging ? " harvy-research-reorder-row--live" : ""
+                    }`}
+                    rowStyle={{
+                      transform: `translateY(${offsetY}px) scale(${scale})`,
+                    }}
+                    leading={
+                      <button
+                        type="button"
+                        aria-label={`Reorder ${COLLECT_SUB_VIEW_LABELS[view]}`}
+                        className={`flex h-6 w-3.5 shrink-0 touch-none items-center justify-center text-muted/45 ${
+                          isDragging ? "cursor-grabbing" : "cursor-grab"
+                        } hover:text-muted/70`}
+                        onPointerDown={(event) => onGripPointerDown(event, view)}
+                        onPointerMove={onGripPointerMove}
+                        onPointerUp={endGripDrag}
+                        onPointerCancel={endGripDrag}
+                      >
+                        <GripVertical size={14} strokeWidth={2} aria-hidden />
+                      </button>
+                    }
+                  />
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
+      </div>
       {enableCollect && showOutliersView ? (
         <div className="space-y-3">
           <SettingsGroup>
@@ -2546,6 +2729,10 @@ function ToggleRow({
   expanded,
   onExpandToggle,
   expandLabel,
+  leading,
+  dataResearchView,
+  rowClassName,
+  rowStyle,
 }: {
   id: string;
   label: ReactNode;
@@ -2556,16 +2743,23 @@ function ToggleRow({
   expanded?: boolean;
   onExpandToggle?: () => void;
   expandLabel?: string;
+  leading?: ReactNode;
+  dataResearchView?: CollectSubView;
+  rowClassName?: string;
+  rowStyle?: CSSProperties;
 }) {
   const isExpandable = Boolean(onExpandToggle && expandLabel);
 
   return (
     <li
-      className={`flex justify-between gap-4 px-3.5 py-3 ${
+      data-research-view={dataResearchView}
+      className={`flex justify-between gap-3 px-3.5 py-3 ${
         description ? "items-start" : "items-center"
-      }`}
+      } ${rowClassName ?? ""}`}
+      style={rowStyle}
     >
-      <div className="min-w-0">
+      {leading ? <div className={description ? "mt-0.5" : ""}>{leading}</div> : null}
+      <div className="min-w-0 flex-1">
         <label htmlFor={id} className="text-[13px] font-medium text-ink">
           {label}
         </label>
