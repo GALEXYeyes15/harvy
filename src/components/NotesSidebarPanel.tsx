@@ -43,7 +43,7 @@ export function NotesSidebarPanel({
         onChange={(e) => onNotesChange(e.target.value)}
         onKeyDown={(e) => handleNotesTextareaTabKey(e, e.currentTarget, onNotesChange)}
         placeholder="Ideas, references, reminders…"
-        className="mt-6 min-h-0 w-full flex-1 resize-none overflow-y-auto rounded-md border-0 bg-mist px-3 py-2.5 text-[13px] leading-relaxed text-ink focus:outline-none focus:ring-0"
+        className="mt-6 h-[var(--harvy-notes-panel-height)] min-h-0 w-full shrink-0 resize-none overflow-y-auto rounded-md border-0 bg-mist px-3 py-2.5 text-[13px] leading-relaxed text-ink focus:outline-none focus:ring-0"
       />
 
       {showQuickLinks ? (

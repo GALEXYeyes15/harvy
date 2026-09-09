@@ -19,6 +19,15 @@
     --harvy-workspace-section-rail-left-collapsed: .7rem;
     /* Open sidebar: gap between rail right edge and top-bar nav group (toggle / tab arrows). */
     --harvy-workspace-chrome-gutter: 0.75rem;
+    /*
+     * Notes field height — Edit sidebar from the title divider through Suggestions
+     * (3× section label + 3 stat rows, and 3× my-6 dividers), minus Notes’ mt-6.
+     */
+    --harvy-notes-panel-height: calc(
+      3 * (1.5rem + 1px + 1.5rem)
+      + 3 * (11px * 1.5 + 10px + 3 * (14px * 1.375) + 2 * 0.75rem)
+      - 1.5rem
+    );
     --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     --font-content:
       "Libre Baskerville", "Baskerville", "Baskerville Old Face", "Palatino", "Palatino Linotype",
@@ -168,6 +177,73 @@
    */
   .harvy-title-bar-drag {
     user-select: none;
+  }
+
+  /*
+   * Page-tab close: Notion-style fade. Title stays put; on hover a gradient
+   * covers the last characters so they dissolve into the tab background
+   * under the × (no padding jump, no hard ellipsis-against-button).
+   */
+  .harvy-tab-strip {
+    --harvy-tab-strip-bg: var(--color-mist);
+  }
+
+  .harvy-tab-strip--stage {
+    --harvy-tab-strip-bg: var(--color-stage);
+  }
+
+  .harvy-page-tab {
+    --harvy-tab-fade-bg: var(--harvy-tab-strip-bg);
+  }
+
+  .harvy-page-tab--active {
+    --harvy-tab-fade-bg: var(--color-stage);
+  }
+
+  .harvy-page-tab--idle:hover,
+  .harvy-page-tab--idle:focus-within {
+    --harvy-tab-fade-bg: color-mix(in oklab, var(--color-ink) 3%, var(--harvy-tab-strip-bg));
+  }
+
+  .harvy-page-tab-fade {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+    width: 4.25rem;
+    pointer-events: none;
+    opacity: 0;
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      var(--harvy-tab-fade-bg) 78%,
+      var(--harvy-tab-fade-bg) 100%
+    );
+    transition: opacity 100ms ease;
+  }
+
+  .harvy-page-tab-close {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 100ms ease;
+  }
+
+  .harvy-page-tab:hover .harvy-page-tab-fade,
+  .harvy-page-tab:focus-within .harvy-page-tab-fade,
+  .harvy-page-tab:hover .harvy-page-tab-close,
+  .harvy-page-tab:focus-within .harvy-page-tab-close {
+    opacity: 1;
+  }
+
+  .harvy-page-tab:hover .harvy-page-tab-close,
+  .harvy-page-tab:focus-within .harvy-page-tab-close {
+    pointer-events: auto;
+  }
+
+  .harvy-page-tab:hover [aria-label="Unsaved changes"],
+  .harvy-page-tab:focus-within [aria-label="Unsaved changes"] {
+    opacity: 0;
   }
 
   body.harvy-sidebar-image-dragging,
@@ -929,6 +1005,32 @@
   .harvy-export-submenu {
     position: relative;
     min-width: 12.5rem;
+  }
+
+  .harvy-workspace-folder-chevron {
+    transition-property: opacity, transform;
+    transition-duration: 75ms, 235ms;
+    transition-timing-function: ease-out, ease-out;
+  }
+
+  .harvy-workspace-folder-children {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 235ms ease-out;
+  }
+
+  .harvy-workspace-folder-children--open {
+    grid-template-rows: 1fr;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .harvy-workspace-folder-chevron {
+      transition-duration: 75ms, 0ms;
+    }
+
+    .harvy-workspace-folder-children {
+      transition: none;
+    }
   }
 
   .harvy-context-menu-item--disabled {

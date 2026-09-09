@@ -73,8 +73,8 @@ export function OpenWindowsBar({
       data-harvy-window-drag
     >
       <header
-        className={`harvy-title-bar-drag relative flex h-8 w-full min-w-0 shrink-0 flex-row items-stretch ${RAIL_AND_CHROME_BG} ${
-          chromeHidden ? "bg-stage" : "bg-mist"
+        className={`harvy-title-bar-drag harvy-tab-strip relative flex h-8 w-full min-w-0 shrink-0 flex-row items-stretch ${RAIL_AND_CHROME_BG} ${
+          chromeHidden ? "harvy-tab-strip--stage bg-stage" : "bg-mist"
         } ${overlayWorkspaceRail && workspaceSidebarOpen ? "ml-[260px]" : "ml-0"}`}
         data-harvy-window-drag
       >
@@ -119,8 +119,8 @@ export function OpenWindowsBar({
                     key={item.id}
                     className={
                       active
-                        ? "group relative z-10 box-border flex w-[160px] shrink-0 items-stretch rounded-t-none rounded-b-none bg-stage pl-0 pr-2"
-                        : "group relative z-0 flex w-[160px] shrink-0 items-stretch rounded-none bg-transparent pr-2 text-muted/40 transition-colors hover:bg-ink/[0.03] hover:text-muted/65"
+                        ? "harvy-page-tab harvy-page-tab--active relative z-10 box-border flex w-[160px] shrink-0 items-stretch rounded-t-none rounded-b-none bg-stage pl-0 pr-2"
+                        : "harvy-page-tab harvy-page-tab--idle relative z-0 flex w-[160px] shrink-0 items-stretch rounded-none bg-transparent pr-2 text-muted/40 transition-colors hover:bg-ink/[0.03] hover:text-muted/65"
                     }
                   >
                     <button
@@ -131,8 +131,8 @@ export function OpenWindowsBar({
                       onClick={() => onSelectTab(item.id)}
                       className={
                         active
-                          ? "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[11px] font-medium leading-tight text-ink/92 group-hover:pr-6 group-focus-within:pr-6"
-                          : "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[11px] font-normal leading-tight group-hover:pr-6 group-focus-within:pr-6"
+                          ? "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[11px] font-medium leading-tight text-ink/92"
+                          : "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[11px] font-normal leading-tight"
                       }
                     >
                       <span className="min-w-0 flex-1 truncate">{item.title}</span>
@@ -142,6 +142,7 @@ export function OpenWindowsBar({
                         </span>
                       ) : null}
                     </button>
+                    <span className="harvy-page-tab-fade" aria-hidden />
                     <button
                       type="button"
                       aria-label={`Close ${item.title}`}
@@ -149,7 +150,7 @@ export function OpenWindowsBar({
                         e.stopPropagation();
                         onCloseTab(item.id);
                       }}
-                      className={`absolute top-0 right-2 bottom-0 z-10 flex items-center rounded px-1 text-[12px] leading-none opacity-0 pointer-events-none transition hover:bg-ink/[0.06] group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 ${
+                      className={`harvy-page-tab-close absolute top-0 right-2 bottom-0 z-10 flex items-center rounded px-1 text-[12px] leading-none hover:bg-ink/[0.06] focus-visible:opacity-100 focus-visible:pointer-events-auto ${
                         active
                           ? "text-accent/70 hover:text-accent"
                           : "text-accent/40 hover:text-accent/70"

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isTauriRuntime } from "../features/save/saveRuntime";
 import { setWorkspaceImageDragData } from "../features/editor/imageDrop";
 import { armSidebarImagePointerDrag } from "../features/editor/sidebarImageDrag";
@@ -40,6 +40,7 @@ type WorkspaceTreeProps = {
 const DEPTH_STEP = 14;
 /** Extra inset so the open-document bar isn’t flush against the icon column. */
 const ICON_GUTTER = 6;
+const FOLDER_ANIMATION_MS = 500;
 
 export function WorkspaceTree({
   node,
@@ -75,6 +76,8 @@ export function WorkspaceTree({
 
   const renameInputRef = useRef<HTMLInputElement>(null);
   const isThisRowHovered = hoveredRowPath === node.path;
+  const [renderChildren, setRenderChildren] = useState(isExpanded);
+  const [childrenOpen, setChildrenOpen] = useState(isExpanded);
 
   useLayoutEffect(() => {
     if (!isRenaming || !renameInputRef.current) return;
@@ -83,7 +86,25 @@ export function WorkspaceTree({
     el.select();
   }, [isRenaming]);
 
+  useLayoutEffect(() => {
+    if (!isDirectory) return;
+    if (isExpanded) {
+      setRenderChildren(true);
+      const frame = requestAnimationFrame(() => setChildrenOpen(true));
+      return () => cancelAnimationFrame(frame);
+    }
+    setChildrenOpen(false);
+  }, [isDirectory, isExpanded]);
+
+  useEffect(() => {
+    if (!isDirectory || isExpanded) return;
+    const timer = window.setTimeout(() => setRenderChildren(false), FOLDER_ANIMATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [isDirectory, isExpanded]);
+
   const paddingLeft = depth * DEPTH_STEP + ICON_GUTTER;
+  const childNodes = node.children ?? [];
+  const hasChildren = childNodes.length > 0;
 
   return (
     <li>
@@ -136,6 +157,7 @@ export function WorkspaceTree({
           <button
             type="button"
             aria-current={isOpenDocumentTrail ? "true" : undefined}
+            aria-expanded={isDirectory ? isExpanded : undefined}
             // HTML5 drag works in the browser; desktop uses pointer drag (Tauri blocks HTML5 drops).
             draggable={isDraggableImage && !isTauriRuntime()}
             onDragStart={(event) => {
@@ -165,7 +187,7 @@ export function WorkspaceTree({
                   <WorkspaceNodeIcon node={node} isExpanded={isExpanded} />
                 </span>
                 <span
-                  className={`absolute inset-0 flex items-center justify-center font-mono text-[11px] leading-none transition-[opacity,transform] duration-75 ease-out ${
+                  className={`harvy-workspace-folder-chevron absolute inset-0 flex items-center justify-center font-mono text-[11px] leading-none ${
                     isThisRowHovered ? "opacity-100" : "opacity-0"
                   } ${
                     isSelected ? "text-muted/80" : "text-muted/50"
@@ -207,30 +229,38 @@ export function WorkspaceTree({
         </div>
       )}
 
-      {isDirectory && isExpanded ? (
-        <ul className="mt-0.5 space-y-0.5">
-          {(node.children ?? []).map((child) => (
-            <WorkspaceTree
-              key={child.path}
-              node={child}
-              depth={depth + 1}
-              expandedPaths={expandedPaths}
-              selectedPath={selectedPath}
-              openDocumentTrailPath={openDocumentTrailPath}
-              hoveredRowPath={hoveredRowPath}
-              onWorkspaceRowPointerEnter={onWorkspaceRowPointerEnter}
-              onWorkspaceRowPointerLeave={onWorkspaceRowPointerLeave}
-              onToggleFolder={onToggleFolder}
-              onSelectNode={onSelectNode}
-              onOpenFolder={onOpenFolder}
-              renamingPath={renamingPath}
-              renameDraft={renameDraft}
-              onRenameDraftChange={onRenameDraftChange}
-              onRenameCommit={onRenameCommit}
-              onRenameCancel={onRenameCancel}
-            />
-          ))}
-        </ul>
+      {isDirectory && hasChildren && renderChildren ? (
+        <div
+          className={`harvy-workspace-folder-children ${
+            childrenOpen ? "harvy-workspace-folder-children--open" : ""
+          }`}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <ul className="mt-0.5 space-y-0.5">
+              {childNodes.map((child) => (
+                <WorkspaceTree
+                  key={child.path}
+                  node={child}
+                  depth={depth + 1}
+                  expandedPaths={expandedPaths}
+                  selectedPath={selectedPath}
+                  openDocumentTrailPath={openDocumentTrailPath}
+                  hoveredRowPath={hoveredRowPath}
+                  onWorkspaceRowPointerEnter={onWorkspaceRowPointerEnter}
+                  onWorkspaceRowPointerLeave={onWorkspaceRowPointerLeave}
+                  onToggleFolder={onToggleFolder}
+                  onSelectNode={onSelectNode}
+                  onOpenFolder={onOpenFolder}
+                  renamingPath={renamingPath}
+                  renameDraft={renameDraft}
+                  onRenameDraftChange={onRenameDraftChange}
+                  onRenameCommit={onRenameCommit}
+                  onRenameCancel={onRenameCancel}
+                />
+              ))}
+            </ul>
+          </div>
+        </div>
       ) : null}
     </li>
   );

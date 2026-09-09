@@ -52,11 +52,12 @@ function placeExportSubmenu(
   const parent = parentMenuEl.getBoundingClientRect();
   const item = itemEl.getBoundingClientRect();
   const menu = submenuEl.getBoundingClientRect();
+  const overlap = 8;
   const margin = 8;
 
-  let left = parent.right;
+  let left = parent.right - overlap;
   if (left + menu.width > window.innerWidth - margin) {
-    left = parent.left - menu.width;
+    left = parent.left - menu.width + overlap;
   }
   left = Math.max(margin, left);
 
