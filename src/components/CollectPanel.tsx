@@ -4,7 +4,6 @@ import {
   NotepadText,
   RefreshCw,
   Trash2,
-  Type as TypeIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type CollectItem } from "../features/collect/collectItems";
@@ -23,6 +22,7 @@ import {
   writeNotionIdeasLastSyncedAt,
 } from "../features/notion/notionIdeas";
 import { formatFetchedAgo } from "../features/outliers/outlierPosts";
+import { useOutlierColumnCount } from "../features/outliers/useOutlierColumnCount";
 import { isTauriRuntime } from "../features/save/saveRuntime";
 import { AvatarView } from "./AvatarView";
 import { CollectItemModal } from "./CollectItemModal";
@@ -50,11 +50,11 @@ function CollectRowCheckbox({
       type="button"
       role="checkbox"
       aria-checked={checked}
-      aria-label={checked ? "Deselect row" : "Select row"}
+      aria-label={checked ? "Deselect idea" : "Select idea"}
       className={`harvy-checkbox flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-sm transition-opacity duration-150 ${
         checked
           ? "harvy-checkbox--checked opacity-100"
-          : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+          : "border border-line/45 bg-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 dark:border-white/22"
       }`}
       onClick={(event) => {
         event.stopPropagation();
@@ -96,6 +96,64 @@ function CollectSelectionActions({
         <NotepadText size={15} strokeWidth={1.75} aria-hidden />
       </button>
     </div>
+  );
+}
+
+function IdeaGalleryCard({
+  item,
+  selected,
+  onOpen,
+  onToggleSelected,
+  onStartWriting,
+}: {
+  item: CollectItem;
+  selected: boolean;
+  onOpen: () => void;
+  onToggleSelected: () => void;
+  onStartWriting?: (item: CollectItem) => void | Promise<void>;
+}) {
+  const untitled = !item.preview.trim();
+  const title = untitled ? "Untitled" : item.preview.trim();
+  const notes = (item.body ?? "").trim();
+
+  return (
+    <article
+      className={`harvy-outlier-card harvy-idea-card group relative ${selected ? "is-selected" : ""}`}
+      onClick={onOpen}
+    >
+      <div
+        className="absolute right-2 top-2 z-10 flex items-center gap-1"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {onStartWriting ? (
+          <button
+            type="button"
+            className="harvy-notion-row-action opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+            aria-label="Start writing"
+            onClick={() => void onStartWriting(item)}
+          >
+            Write
+          </button>
+        ) : null}
+        <CollectRowCheckbox checked={selected} onToggle={onToggleSelected} />
+      </div>
+
+      <div className="harvy-idea-card-preview">
+        {notes ? <p className="harvy-idea-card-preview-text">{notes}</p> : null}
+      </div>
+
+      <div className="harvy-idea-card-title">
+        <FileText
+          size={15}
+          strokeWidth={1.6}
+          className="harvy-notion-page-icon mt-0.5 shrink-0"
+          aria-hidden
+        />
+        <span className={`harvy-idea-card-title-text ${untitled ? "is-untitled" : ""}`}>
+          {title}
+        </span>
+      </div>
+    </article>
   );
 }
 
@@ -232,6 +290,11 @@ export function CollectPanel({
     };
   }, [activeCollectView]);
 
+  const { columnCount, isReflowing } = useOutlierColumnCount({
+    workspaceSidebarOpen,
+    toolsSidebarOpen,
+  });
+
   const selectedItems = useMemo(
     () => items.filter((item) => selectedIds.has(item.id)),
     [items, selectedIds],
@@ -331,8 +394,8 @@ export function CollectPanel({
             toolsSidebarOpen={toolsSidebarOpen}
           />
         ) : activeCollectView === "collect" && showCollectView ? (
-        <div className="harvy-notion-db mt-7">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="mt-7 flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0 text-[12px] text-muted/65 dark:text-white/45">
                 {notionConnected ? (
                   <>
@@ -376,98 +439,30 @@ export function CollectPanel({
               </div>
             </div>
 
-            <div className="harvy-notion-db-frame">
-              <table className="harvy-notion-db-table">
-                <thead>
-                  <tr>
-                    <th className="harvy-notion-db-th harvy-notion-db-th--name">
-                      <span className="harvy-notion-db-th-inner">
-                        <TypeIcon size={13} strokeWidth={1.75} aria-hidden />
-                        Name
-                      </span>
-                    </th>
-                    <th className="harvy-notion-db-th harvy-notion-db-th--check" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {ideaItems.length === 0 ? (
-                    <tr>
-                      <td colSpan={2} className="harvy-notion-db-empty">
-                        {notionConnected
-                          ? 'No pages with Status “Idea”. Add one in Notion, then Sync.'
-                          : "Connect Notion in Settings → Research to load ideas."}
-                      </td>
-                    </tr>
-                  ) : (
-                    ideaItems.map((item) => {
-                      const isSelected = selectedIds.has(item.id);
-                      return (
-                        <tr
-                          key={item.id}
-                          className={`harvy-notion-db-row group ${isSelected ? "is-selected" : ""}`}
-                          onClick={() => openItem(item.id)}
-                        >
-                          <td className="harvy-notion-db-td harvy-notion-db-td--name">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <FileText
-                                size={15}
-                                strokeWidth={1.6}
-                                className="harvy-notion-page-icon shrink-0"
-                                aria-hidden
-                              />
-                              <span
-                                className={`min-w-0 flex-1 truncate text-[14px] ${
-                                  item.preview.trim()
-                                    ? "text-ink dark:text-white/90"
-                                    : "text-muted/50 dark:text-white/35"
-                                }`}
-                              >
-                                {item.preview.trim() || "Untitled"}
-                              </span>
-                              <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                {onStartWriting ? (
-                                  <button
-                                    type="button"
-                                    className="harvy-notion-row-action"
-                                    aria-label="Start writing"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      void onStartWriting(item);
-                                    }}
-                                  >
-                                    Write
-                                  </button>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  className="harvy-notion-row-action"
-                                  aria-label="Open idea"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    openItem(item.id);
-                                  }}
-                                >
-                                  Open
-                                </button>
-                              </div>
-                            </div>
-                          </td>
-                          <td
-                            className="harvy-notion-db-td harvy-notion-db-td--check"
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            <CollectRowCheckbox
-                              checked={isSelected}
-                              onToggle={() => toggleSelected(item.id)}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+            {ideaItems.length === 0 ? (
+              <p className="mt-5 text-[13px] text-muted/65">
+                {notionConnected
+                  ? 'No pages with Status “Idea”. Add one in Notion, then Sync.'
+                  : "Connect Notion in Settings → Research to load ideas."}
+              </p>
+            ) : (
+              <div
+                className="harvy-idea-gallery mt-5"
+                data-reflowing={isReflowing ? "true" : undefined}
+                style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
+              >
+                {ideaItems.map((item) => (
+                  <IdeaGalleryCard
+                    key={item.id}
+                    item={item}
+                    selected={selectedIds.has(item.id)}
+                    onOpen={() => openItem(item.id)}
+                    onToggleSelected={() => toggleSelected(item.id)}
+                    onStartWriting={onStartWriting}
+                  />
+                ))}
+              </div>
+            )}
         </div>
         ) : showOutliersView ? (
           <OutliersView

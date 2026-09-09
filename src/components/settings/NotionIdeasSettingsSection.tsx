@@ -98,10 +98,21 @@ export function NotionIdeasSettingsSection() {
     setError(null);
     setMessage(null);
     try {
-      const count = await testNotionIdeasConnection();
-      setMessage(
-        `Connected — ${count} page${count === 1 ? "" : "s"} with Status “${ideaStatusValue || "Idea"}”.`,
-      );
+      await fetchNotionDatabaseSchema({
+        token: token.trim() || undefined,
+        databaseIdOrUrl: databaseIdOrUrl.trim() || undefined,
+      });
+      const savedId = (config?.databaseId || "").replace(/-/g, "").toLowerCase();
+      const formId = databaseIdOrUrl.replace(/-/g, "").toLowerCase().replace(/[^a-f0-9]/g, "");
+      const testingSavedDatabase = savedId.length === 32 && formId.endsWith(savedId);
+      if (testingSavedDatabase) {
+        const count = await testNotionIdeasConnection();
+        setMessage(
+          `Connected — ${count} page${count === 1 ? "" : "s"} with Status “${ideaStatusValue || "Idea"}”.`,
+        );
+      } else {
+        setMessage("That database is reachable. Save connection to use it in Ideas.");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

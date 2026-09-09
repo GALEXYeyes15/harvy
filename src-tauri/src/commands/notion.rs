@@ -236,6 +236,48 @@ fn parse_error_body(body: &str) -> String {
     }
 }
 
+fn looks_like_missing_database(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("could not find database") || lower.contains("object_not_found")
+}
+
+fn explain_database_access_error(message: &str, database_id: &str) -> String {
+    if looks_like_missing_database(message) {
+        format!(
+            "Harvy can't open Notion database {database_id}. The URL is fine — Harvy just doesn't have access yet. In Notion: … → Connections → Manage connections → Internal → Harvy, then select that database."
+        )
+    } else {
+        message.to_string()
+    }
+}
+
+/// Combine form fields with the saved connection. A new database ID must be used
+/// even when the token field is left blank (“keep existing secret”).
+fn merge_notion_credentials(
+    saved: Option<&NotionIdeasConfig>,
+    token: Option<&str>,
+    database_id_or_url: Option<&str>,
+) -> Result<(String, String), String> {
+    let token_in = token.map(str::trim).filter(|s| !s.is_empty());
+    let id_in = database_id_or_url.map(str::trim).filter(|s| !s.is_empty());
+
+    let auth_token = match token_in {
+        Some(t) => t.to_string(),
+        None => saved
+            .map(|c| c.token.clone())
+            .filter(|t| !t.trim().is_empty())
+            .ok_or_else(|| "Paste your Notion integration secret.".to_string())?,
+    };
+    let database_id = match id_in {
+        Some(id) => normalize_notion_database_id(id)?,
+        None => saved
+            .map(|c| c.database_id.clone())
+            .filter(|id| !id.trim().is_empty())
+            .ok_or_else(|| "Enter a Notion database URL or ID.".to_string())?,
+    };
+    Ok((auth_token, database_id))
+}
+
 fn require_config(app: &AppHandle) -> Result<NotionIdeasConfig, String> {
     let config = read_config(app)?
         .ok_or_else(|| "Notion is not connected. Add your integration in Settings → Research.".to_string())?;
@@ -246,6 +288,40 @@ fn require_config(app: &AppHandle) -> Result<NotionIdeasConfig, String> {
         return Err("Notion database ID is missing.".to_string());
     }
     Ok(config)
+}
+
+fn retrieve_database_json(
+    client: &Client,
+    token: &str,
+    database_id: &str,
+) -> Result<Value, String> {
+    let url = format!("{}/databases/{}", NOTION_API_BASE, database_id);
+    let response = client
+        .get(&url)
+        .headers(notion_headers(token)?)
+        .send()
+        .map_err(|e| format!("Notion request failed: {}", e))?;
+    let status = response.status();
+    let body = response
+        .text()
+        .map_err(|e| format!("Could not read Notion response: {}", e))?;
+    if status.is_success() {
+        return serde_json::from_str(&body).map_err(|e| format!("Invalid Notion schema JSON: {}", e));
+    }
+
+    let message = parse_error_body(&body);
+    if looks_like_missing_database(&message) {
+        let page_url = format!("{}/pages/{}", NOTION_API_BASE, database_id);
+        if let Ok(page_resp) = client.get(&page_url).headers(notion_headers(token)?).send() {
+            if page_resp.status().is_success() {
+                return Err(
+                    "That ID is a Notion page, not a database. Open the database as a full page and copy its URL from the address bar."
+                        .to_string(),
+                );
+            }
+        }
+    }
+    Err(explain_database_access_error(&message, database_id))
 }
 
 #[tauri::command]
@@ -363,34 +439,15 @@ pub fn notion_fetch_database_schema(
     token: Option<String>,
     database_id_or_url: Option<String>,
 ) -> Result<Vec<NotionPropertyInfo>, String> {
-    let (auth_token, database_id) = match (token, database_id_or_url) {
-        (Some(t), Some(id)) if !t.trim().is_empty() && !id.trim().is_empty() => {
-            (t.trim().to_string(), normalize_notion_database_id(&id)?)
-        }
-        _ => {
-            let config = require_config(&app)?;
-            (config.token, config.database_id)
-        }
-    };
+    let saved = read_config(&app)?;
+    let (auth_token, database_id) = merge_notion_credentials(
+        saved.as_ref(),
+        token.as_deref(),
+        database_id_or_url.as_deref(),
+    )?;
 
     let client = notion_client()?;
-    let url = format!("{}/databases/{}", NOTION_API_BASE, database_id);
-    let response = client
-        .get(&url)
-        .headers(notion_headers(&auth_token)?)
-        .send()
-        .map_err(|e| format!("Notion request failed: {}", e))?;
-
-    let status = response.status();
-    let body = response
-        .text()
-        .map_err(|e| format!("Could not read Notion response: {}", e))?;
-    if !status.is_success() {
-        return Err(parse_error_body(&body));
-    }
-
-    let parsed: Value =
-        serde_json::from_str(&body).map_err(|e| format!("Invalid Notion schema JSON: {}", e))?;
+    let parsed = retrieve_database_json(&client, &auth_token, &database_id)?;
     let props = parsed
         .get("properties")
         .and_then(|p| p.as_object())
@@ -425,21 +482,7 @@ pub fn notion_query_idea_pages(app: AppHandle) -> Result<Vec<NotionIdeaPage>, St
     let client = notion_client()?;
 
     // Load schema to know status vs select for filtering.
-    let schema_url = format!("{}/databases/{}", NOTION_API_BASE, config.database_id);
-    let schema_resp = client
-        .get(&schema_url)
-        .headers(notion_headers(&config.token)?)
-        .send()
-        .map_err(|e| format!("Notion request failed: {}", e))?;
-    let schema_status = schema_resp.status();
-    let schema_body = schema_resp
-        .text()
-        .map_err(|e| format!("Could not read Notion response: {}", e))?;
-    if !schema_status.is_success() {
-        return Err(parse_error_body(&schema_body));
-    }
-    let schema: Value = serde_json::from_str(&schema_body)
-        .map_err(|e| format!("Invalid Notion schema JSON: {}", e))?;
+    let schema = retrieve_database_json(&client, &config.token, &config.database_id)?;
     let props = schema.get("properties").cloned().unwrap_or(Value::Null);
     let status_type = status_property_type(&props, &config.status_property)
         .unwrap_or_else(|| "status".to_string());
@@ -486,11 +529,15 @@ pub fn notion_query_idea_pages(app: AppHandle) -> Result<Vec<NotionIdeaPage>, St
             .text()
             .map_err(|e| format!("Could not read Notion response: {}", e))?;
         if !status.is_success() {
+            let message = parse_error_body(&text);
+            if looks_like_missing_database(&message) {
+                return Err(explain_database_access_error(&message, &config.database_id));
+            }
             // If filter fails (e.g. empty status), fall back to unfiltered + client filter.
             if results.is_empty() && start_cursor.is_none() {
                 return query_ideas_unfiltered(&client, &config, &idea);
             }
-            return Err(parse_error_body(&text));
+            return Err(message);
         }
 
         let parsed: Value =
@@ -558,7 +605,10 @@ fn query_ideas_unfiltered(
             .text()
             .map_err(|e| format!("Could not read Notion response: {}", e))?;
         if !status.is_success() {
-            return Err(parse_error_body(&text));
+            return Err(explain_database_access_error(
+                &parse_error_body(&text),
+                &config.database_id,
+            ));
         }
 
         let parsed: Value =
@@ -643,16 +693,7 @@ pub fn notion_mark_idea_started(app: AppHandle, page_id: String) -> Result<(), S
     let client = notion_client()?;
 
     // Detect status vs select for the patch payload.
-    let schema_url = format!("{}/databases/{}", NOTION_API_BASE, config.database_id);
-    let schema_resp = client
-        .get(&schema_url)
-        .headers(notion_headers(&config.token)?)
-        .send()
-        .map_err(|e| format!("Notion request failed: {}", e))?;
-    let schema_body = schema_resp
-        .text()
-        .map_err(|e| format!("Could not read Notion response: {}", e))?;
-    let schema: Value = serde_json::from_str(&schema_body).unwrap_or(Value::Null);
+    let schema = retrieve_database_json(&client, &config.token, &config.database_id).unwrap_or(Value::Null);
     let props = schema.get("properties").cloned().unwrap_or(Value::Null);
     let status_type = status_property_type(&props, &config.status_property)
         .unwrap_or_else(|| "status".to_string());
@@ -699,7 +740,22 @@ pub fn notion_test_ideas_connection(app: AppHandle) -> Result<usize, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_notion_database_id;
+    use super::{
+        explain_database_access_error, merge_notion_credentials, normalize_notion_database_id,
+        NotionIdeasConfig,
+    };
+
+    fn sample_config() -> NotionIdeasConfig {
+        NotionIdeasConfig {
+            token: "secret_old".to_string(),
+            database_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".to_string(),
+            title_property: "Name".to_string(),
+            notes_property: "Notes".to_string(),
+            status_property: "Status".to_string(),
+            idea_status_value: "Idea".to_string(),
+            started_status_value: "Started".to_string(),
+        }
+    }
 
     #[test]
     fn parses_dashed_uuid() {
@@ -714,5 +770,30 @@ mod tests {
         )
         .unwrap();
         assert_eq!(id, "a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+    }
+
+    #[test]
+    fn merge_keeps_saved_token_when_only_database_changes() {
+        let saved = sample_config();
+        let (token, database_id) = merge_notion_credentials(
+            Some(&saved),
+            None,
+            Some("fc18c16a-5124-4937-81c2-17f7bf0172cf"),
+        )
+        .unwrap();
+        assert_eq!(token, "secret_old");
+        assert_eq!(database_id, "fc18c16a-5124-4937-81c2-17f7bf0172cf");
+    }
+
+    #[test]
+    fn explains_unshared_database() {
+        let message = explain_database_access_error(
+            "Could not find database with ID: fc18c16a-5124-4937-81c2-17f7bf0172cf. Make sure the relevant pages and databases are shared with your integration \"Harvy\".",
+            "fc18c16a-5124-4937-81c2-17f7bf0172cf",
+        );
+        assert!(message.contains("Manage connections"));
+        assert!(message.contains("Internal"));
+        assert!(message.contains("Harvy"));
+        assert!(message.contains("fc18c16a-5124-4937-81c2-17f7bf0172cf"));
     }
 }
