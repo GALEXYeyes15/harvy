@@ -187,7 +187,7 @@ export function WorkspaceTree({
                   <WorkspaceNodeIcon node={node} isExpanded={isExpanded} />
                 </span>
                 <span
-                  className={`harvy-workspace-folder-chevron absolute inset-0 flex items-center justify-center font-mono text-[11px] leading-none ${
+                  className={`harvy-workspace-folder-chevron absolute inset-0 flex items-center justify-center font-mono text-[12px] leading-none ${
                     isThisRowHovered ? "opacity-100" : "opacity-0"
                   } ${
                     isSelected ? "text-muted/80" : "text-muted/50"

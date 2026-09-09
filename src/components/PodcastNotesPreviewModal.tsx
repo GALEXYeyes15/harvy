@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type MouseEvent } from "react";
 import { markdownToEditorHtml } from "../features/editor/documentMarkdown";
 import { ensurePodcastNotesBullets } from "../features/aiCheck/podcastNotesMarkdown";
 import { CenteredOverlayModal } from "./overlay/CenteredOverlayModal";
@@ -11,11 +11,12 @@ type PodcastNotesPreviewModalProps = {
   onClose: () => void;
   onExport: () => void;
   onPrint?: () => void;
+  onShare?: (event: MouseEvent<HTMLButtonElement>) => void;
   onRetry?: () => void;
 };
 
 const OPTION_LABEL =
-  "text-[11px] font-medium tracking-wide text-muted/70";
+  "text-[12px] font-medium tracking-wide text-muted/70";
 
 const OPTION_FIELD =
   "flex h-11 w-full min-w-0 items-center rounded-[10px] border border-[#6f6f6f] bg-ink/[0.04] px-3.5 text-[14px] font-medium text-ink/92 dark:bg-ink/[0.07]";
@@ -31,6 +32,7 @@ export function PodcastNotesPreviewModal({
   onClose,
   onExport,
   onPrint,
+  onShare,
   onRetry,
 }: PodcastNotesPreviewModalProps) {
   const previewHtml = useMemo(() => {
@@ -114,6 +116,19 @@ export function PodcastNotesPreviewModal({
                   className={OPTION_BUTTON}
                 >
                   Print
+                </button>
+              </div>
+            ) : null}
+            {onShare ? (
+              <div className="flex flex-col gap-1.5">
+                <p className={OPTION_LABEL}>Share</p>
+                <button
+                  type="button"
+                  onClick={onShare}
+                  disabled={!canExport}
+                  className={OPTION_BUTTON}
+                >
+                  Share
                 </button>
               </div>
             ) : null}

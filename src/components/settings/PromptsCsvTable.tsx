@@ -57,14 +57,14 @@ export function PromptsCsvTable({
                 </td>
                 <td className="align-middle border-l border-line/12 text-center dark:border-white/[0.06]">
                   {locked ? (
-                    <span className="px-1.5 py-1 text-[11px] text-muted/40" aria-label="Default prompt cannot be removed">
+                    <span className="px-1.5 py-1 text-[12px] text-muted/40" aria-label="Default prompt cannot be removed">
                       —
                     </span>
                   ) : (
                     <button
                       type="button"
                       onClick={() => onRemove(prompt.id)}
-                      className="rounded-md px-1.5 py-1 text-[11px] text-muted/60 transition-colors hover:bg-ink/[0.06] hover:text-ink"
+                      className="rounded-md px-1.5 py-1 text-[12px] text-muted/60 transition-colors hover:bg-ink/[0.06] hover:text-ink"
                       aria-label="Remove prompt"
                     >
                       ×

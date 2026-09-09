@@ -15,6 +15,7 @@ pub mod ai_check;
 mod pdf_export;
 pub mod pdf_import;
 pub mod print;
+pub mod share;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "lowercase")]

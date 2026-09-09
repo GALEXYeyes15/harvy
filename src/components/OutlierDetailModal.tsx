@@ -98,7 +98,7 @@ function CommentThread({
         <Avatar
           name={comment.authorName}
           photoUrl={comment.photoUrl}
-          sizeClass="h-8 w-8 text-[11px]"
+          sizeClass="h-8 w-8 text-[12px]"
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">

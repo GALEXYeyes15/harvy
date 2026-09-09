@@ -46,7 +46,7 @@ export function NotionIdeasSettingsSection() {
     return (
       <div className={BOX}>
         <p className="text-[13px] font-medium text-ink">Notion Ideas</p>
-        <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+        <p className="mt-0.5 text-[12px] leading-snug text-muted/75">
           Connect a Notion database in the Harvy desktop app to sync essay ideas.
         </p>
       </div>
@@ -132,7 +132,7 @@ export function NotionIdeasSettingsSection() {
     <div className="space-y-3">
       <div className={BOX}>
         <p className="text-[13px] font-medium text-ink">Notion Ideas</p>
-        <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+        <p className="mt-0.5 text-[12px] leading-snug text-muted/75">
           Sync pulls Notion pages for the Status below. Start writing updates Status so they leave
           the queue. Title, Notes, and Status columns are detected automatically from your database.
         </p>

@@ -22,7 +22,7 @@ type EditorDocumentHeaderProps = {
 };
 
 const TITLE_EMPHASIS = "text-ink/88";
-const TITLE_ROW_TYPOGRAPHY = "text-[11px] font-normal tracking-wide text-muted/58";
+const TITLE_ROW_TYPOGRAPHY = "text-[12px] font-normal tracking-wide text-muted/58";
 
 const LEADING_PAD_SYNC = "transition-[padding-left] duration-500 ease-in-out";
 

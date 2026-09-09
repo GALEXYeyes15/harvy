@@ -10,6 +10,7 @@ describe("PodcastNotesPreviewModal", () => {
     const onClose = vi.fn();
 
     const onPrint = vi.fn();
+    const onShare = vi.fn();
 
     render(
       <PodcastNotesPreviewModal
@@ -20,6 +21,7 @@ describe("PodcastNotesPreviewModal", () => {
         onClose={onClose}
         onExport={onExport}
         onPrint={onPrint}
+        onShare={onShare}
       />,
     );
 
@@ -30,6 +32,9 @@ describe("PodcastNotesPreviewModal", () => {
 
     await user.click(screen.getByRole("button", { name: "Print" }));
     expect(onPrint).toHaveBeenCalledOnce();
+
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    expect(onShare).toHaveBeenCalledOnce();
 
     await user.click(screen.getByRole("button", { name: "Export PDF" }));
     expect(onExport).toHaveBeenCalledOnce();

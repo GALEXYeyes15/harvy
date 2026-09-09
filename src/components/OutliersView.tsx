@@ -454,7 +454,7 @@ function OutliersSettingsDropdown({
           >
             {isFetching ? "Loading..." : "Fetch posts"}
           </button>
-          <p className="mt-1.5 text-center text-[11px] text-muted/65 dark:text-white/45">
+          <p className="mt-1.5 text-center text-[12px] text-muted/65 dark:text-white/45">
             {lastFetchedAt != null ? `Last fetch ${lastFetchedLabel}` : lastFetchedLabel}
           </p>
 
@@ -635,7 +635,7 @@ function OutlierArticleLinkCard({ post }: { post: OutlierPost }) {
           rounded="md"
         />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[11px] leading-snug text-muted/70 dark:text-white/50">
+          <p className="truncate text-[12px] leading-snug text-muted/70 dark:text-white/50">
             {post.creatorName}
           </p>
           <p className="mt-0.5 break-words text-[13px] font-semibold leading-snug text-ink [overflow-wrap:anywhere]">
@@ -711,7 +711,7 @@ function OutlierCard({
             <p className="truncate text-[13px] font-semibold leading-snug text-ink">
               {post.creatorName}
             </p>
-            <p className="mt-0.5 truncate text-[11px] text-muted/65 dark:text-white/45">
+            <p className="mt-0.5 truncate text-[12px] text-muted/65 dark:text-white/45">
               {post.handle} · {post.platform} · {post.postedAgo}
             </p>
           </span>
@@ -757,7 +757,7 @@ function OutlierCard({
             <OutlierThumbnail post={post} />
           </button>
           {post.captionBelowThumbnail ? (
-            <p className="mt-2.5 text-[11px] leading-snug text-muted/70 dark:text-white/50">
+            <p className="mt-2.5 text-[12px] leading-snug text-muted/70 dark:text-white/50">
               {post.captionBelowThumbnail}
             </p>
           ) : null}

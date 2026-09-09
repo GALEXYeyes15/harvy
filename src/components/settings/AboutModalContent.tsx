@@ -105,7 +105,7 @@ export function AboutModalContent() {
           <ChevronLeft size={18} strokeWidth={1.75} aria-hidden />
         </button>
 
-        <p className="text-[11px] tabular-nums tracking-wide text-muted/55">
+        <p className="text-[12px] tabular-nums tracking-wide text-muted/55">
           {index + 1} / {total}
         </p>
 

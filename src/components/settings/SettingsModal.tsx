@@ -386,7 +386,7 @@ function SettingsGroup({
       <ul className={SETTINGS_BOX}>
         {children}
       </ul>
-      {hint ? <p className="mt-2 text-[11px] leading-snug text-muted/70">{hint}</p> : null}
+      {hint ? <p className="mt-2 text-[12px] leading-snug text-muted/70">{hint}</p> : null}
     </div>
   );
 }
@@ -1132,7 +1132,7 @@ function AppearancePanel({
             <span className="flex h-[4.75rem] w-[4.75rem] items-center justify-center rounded-xl bg-mist text-[1.75rem] font-light text-ink/70 transition-colors group-hover:text-ink">
               +
             </span>
-            <span className="text-center text-[11px] text-muted/80">Add New</span>
+            <span className="text-center text-[12px] text-muted/80">Add New</span>
           </button>
         </div>
       </div>
@@ -1222,7 +1222,7 @@ function StylePreviewCard({
         ) : null}
       </div>
       <div className="flex w-full flex-col items-center gap-0.5">
-        <span className="w-full text-center text-[11px] leading-tight text-ink/85">{label}</span>
+        <span className="w-full text-center text-[12px] leading-tight text-ink/85">{label}</span>
         {subtitle ? (
           <span className="w-full text-center text-[10px] leading-tight text-muted/65">{subtitle}</span>
         ) : null}
@@ -1677,7 +1677,7 @@ function StyleEditorForm({
       {!typographyOnly ? (
         <>
           <label className="block">
-            <span className="text-[11px] text-muted/75">Name</span>
+            <span className="text-[12px] text-muted/75">Name</span>
             <input
               type="text"
               value={style.name}
@@ -1688,7 +1688,7 @@ function StyleEditorForm({
           </label>
 
           <div className="block">
-            <span className="text-[11px] text-muted/75">Body font</span>
+            <span className="text-[12px] text-muted/75">Body font</span>
             <BodyFontPicker
               value={resolveStyleBodyFont(style)}
               onChange={(bodyFont) =>
@@ -1990,7 +1990,7 @@ function EncouragementPanel({
         <div className={SETTINGS_BOX_PAD}>
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex min-w-[6.5rem] flex-col gap-1">
-              <span className="text-[11px] text-muted/75">From</span>
+              <span className="text-[12px] text-muted/75">From</span>
               <input
                 type="number"
                 min={1}
@@ -2002,7 +2002,7 @@ function EncouragementPanel({
             </label>
             <span className="pb-2 text-[12px] text-muted/55">to</span>
             <label className="flex min-w-[6.5rem] flex-col gap-1">
-              <span className="text-[11px] text-muted/75">Until</span>
+              <span className="text-[12px] text-muted/75">Until</span>
               <input
                 type="number"
                 min={1}
@@ -2013,7 +2013,7 @@ function EncouragementPanel({
               />
             </label>
           </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-muted/70">
+          <p className="mt-2 text-[12px] leading-relaxed text-muted/70">
             Picks a random time in this range (e.g. 15–45).
           </p>
         </div>
@@ -2028,7 +2028,7 @@ function EncouragementPanel({
             <button
               type="button"
               onClick={addRow}
-              className="rounded-md px-2 py-1 text-[11px] font-medium text-muted/80 transition-colors hover:bg-ink/[0.06] hover:text-ink"
+              className="rounded-md px-2 py-1 text-[12px] font-medium text-muted/80 transition-colors hover:bg-ink/[0.06] hover:text-ink"
             >
               Add row
             </button>
@@ -2050,7 +2050,7 @@ function EncouragementPanel({
           onRemove={removePhrase}
           maxHeightClass="max-h-[14rem]"
         />
-        <p className="mt-2 text-[11px] leading-relaxed text-muted/70">
+        <p className="mt-2 text-[12px] leading-relaxed text-muted/70">
           One phrase per row — quote and attribution.
         </p>
       </div>
@@ -2151,7 +2151,7 @@ function EditorPanel({
             <button
               type="button"
               onClick={addPromptRow}
-              className="rounded-md px-2 py-1 text-[11px] font-medium text-muted/80 transition-colors hover:bg-ink/[0.06] hover:text-ink"
+              className="rounded-md px-2 py-1 text-[12px] font-medium text-muted/80 transition-colors hover:bg-ink/[0.06] hover:text-ink"
             >
               Add row
             </button>
@@ -2266,7 +2266,7 @@ function ParametersFields({
       <li className="space-y-2 px-3.5 py-3">
         <div>
           <p className="text-[13px] font-medium text-ink">Reading grade</p>
-          <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+          <p className="mt-0.5 text-[12px] leading-snug text-muted/75">
             Flesch–Kincaid U.S. grade level for the document.{" "}
             <button
               type="button"
@@ -2278,7 +2278,7 @@ function ParametersFields({
           </p>
         </div>
         {showReadingGradeFormula ? (
-          <div className="font-mono text-[11px] leading-relaxed text-muted/80">
+          <div className="font-mono text-[12px] leading-relaxed text-muted/80">
             <p>0.39 × (words ÷ sentences) + 11.8 × (syllables ÷ words) − 15.59</p>
           </div>
         ) : null}
@@ -2305,7 +2305,7 @@ function ParametersFields({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium text-ink">Sentence complexity</p>
-            <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+            <p className="mt-0.5 text-[12px] leading-snug text-muted/75">
               Highlight sentences at or above this F–K density. Suggested{" "}
               {SUGGESTED_FK_COMPLEXITY_THRESHOLD_MIN}–{SUGGESTED_FK_COMPLEXITY_THRESHOLD_MAX}.{" "}
               <button
@@ -2329,7 +2329,7 @@ function ParametersFields({
           />
         </div>
         {showComplexityFormula ? (
-          <div className="font-mono text-[11px] leading-relaxed text-muted/80">
+          <div className="font-mono text-[12px] leading-relaxed text-muted/80">
             <p>
               0.39 × words + 11.8 × (syllables ÷ words) − 15.59 ≥ {prefs.fkComplexityThreshold}
             </p>
@@ -2362,7 +2362,7 @@ function HotkeysPanel() {
                 <div className="min-w-0">
                   <p className="text-[13px] font-medium text-ink">{item.action}</p>
                   {item.note ? (
-                    <p className="mt-0.5 text-[11px] leading-snug text-muted/75">{item.note}</p>
+                    <p className="mt-0.5 text-[12px] leading-snug text-muted/75">{item.note}</p>
                   ) : null}
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 pt-0.5">
@@ -2412,7 +2412,7 @@ function CriteriaExpandableSettings({
       </ul>
       {expanded ? (
         <div className="space-y-2 px-3.5 pb-3">
-          <p className="text-[11px] leading-snug text-muted/75">
+          <p className="text-[12px] leading-snug text-muted/75">
             Saved with the active document. One item per line. Start a line with{" "}
             <span className="font-mono text-[10px] text-ink/80">[]</span> for a checkbox in the
             sidebar.
@@ -2451,7 +2451,7 @@ function ExportPanel({
           <label htmlFor="export-publish-url" className="block text-[13px] font-medium text-ink">
             Publish link
           </label>
-          <p className="mt-1 mb-2 text-[11px] leading-snug text-muted/75">
+          <p className="mt-1 mb-2 text-[12px] leading-snug text-muted/75">
             Used by Copy + Publish in the export menu.
           </p>
           <input
@@ -2651,7 +2651,7 @@ function QuickLinksExpandableSettings({
       </ul>
       {expanded ? (
         <div className="space-y-2 px-3.5 pb-3">
-          <p className="text-[11px] leading-snug text-muted/75">
+          <p className="text-[12px] leading-snug text-muted/75">
             Add a title and URL. Links open in your browser.
           </p>
           <form
@@ -2688,7 +2688,7 @@ function QuickLinksExpandableSettings({
               </button>
             </div>
             {draftError ? (
-              <p className="text-[11px] leading-snug text-[#ff5a5a]">{draftError}</p>
+              <p className="text-[12px] leading-snug text-[#ff5a5a]">{draftError}</p>
             ) : null}
           </form>
 
@@ -2700,12 +2700,12 @@ function QuickLinksExpandableSettings({
                 <li key={link.id} className="flex items-center gap-2 px-2.5 py-2">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] text-ink">{link.title}</p>
-                    <p className="truncate text-[11px] text-muted/65">{link.url}</p>
+                    <p className="truncate text-[12px] text-muted/65">{link.url}</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setLinks((prev) => prev.filter((row) => row.id !== link.id))}
-                    className="shrink-0 rounded-md px-2 py-1 text-[11px] text-muted/75 hover:text-ink"
+                    className="shrink-0 rounded-md px-2 py-1 text-[12px] text-muted/75 hover:text-ink"
                   >
                     Remove
                   </button>
@@ -2764,7 +2764,7 @@ function ToggleRow({
           {label}
         </label>
         {description ? (
-          <p className="mt-0.5 text-[11px] leading-snug text-muted/85">{description}</p>
+          <p className="mt-0.5 text-[12px] leading-snug text-muted/85">{description}</p>
         ) : null}
       </div>
       <div className={`flex shrink-0 items-center gap-1.5 ${description ? "mt-0.5" : ""}`}>

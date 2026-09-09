@@ -101,6 +101,7 @@ import { pickAndImportWorkspaceImage } from "../features/editor/imageAssets";
 import { copyDocumentToClipboard } from "../features/editor/documentClipboard";
 import { openSafeExternalUrl } from "../features/editor/openExternalUrl";
 import { printDocumentFromEditor, printMarkdownDocument } from "../features/editor/documentPrint";
+import { shareAnchorFromElement, shareMarkdownPdf } from "../features/editor/documentShare";
 import type { HarvyImageLoadAttrs } from "../features/editor/harvyImageAttribution";
 import {
   insertHarvyImagePlaceholderAtCursor,
@@ -3308,7 +3309,7 @@ export function AppShell() {
 
   const tabBarRow = (
     <div
-      className={`harvy-title-bar-drag h-8 overflow-hidden transition-[background-color,border-color,box-shadow] duration-500 ease-in-out ${
+      className={`harvy-title-bar-drag h-[var(--harvy-tab-bar-height)] overflow-hidden transition-[background-color,border-color,box-shadow] duration-500 ease-in-out ${
         hideTopBarWhileTyping ? "border-transparent bg-stage shadow-none" : "bg-mist"
       }`}
       data-harvy-window-drag
@@ -3632,7 +3633,7 @@ export function AppShell() {
       )}
 
       <div
-        className={`pointer-events-none absolute top-0 z-30 flex h-8 items-center rounded-md px-0.5 transition-[opacity,background-color,left] duration-500 ease-in-out ${
+        className={`pointer-events-none absolute top-0 z-30 flex h-[var(--harvy-tab-bar-height)] items-center rounded-md px-0.5 transition-[opacity,background-color,left] duration-500 ease-in-out ${
           hideTopBarWhileTyping || focusModeActive ? "bg-stage opacity-0" : "bg-mist/55 opacity-100"
         }`}
         style={{ left: workspaceSidebarToggleLeft }}
@@ -3757,6 +3758,17 @@ export function AppShell() {
             ensurePodcastNotesBullets(podcastNotesMarkdown),
           ).catch((e) => {
             window.alert(`Print failed: ${e instanceof Error ? e.message : String(e)}`);
+          });
+        }}
+        onShare={(event) => {
+          if (!podcastNotesMarkdown?.trim()) return;
+          void shareMarkdownPdf(
+            "Podcast Notes",
+            ensurePodcastNotesBullets(podcastNotesMarkdown),
+            defaultPodcastNotesPdfFileName(editorTitleBase),
+            shareAnchorFromElement(event.currentTarget),
+          ).catch((e) => {
+            window.alert(`Share failed: ${e instanceof Error ? e.message : String(e)}`);
           });
         }}
         onRetry={retryPodcastNotesPreview}

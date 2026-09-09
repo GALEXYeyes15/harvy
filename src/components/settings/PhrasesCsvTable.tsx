@@ -77,7 +77,7 @@ export function PhrasesCsvTable({
                   <button
                     type="button"
                     onClick={() => onRemove(phrase.id)}
-                    className="rounded-md px-1.5 py-1 text-[11px] text-muted/60 transition-colors hover:bg-ink/[0.06] hover:text-ink"
+                    className="rounded-md px-1.5 py-1 text-[12px] text-muted/60 transition-colors hover:bg-ink/[0.06] hover:text-ink"
                     aria-label="Remove phrase"
                   >
                     ×

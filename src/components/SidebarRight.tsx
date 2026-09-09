@@ -82,7 +82,7 @@ function SidebarToolsTab({
       className="group flex min-w-0 flex-col items-stretch gap-1 py-0.5 text-center"
     >
       <span
-        className={`text-[11px] font-medium leading-normal tracking-wide transition-colors ${
+        className={`text-[12px] font-medium leading-normal tracking-wide transition-colors ${
           active ? "text-ink" : "text-muted/60 group-hover:text-muted/85"
         }`}
       >
@@ -386,7 +386,7 @@ export function SidebarRight({
 
   return (
     <div className={PANEL}>
-      {/* pt-1 mirrors SidebarLeft first block after the h-8 chrome band (toggle → content rhythm) */}
+      {/* pt-1 mirrors SidebarLeft first block after the tab-bar chrome band (toggle → content rhythm) */}
       <div
         className={`grid shrink-0 items-end gap-x-5 px-7 pb-3 pt-1 ${tabColsClass}`}
         role="tablist"

@@ -73,7 +73,7 @@ export function OpenWindowsBar({
       data-harvy-window-drag
     >
       <header
-        className={`harvy-title-bar-drag harvy-tab-strip relative flex h-8 w-full min-w-0 shrink-0 flex-row items-stretch ${RAIL_AND_CHROME_BG} ${
+        className={`harvy-title-bar-drag harvy-tab-strip relative flex h-[var(--harvy-tab-bar-height)] w-full min-w-0 shrink-0 flex-row items-stretch ${RAIL_AND_CHROME_BG} ${
           chromeHidden ? "harvy-tab-strip--stage bg-stage" : "bg-mist"
         } ${overlayWorkspaceRail && workspaceSidebarOpen ? "ml-[260px]" : "ml-0"}`}
         data-harvy-window-drag
@@ -91,7 +91,7 @@ export function OpenWindowsBar({
             disabled={tabNavDisabled}
             onClick={goPrevTab}
           >
-            <ChevronLeft size={15} strokeWidth={1.5} aria-hidden />
+            <ChevronLeft size={16} strokeWidth={1.75} aria-hidden />
           </button>
           <button
             type="button"
@@ -100,7 +100,7 @@ export function OpenWindowsBar({
             disabled={tabNavDisabled}
             onClick={goNextTab}
           >
-            <ChevronRight size={15} strokeWidth={1.5} aria-hidden />
+            <ChevronRight size={16} strokeWidth={1.75} aria-hidden />
           </button>
         </div>
 
@@ -131,8 +131,8 @@ export function OpenWindowsBar({
                       onClick={() => onSelectTab(item.id)}
                       className={
                         active
-                          ? "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[11px] font-medium leading-tight text-ink/92"
-                          : "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[11px] font-normal leading-tight"
+                          ? "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[13px] font-semibold leading-tight text-ink/92"
+                          : "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[13px] font-semibold leading-tight"
                       }
                     >
                       <span className="min-w-0 flex-1 truncate">{item.title}</span>

@@ -97,6 +97,7 @@ pub fn run() {
             commands::export_markdown_pdf,
             commands::pdf_import::extract_pdf_text,
             commands::print::print_markdown,
+            commands::share::share_markdown,
             commands::get_user_editor_rules_path,
             commands::read_user_editor_rules,
             commands::ensure_user_editor_rules,
