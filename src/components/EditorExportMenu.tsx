@@ -44,15 +44,19 @@ function placeExportMenu(menuEl: HTMLElement, anchorEl: HTMLElement): void {
   menuEl.style.zIndex = "10000";
 }
 
-function placeExportSubmenu(submenuEl: HTMLElement, itemEl: HTMLElement): void {
+function placeExportSubmenu(
+  submenuEl: HTMLElement,
+  parentMenuEl: HTMLElement,
+  itemEl: HTMLElement,
+): void {
+  const parent = parentMenuEl.getBoundingClientRect();
   const item = itemEl.getBoundingClientRect();
   const menu = submenuEl.getBoundingClientRect();
-  const gap = 4;
   const margin = 8;
 
-  let left = item.right + gap;
+  let left = parent.right;
   if (left + menu.width > window.innerWidth - margin) {
-    left = item.left - menu.width - gap;
+    left = parent.left - menu.width;
   }
   left = Math.max(margin, left);
 
@@ -127,8 +131,10 @@ export function EditorExportMenu({
   }, [open]);
 
   useLayoutEffect(() => {
-    if (!open || !moreOpen || !moreItemRef.current || !submenuRef.current) return;
-    placeExportSubmenu(submenuRef.current, moreItemRef.current);
+    if (!open || !moreOpen || !menuRef.current || !moreItemRef.current || !submenuRef.current) {
+      return;
+    }
+    placeExportSubmenu(submenuRef.current, menuRef.current, moreItemRef.current);
   }, [open, moreOpen]);
 
   useEffect(() => {
@@ -230,10 +236,7 @@ export function EditorExportMenu({
                   More…
                 </button>
                 {moreOpen ? (
-                  <div
-                    ref={submenuRef}
-                    className="absolute left-full top-0 z-[1] pl-1.5"
-                  >
+                  <div ref={submenuRef} className="absolute left-full top-0 z-[1]">
                     <HarvyContextMenuShell
                       ariaLabel="More"
                       className="harvy-export-submenu"

@@ -95,6 +95,7 @@ pub fn run() {
             commands::path_exists,
             commands::rename_fs_path,
             commands::export_markdown_pdf,
+            commands::pdf_import::extract_pdf_text,
             commands::print::print_markdown,
             commands::get_user_editor_rules_path,
             commands::read_user_editor_rules,

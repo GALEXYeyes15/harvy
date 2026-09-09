@@ -83,6 +83,10 @@ export function isImagePreviewable(path: string): boolean {
   );
 }
 
+export function isPdfDocument(path: string): boolean {
+  return getExtension(path.split(/[\\/]/).pop() ?? path) === "pdf";
+}
+
 export function defaultExpandedPaths(root: FileNode): Set<string> {
   const expanded = new Set<string>([root.path]);
   for (const child of root.children ?? []) {

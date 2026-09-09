@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../save/saveRuntime";
 import type { ProofreadIssue } from "../proofread/types";
+import { ensurePodcastNotesBullets } from "./podcastNotesMarkdown";
 
 export type AiProvider = "openai" | "anthropic";
 
@@ -117,7 +118,8 @@ export async function runAiCheck(essay: string): Promise<AiCheckResult> {
 
 export async function generatePodcastNotes(essay: string): Promise<PodcastNotesResult> {
   requireTauri();
-  return invoke<PodcastNotesResult>("ai_check_podcast_notes", { essay });
+  const result = await invoke<PodcastNotesResult>("ai_check_podcast_notes", { essay });
+  return { ...result, markdown: ensurePodcastNotesBullets(result.markdown) };
 }
 
 export type HeadlinePair = {

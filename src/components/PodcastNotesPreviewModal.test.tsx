@@ -16,7 +16,7 @@ describe("PodcastNotesPreviewModal", () => {
         open
         generating={false}
         error={null}
-        markdown={"# Host notes\n\n## Opening\n- Start with the hook.\n"}
+        markdown={"# Host notes\n\n## Opening\nThe host starts with the hook.\n"}
         onClose={onClose}
         onExport={onExport}
         onPrint={onPrint}
@@ -25,7 +25,8 @@ describe("PodcastNotesPreviewModal", () => {
 
     expect(screen.getByRole("heading", { name: "Podcast Notes" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Host notes" })).toBeInTheDocument();
-    expect(screen.getByText("Start with the hook.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Opening" })).toBeInTheDocument();
+    expect(screen.getByRole("listitem")).toHaveTextContent("The host starts with the hook.");
 
     await user.click(screen.getByRole("button", { name: "Print" }));
     expect(onPrint).toHaveBeenCalledOnce();

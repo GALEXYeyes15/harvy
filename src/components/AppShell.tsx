@@ -36,6 +36,7 @@ import {
 } from "../features/focus/focusModeWindowLock";
 import { EditorCanvas } from "./EditorCanvas";
 import { ImagePreviewModal, type ImagePreviewTarget } from "./ImagePreviewModal";
+import { PdfConvertPreviewModal } from "./PdfConvertPreviewModal";
 import { PodcastNotesPreviewModal } from "./PodcastNotesPreviewModal";
 import { FloatingTextMenu } from "./FloatingTextMenu";
 import { setSpellingDocumentKey } from "../features/proofread/mechanics/spellingDictionary";
@@ -124,8 +125,14 @@ import {
   filterTree,
   findNodeByPath,
   isImagePreviewable,
+  isPdfDocument,
   isTextPreviewable,
 } from "../features/workspace/tree";
+import {
+  pdfExtractedRunsToMarkdown,
+  siblingMarkdownPathForImport,
+  type PdfTextRun,
+} from "../features/workspace/pdfImport";
 import { isPathUnderWorkspaceRoot, normalizeFsPath } from "../features/workspace/workspacePaths";
 import {
   resolveOpenDocumentPath,
@@ -228,6 +235,7 @@ import {
   type AiCheckConfigPublic,
   type HeadlinePair,
 } from "../features/aiCheck/aiCheck";
+import { ensurePodcastNotesBullets } from "../features/aiCheck/podcastNotesMarkdown";
 import { syncAiCheckPopoverPrefs } from "../features/aiCheck/aiCheckPopoverPrefs";
 import { readHeadlineStylePrompt } from "../features/aiCheck/headlinePromptSettings";
 import { loadHeadlineShotsForVision } from "../features/headlines/headlineScreenshotAssets";
@@ -405,6 +413,16 @@ export function AppShell() {
   const [focusSessionEndsAt, setFocusSessionEndsAt] = useState<number | null>(null);
   const [focusRemainingMs, setFocusRemainingMs] = useState(0);
   const [imagePreview, setImagePreview] = useState<ImagePreviewTarget | null>(null);
+  const [pdfConvertPreview, setPdfConvertPreview] = useState<{
+    sourcePath: string;
+    sourceName: string;
+    outPath: string;
+    markdown: string | null;
+    loading: boolean;
+    error: string | null;
+  } | null>(null);
+  const [pdfConvertSubmitting, setPdfConvertSubmitting] = useState(false);
+  const pdfConvertGenerationRef = useRef(0);
   const [saveAsModalOpen, setSaveAsModalOpen] = useState(false);
   const [saveAsLiveFileName, setSaveAsLiveFileName] = useState("");
   const [saveAsInitialFileName, setSaveAsInitialFileName] = useState("Untitled.md");
@@ -1650,7 +1668,7 @@ export function AppShell() {
           if (!projectDir) {
             throw new Error("Podcast notes require a project folder.");
           }
-          let notesMarkdown = podcastNotesMarkdown?.trim() ?? "";
+          let notesMarkdown = ensurePodcastNotesBullets(podcastNotesMarkdown?.trim() ?? "");
           if (!notesMarkdown) {
             const { text } = tiptapEditor
               ? proofreadPlainTextAndPositions(tiptapEditor.state.doc)
@@ -2275,7 +2293,92 @@ export function AppShell() {
     });
   }
 
-  async function selectNode(node: FileNode) {
+  function closePdfConvertPreview() {
+    pdfConvertGenerationRef.current += 1;
+    setPdfConvertPreview(null);
+    setPdfConvertSubmitting(false);
+  }
+
+  async function convertPdfToMarkdown(node: FileNode) {
+    if (!isTauriRuntime()) {
+      window.alert("Converting PDFs requires the Harvy desktop app.");
+      return;
+    }
+
+    const generationId = ++pdfConvertGenerationRef.current;
+    const outPath = siblingMarkdownPathForImport(node.path);
+    setPdfConvertSubmitting(false);
+    setPdfConvertPreview({
+      sourcePath: node.path,
+      sourceName: node.name,
+      outPath,
+      markdown: null,
+      loading: true,
+      error: null,
+    });
+
+    try {
+      const extracted = await invoke<PdfTextRun[]>("extract_pdf_text", { path: node.path });
+      if (pdfConvertGenerationRef.current !== generationId) return;
+      setPdfConvertPreview({
+        sourcePath: node.path,
+        sourceName: node.name,
+        outPath,
+        markdown: pdfExtractedRunsToMarkdown(extracted),
+        loading: false,
+        error: null,
+      });
+    } catch (error) {
+      if (pdfConvertGenerationRef.current !== generationId) return;
+      setPdfConvertPreview({
+        sourcePath: node.path,
+        sourceName: node.name,
+        outPath,
+        markdown: null,
+        loading: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async function confirmPdfConvert() {
+    if (!pdfConvertPreview || pdfConvertPreview.loading || pdfConvertPreview.error) return;
+    if (pdfConvertSubmitting) return;
+    const markdown = pdfConvertPreview.markdown ?? "";
+    const outPath = pdfConvertPreview.outPath;
+    try {
+      setPdfConvertSubmitting(true);
+      const exists = await invoke<boolean>("path_exists", { path: outPath });
+      if (exists) {
+        const replace = await confirm(
+          `"${fileNameFromPath(outPath)}" already exists at this location. Replace it?`,
+          { title: "Convert", kind: "warning" },
+        );
+        if (!replace) {
+          setPdfConvertSubmitting(false);
+          return;
+        }
+      }
+      await invoke("write_text_file", { path: outPath, contents: markdown });
+    } catch (error) {
+      setPdfConvertSubmitting(false);
+      window.alert(error instanceof Error ? error.message : String(error));
+      return;
+    }
+
+    closePdfConvertPreview();
+    await reloadWorkspaceTree();
+    await selectNode(
+      {
+        name: fileNameFromPath(outPath),
+        path: outPath,
+        kind: "file",
+      },
+      { reload: true },
+    );
+  }
+
+  async function selectNode(node: FileNode, options?: { reload?: boolean }) {
     if (node.kind === "directory") {
       setSelectedPath(node.path);
       return;
@@ -2293,6 +2396,11 @@ export function AppShell() {
       return;
     }
 
+    if (isPdfDocument(node.path)) {
+      await convertPdfToMarkdown(node);
+      return;
+    }
+
     if (isDirty && node.path !== activeTabId) {
       const ok = window.confirm("Discard unsaved changes and open this file?");
       if (!ok) return;
@@ -2305,7 +2413,7 @@ export function AppShell() {
     setScratchLastSavedContent("");
 
     const id = node.path;
-    if (openDocuments[id]) {
+    if (openDocuments[id] && !options?.reload) {
       setActiveTabId(id);
       setOpenTabIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
       return;
@@ -3644,7 +3752,10 @@ export function AppShell() {
         onExport={() => void confirmPodcastNotesExport()}
         onPrint={() => {
           if (!podcastNotesMarkdown?.trim()) return;
-          void printMarkdownDocument("Podcast Notes", podcastNotesMarkdown).catch((e) => {
+          void printMarkdownDocument(
+            "Podcast Notes",
+            ensurePodcastNotesBullets(podcastNotesMarkdown),
+          ).catch((e) => {
             window.alert(`Print failed: ${e instanceof Error ? e.message : String(e)}`);
           });
         }}
@@ -3659,6 +3770,28 @@ export function AppShell() {
         onEnd={endFocusMode}
         remainingLabel={
           focusSessionEndsAt != null ? formatFocusRemaining(focusRemainingMs) : undefined
+        }
+      />
+      <PdfConvertPreviewModal
+        open={pdfConvertPreview !== null}
+        sourceName={pdfConvertPreview?.sourceName ?? ""}
+        sourcePath={pdfConvertPreview?.sourcePath ?? ""}
+        workspaceRootPath={workspaceRootPath}
+        markdown={pdfConvertPreview?.markdown ?? null}
+        loading={pdfConvertPreview?.loading ?? false}
+        error={pdfConvertPreview?.error ?? null}
+        submitting={pdfConvertSubmitting}
+        onClose={closePdfConvertPreview}
+        onConvert={() => void confirmPdfConvert()}
+        onRetry={
+          pdfConvertPreview
+            ? () =>
+                void convertPdfToMarkdown({
+                  name: pdfConvertPreview.sourceName,
+                  path: pdfConvertPreview.sourcePath,
+                  kind: "file",
+                })
+            : undefined
         }
       />
       <ImagePreviewModal

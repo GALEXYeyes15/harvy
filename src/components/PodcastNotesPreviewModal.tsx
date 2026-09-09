@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { markdownToEditorHtml } from "../features/editor/documentMarkdown";
+import { ensurePodcastNotesBullets } from "../features/aiCheck/podcastNotesMarkdown";
 import { CenteredOverlayModal } from "./overlay/CenteredOverlayModal";
 
 type PodcastNotesPreviewModalProps = {
@@ -34,7 +35,7 @@ export function PodcastNotesPreviewModal({
 }: PodcastNotesPreviewModalProps) {
   const previewHtml = useMemo(() => {
     if (!markdown?.trim()) return "";
-    return markdownToEditorHtml(markdown);
+    return markdownToEditorHtml(ensurePodcastNotesBullets(markdown));
   }, [markdown]);
 
   const canExport = Boolean(markdown?.trim()) && !generating && !error;

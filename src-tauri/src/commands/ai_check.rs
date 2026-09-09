@@ -413,7 +413,7 @@ Return ONLY Markdown — no code fences, no preamble, no closing remarks.
 Structure requirements:
 1. Start with one H1 title for the notes (derived from the essay).
 2. Follow with several sections. Each section MUST begin with an H2 heading (`## Section Title`).
-3. Under every section, list the significant points as Markdown bullet items (`- point`).
+3. Under every section, EVERY significant point MUST be a Markdown bullet (`- point`). Never write plain paragraphs for notes. Do not use numbered lists.
 4. Keep bullets concise and speakable for a podcast host.
 5. Do not invent facts that are not supported by the essay.
 6. Prefer about 4–8 sections depending on essay length."#;
