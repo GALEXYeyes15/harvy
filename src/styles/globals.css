@@ -44,6 +44,11 @@
     --editor-font-size: 18px;
     --editor-letter-spacing: 0.2px;
     --editor-line-height: 1.75;
+    /* App chrome type (Settings → Appearance → System). Body default 12px. */
+    --ui-font-size: 12px;
+    --ui-font-size-sm: calc(var(--ui-font-size) * 10 / 12);
+    --ui-font-size-11: calc(var(--ui-font-size) * 11 / 12);
+    --ui-font-size-md: calc(var(--ui-font-size) * 13 / 12);
     /* Light: unified warm paper canvas (editor, tabs, sidebars share one surface). */
     --color-canvas: #faf7f2;
     --color-panel: #faf7f2;
@@ -167,7 +172,7 @@
   body {
     @apply bg-canvas text-ink;
     font-family: var(--font-ui);
-    font-size: 12px;
+    font-size: var(--ui-font-size);
   }
 
   /* Tauri macOS overlay title bar — tabs sit under native traffic lights. */
@@ -967,7 +972,7 @@
     background: var(--color-mist);
     padding: 0.125rem 0;
     font-family: var(--font-ui);
-    font-size: 12px;
+    font-size: var(--ui-font-size);
     color: color-mix(in oklab, var(--color-ink) 90%, transparent);
     box-shadow: none;
     filter: none;
@@ -987,7 +992,7 @@
     border: none;
     background: transparent;
     text-align: left;
-    font-size: 12px;
+    font-size: var(--ui-font-size);
     line-height: 1.35;
     color: inherit;
     cursor: pointer;
@@ -1045,7 +1050,7 @@
     border: none;
     background: transparent;
     text-align: left;
-    font-size: 12px;
+    font-size: var(--ui-font-size);
     line-height: 1.35;
     color: color-mix(in oklab, var(--color-muted) 45%, transparent);
     cursor: default;
@@ -1075,7 +1080,7 @@
   }
 
   .harvy-spelling-popover .harvy-context-menu-item {
-    font-size: 12px;
+    font-size: var(--ui-font-size);
   }
 
   .harvy-mechanics-suggestion-popover {
@@ -1087,7 +1092,7 @@
   .harvy-context-menu__title {
     margin: 0;
     padding: 0.125rem 0.75rem 0.25rem;
-    font-size: 11px;
+    font-size: var(--ui-font-size-11);
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -1153,7 +1158,7 @@
     max-width: 14rem;
     padding: 0 0.125rem;
     text-align: center;
-    font-size: 12px;
+    font-size: var(--ui-font-size);
     line-height: 1.35;
     color: color-mix(in oklab, var(--color-ink) 72%, transparent);
   }
@@ -1175,7 +1180,7 @@
   .harvy-context-menu-item__kicker {
     display: block;
     margin-top: 0.125rem;
-    font-size: 12px;
+    font-size: var(--ui-font-size);
     line-height: 1.35;
     color: color-mix(in oklab, var(--color-muted) 80%, transparent);
   }
@@ -1213,7 +1218,7 @@
     border-radius: 0.25rem;
     background: color-mix(in oklab, var(--color-ink) 4%, var(--color-mist));
     padding: 0.25rem 0.5rem;
-    font-size: 12px;
+    font-size: var(--ui-font-size);
     color: color-mix(in oklab, var(--color-ink) 90%, transparent);
     outline: none;
   }
@@ -1233,7 +1238,7 @@
 
   .harvy-context-menu__link-error {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-size);
     line-height: 1.35;
     color: #ff5a5a;
     text-align: left;
@@ -1250,7 +1255,7 @@
     border-radius: 0.25rem;
     background: transparent;
     padding: 0.25rem 0.5rem;
-    font-size: 12px;
+    font-size: var(--ui-font-size);
     color: color-mix(in oklab, var(--color-ink) 75%, transparent);
     cursor: pointer;
     transition: background 0.12s ease, color 0.12s ease;
@@ -1641,7 +1646,7 @@
 
   .harvy-focus-mode-hint {
     pointer-events: none;
-    font-size: 12px;
+    font-size: var(--ui-font-size);
     line-height: 1.35;
     letter-spacing: 0.01em;
     color: color-mix(in oklab, var(--color-muted) 78%, transparent);
@@ -2026,7 +2031,7 @@
     border: 1px solid color-mix(in oklab, var(--color-line) 70%, transparent);
     background: color-mix(in oklab, var(--color-ink) 8%, var(--color-stage));
     padding: 0.2rem 0.45rem 0.2rem 0.35rem;
-    font-size: 10px;
+    font-size: var(--ui-font-size-sm);
     font-weight: 600;
     letter-spacing: 0.1em;
     color: color-mix(in oklab, var(--color-ink) 88%, transparent);
@@ -2103,7 +2108,7 @@
   .harvy-notion-db-th {
     background: var(--color-stage);
     padding: 0.4rem 0.65rem;
-    font-size: 12px;
+    font-size: var(--ui-font-size);
     font-weight: 500;
     color: color-mix(in oklab, var(--color-ink) 55%, transparent);
   }
@@ -2179,7 +2184,7 @@
   .harvy-notion-db-empty {
     padding: 2.5rem 1rem;
     text-align: center;
-    font-size: 13px;
+    font-size: var(--ui-font-size-md);
     color: color-mix(in oklab, var(--color-ink) 45%, transparent);
   }
 
@@ -2192,7 +2197,7 @@
     border-top: 1px solid color-mix(in oklab, var(--color-line) 22%, transparent);
     background: transparent;
     padding: 0.55rem 0.75rem;
-    font-size: 13px;
+    font-size: var(--ui-font-size-md);
     color: color-mix(in oklab, var(--color-ink) 45%, transparent);
     transition: background-color 120ms ease, color 120ms ease;
   }
@@ -2217,7 +2222,7 @@
     border-radius: 0.25rem;
     background: transparent;
     padding: 0.15rem 0.4rem;
-    font-size: 12px;
+    font-size: var(--ui-font-size);
     font-weight: 500;
     color: color-mix(in oklab, var(--color-ink) 55%, transparent);
   }
@@ -2245,7 +2250,7 @@
     white-space: nowrap;
     border-radius: 999px;
     padding: 0.15rem 0.5rem;
-    font-size: 12px;
+    font-size: var(--ui-font-size);
     font-weight: 500;
     line-height: 1.35;
   }
@@ -2345,7 +2350,7 @@
     flex-shrink: 0;
     align-items: center;
     gap: 0.4rem;
-    font-size: 13px;
+    font-size: var(--ui-font-size-md);
     color: color-mix(in oklab, var(--color-ink) 48%, transparent);
   }
 
@@ -2363,7 +2368,7 @@
   }
 
   .harvy-notion-prop-plain {
-    font-size: 13px;
+    font-size: var(--ui-font-size-md);
     color: var(--color-ink);
   }
 
@@ -2409,7 +2414,7 @@
     border: 1px solid color-mix(in oklab, var(--color-line) 35%, transparent);
     background: transparent;
     padding: 0.4rem 0.75rem;
-    font-size: 13px;
+    font-size: var(--ui-font-size-md);
     font-weight: 500;
     color: var(--color-accent);
     transition: background-color 120ms ease;
@@ -2434,7 +2439,7 @@
     border: 1px solid color-mix(in oklab, var(--color-line) 35%, transparent);
     background: transparent;
     padding: 0.4rem 0.75rem;
-    font-size: 13px;
+    font-size: var(--ui-font-size-md);
     font-weight: 500;
     color: color-mix(in oklab, #c45c4e 78%, var(--color-ink));
     transition: background-color 120ms ease, color 120ms ease;
@@ -2490,7 +2495,7 @@
     border: 0;
     background: transparent;
     padding: 0.25rem 0;
-    font-size: 13px;
+    font-size: var(--ui-font-size-md);
     color: var(--color-ink);
     outline: none;
     box-shadow: none;
@@ -2614,7 +2619,7 @@
     line-clamp: 6;
     overflow-wrap: anywhere;
     white-space: pre-line;
-    font-size: 12px;
+    font-size: var(--ui-font-size);
     line-height: 1.5;
     color: color-mix(in oklab, var(--color-ink) 62%, transparent);
   }
@@ -2640,7 +2645,7 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;
-    font-size: 13px;
+    font-size: var(--ui-font-size-md);
     font-weight: 600;
     line-height: 1.35;
     color: var(--color-ink);
@@ -2659,7 +2664,7 @@
     border-radius: 0.375rem;
     background: color-mix(in oklab, #c4883a 18%, transparent);
     padding: 0.15rem 0.45rem;
-    font-size: 10px;
+    font-size: var(--ui-font-size-sm);
     font-weight: 600;
     letter-spacing: 0.02em;
     color: color-mix(in oklab, #d4a574 88%, var(--color-ink));
@@ -2851,3 +2856,21 @@
 .harvy-podcast-notes-sheet ol {
   list-style: decimal;
 }
+
+/*
+ * Chrome type scale: the common UI pixel classes follow Appearance → System
+ * (body default 12). Editor copy stays on --editor-font-size.
+ */
+.text-\[10px\] {
+  font-size: var(--ui-font-size-sm);
+}
+.text-\[11px\] {
+  font-size: var(--ui-font-size-11);
+}
+.text-\[12px\] {
+  font-size: var(--ui-font-size);
+}
+.text-\[13px\] {
+  font-size: var(--ui-font-size-md);
+}
+

@@ -58,6 +58,12 @@ import {
   type StyleBasics,
 } from "../../theme/appearanceStyles";
 import {
+  applySystemTypography,
+  readSystemTypography,
+  SYSTEM_BODY_FONT_SIZE_LIMITS,
+  writeSystemTypography,
+} from "../../theme/systemTypography";
+import {
   clampOutliersFetchIntervalMinutes,
   OUTLIERS_FETCH_INTERVAL_MAX_MINUTES,
   OUTLIERS_FETCH_INTERVAL_MIN_MINUTES,
@@ -909,6 +915,7 @@ function AppearancePanel({
   const [customStyles, setCustomStyles] = useState(() => readCustomAppearanceStyles());
   const [cyberStyle, setCyberStyle] = useState(() => readCyberAppearanceStyle());
   const [editor, setEditor] = useState<CustomAppearanceStyle | null>(null);
+  const [systemTypography, setSystemTypography] = useState(readSystemTypography);
 
   const classicResolvedDark =
     themeMode === "dark" || (themeMode === "system" && systemPrefersDark);
@@ -1075,6 +1082,27 @@ function AppearancePanel({
         title="Appearance"
         description="Built-in themes and themes you create and save."
       />
+
+      <div>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+          System
+        </p>
+        <div className={`flex items-center justify-between gap-4 ${SETTINGS_BOX_PAD}`}>
+          <p className="text-[13px] font-medium text-ink">Body text</p>
+          <TypographyStepper
+            value={systemTypography.bodyFontSizePx}
+            min={SYSTEM_BODY_FONT_SIZE_LIMITS.min}
+            max={SYSTEM_BODY_FONT_SIZE_LIMITS.max}
+            step={SYSTEM_BODY_FONT_SIZE_LIMITS.step}
+            ariaLabel="Body text size"
+            onChange={(bodyFontSizePx) => {
+              const next = writeSystemTypography({ bodyFontSizePx });
+              setSystemTypography(next);
+              applySystemTypography(next);
+            }}
+          />
+        </div>
+      </div>
 
       <div>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">

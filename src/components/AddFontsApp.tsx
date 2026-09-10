@@ -32,6 +32,7 @@ import {
   applyAppearanceStyle,
   readStoredAppearanceStyleId,
 } from "../theme/appearanceStyles";
+import { applySystemTypography, SYSTEM_TYPOGRAPHY_KEY } from "../theme/systemTypography";
 import {
   addUserAppearanceFont,
   ensureGoogleFontStylesheet,
@@ -52,6 +53,7 @@ function applyTheme(mode: ThemeMode, systemPrefersDark: boolean) {
   const resolved = resolveTheme(mode, systemPrefersDark);
   applyResolvedTheme(resolved);
   applyAppearanceStyle(readStoredAppearanceStyleId(), resolved);
+  applySystemTypography();
 }
 
 const PAGE_SIZE = 36;
@@ -303,7 +305,8 @@ export function AddFontsApp() {
       if (
         event.key === "harvy-theme" ||
         event.key === "harvy-style" ||
-        event.key === "harvy:appearance-styles:v1"
+        event.key === "harvy:appearance-styles:v1" ||
+        event.key === SYSTEM_TYPOGRAPHY_KEY
       ) {
         syncTheme();
       }
