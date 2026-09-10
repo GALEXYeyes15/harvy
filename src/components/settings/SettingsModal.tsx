@@ -36,7 +36,7 @@ import {
   applyAppearanceStyle,
   CYBER_STYLE_ID,
   CLASSIC_STYLE_ID,
-  createBlankCustomStyle,
+  duplicateAppearanceStyle,
   deleteCustomAppearanceStyle,
   hasCyberAppearanceOverrides,
   builtInClassicAppearanceStyle,
@@ -948,8 +948,18 @@ function AppearancePanel({
     applyAppearanceStyle(appearanceStyleId, resolvedTheme);
   }
 
+  function currentAppearanceStyle(): CustomAppearanceStyle {
+    if (editor) return editor;
+    if (appearanceStyleId === CYBER_STYLE_ID) return cyberStyle;
+    if (appearanceStyleId === CLASSIC_STYLE_ID) return builtInClassicAppearanceStyle();
+    return (
+      customStyles.find((style) => style.id === appearanceStyleId) ??
+      builtInClassicAppearanceStyle()
+    );
+  }
+
   function openNewStyle() {
-    beginEditing(createBlankCustomStyle());
+    beginEditing(duplicateAppearanceStyle(currentAppearanceStyle(), resolvedTheme));
   }
 
   function openEditStyle(style: CustomAppearanceStyle) {
