@@ -26,4 +26,16 @@ export type WorkspaceDocument = {
   /** Writing criteria for this document (persisted under `Notes/` in project folders). */
   criteria: string;
   lastSavedCriteria: string;
+  /** Notion database page this essay is linked to (survives save/rename). */
+  notionParentPageId: string;
+  /** Nested Notion page that holds the synced essay body. */
+  notionEssayPageId: string;
+  /** When true, Harvy created the parent database row and may rename it. */
+  notionRenameParent: boolean;
 };
+
+export const EMPTY_NOTION_ESSAY_FIELDS = {
+  notionParentPageId: "",
+  notionEssayPageId: "",
+  notionRenameParent: false,
+} as const;

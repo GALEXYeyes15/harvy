@@ -1,8 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { CollectItem } from "../collect/collectItems";
-import { mergeNotionIdeasIntoCollectItems, notionPageToCollectItem } from "./notionIdeas";
+import {
+  dismissNotionIdeaPage,
+  mergeNotionIdeasIntoCollectItems,
+  notionPageToCollectItem,
+} from "./notionIdeas";
 
 describe("mergeNotionIdeasIntoCollectItems", () => {
+  afterEach(() => {
+    localStorage.removeItem("harvy:notion-ideas-dismissed");
+  });
   it("replaces the list with Notion pages and drops local-only rows", () => {
     const local: CollectItem = {
       id: "local-1",
@@ -66,5 +73,33 @@ describe("mergeNotionIdeasIntoCollectItems", () => {
     expect(item.body).toBe("notes");
     expect(item.status).toBe("Idea");
     expect(item.dateCreated).toBe("2026-03-10");
+  });
+
+  it("omits dismissed Notion pages on merge", () => {
+    localStorage.setItem("harvy:notion-ideas-dismissed", JSON.stringify(["abc"]));
+    dismissNotionIdeaPage("new");
+
+    const merged = mergeNotionIdeasIntoCollectItems(
+      [],
+      [
+        {
+          pageId: "abc",
+          title: "Gone",
+          notes: "",
+          status: "Idea",
+          createdTime: "2026-02-01T00:00:00.000Z",
+        },
+        {
+          pageId: "keep",
+          title: "Keep",
+          notes: "",
+          status: "Idea",
+          createdTime: "2026-02-02T00:00:00.000Z",
+        },
+      ],
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.notionPageId).toBe("keep");
   });
 });

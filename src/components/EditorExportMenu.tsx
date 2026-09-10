@@ -1,4 +1,4 @@
-import { SquareArrowOutUpRight, Upload, Zap } from "lucide-react";
+import { RefreshCw, SquareArrowOutUpRight, Upload, Zap } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -22,6 +22,9 @@ type EditorExportMenuProps = {
   onPrint: () => void | Promise<void>;
   podcastNotesEnabled?: boolean;
   podcastNotesRunning?: boolean;
+  onSyncWithNotion?: () => void | Promise<void>;
+  notionSyncEnabled?: boolean;
+  notionSyncRunning?: boolean;
 };
 
 function placeExportMenu(menuEl: HTMLElement, anchorEl: HTMLElement): void {
@@ -79,6 +82,9 @@ export function EditorExportMenu({
   onPrint,
   podcastNotesEnabled = false,
   podcastNotesRunning = false,
+  onSyncWithNotion,
+  notionSyncEnabled = false,
+  notionSyncRunning = false,
 }: EditorExportMenuProps) {
   const [open, setOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -293,6 +299,30 @@ export function EditorExportMenu({
                         {podcastNotesRunning ? "Export Podcast Notes…" : "Export Podcast Notes"}
                       </span>
                       <Zap size={14} strokeWidth={2} aria-hidden className="shrink-0" />
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={`${
+                        !notionSyncEnabled || notionSyncRunning || !onSyncWithNotion
+                          ? HARVY_CONTEXT_MENU_ITEM_DISABLED_CLASS
+                          : HARVY_CONTEXT_MENU_ITEM_CLASS
+                      } harvy-context-menu-item--with-icon`}
+                      disabled={!notionSyncEnabled || notionSyncRunning || !onSyncWithNotion}
+                      title={
+                        notionSyncEnabled
+                          ? "Copy this essay into a Notion page"
+                          : "Connect Notion in Settings → Research"
+                      }
+                      onClick={() => {
+                        if (!notionSyncEnabled || notionSyncRunning || !onSyncWithNotion) return;
+                        runAction(onSyncWithNotion);
+                      }}
+                    >
+                      <span className="min-w-0 flex-1">
+                        {notionSyncRunning ? "Syncing with Notion…" : "Sync with Notion"}
+                      </span>
+                      <RefreshCw size={14} strokeWidth={2} aria-hidden className="shrink-0" />
                     </button>
                     </HarvyContextMenuShell>
                   </div>

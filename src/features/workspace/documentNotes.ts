@@ -61,14 +61,20 @@ export async function saveDocumentNotes(sourcePath: string, notes: string): Prom
 
   const projectDir = resolveProjectDirectory(sourcePath);
   const notesPath = projectNotesPath(sourcePath);
-  if (!projectDir || !notesPath) return;
+  if (projectDir && notesPath) {
+    await invoke("ensure_directory", {
+      parentPath: projectDir,
+      folderName: "Notes",
+    });
+    await invoke("write_text_file", {
+      path: notesPath,
+      contents: notes,
+    });
+    return;
+  }
 
-  await invoke("ensure_directory", {
-    parentPath: projectDir,
-    folderName: "Notes",
-  });
   await invoke("write_text_file", {
-    path: notesPath,
+    path: documentNotesSidecarPath(sourcePath),
     contents: notes,
   });
 }

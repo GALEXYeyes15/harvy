@@ -49,7 +49,19 @@ import {
   loadPersistedCollectItems,
   savePersistedCollectItems,
 } from "../features/collect/collectItemsPersistence";
-import { markNotionIdeaStarted } from "../features/notion/notionIdeas";
+import {
+  getNotionIdeasConfig,
+  markNotionIdeaStarted,
+} from "../features/notion/notionIdeas";
+import {
+  loadNotionEssayLink,
+  notionFieldsFromLink,
+  notionLinkFromFields,
+  renameNotionEssaySidecar,
+  saveNotionEssayLink,
+  syncEssayWithNotion,
+  type NotionEssayLink,
+} from "../features/notion/notionEssaySync";
 import { WorkspaceSectionSwitcher } from "./WorkspaceSectionSwitcher";
 import { useWindowFullscreen } from "../features/window/useWindowFullscreen";
 import {
@@ -140,6 +152,7 @@ import {
   visibleOpenDocumentTrailPath,
 } from "../features/workspace/openDocumentTrail";
 import {
+  documentNotesSidecarPath,
   loadDocumentNotes,
   renameDocumentNotesSidecar,
   resolveProjectDirectory,
@@ -156,7 +169,7 @@ import {
   parseDocumentFrontmatter,
   serializeDocumentWithFrontmatter,
 } from "../features/editor/documentFrontmatter";
-import type { FileNode, WorkspaceDocument } from "../features/workspace/types";
+import { EMPTY_NOTION_ESSAY_FIELDS, type FileNode, type WorkspaceDocument } from "../features/workspace/types";
 import { nextActiveTabIdAfterClose, toPageTabs } from "../features/tabs/pageTabs";
 import {
   defaultPdfFileName,
@@ -290,6 +303,7 @@ function createInitialUntitledWorkspaceDocument(): WorkspaceDocument {
     lastSavedNotes: "",
     criteria: "",
     lastSavedCriteria: "",
+    ...EMPTY_NOTION_ESSAY_FIELDS,
   };
 }
 
@@ -309,6 +323,7 @@ function createUntitledWorkspaceDocument(id: string): WorkspaceDocument {
     lastSavedNotes: "",
     criteria: "",
     lastSavedCriteria: "",
+    ...EMPTY_NOTION_ESSAY_FIELDS,
   };
 }
 
@@ -331,11 +346,23 @@ function isDocumentDirty(doc: WorkspaceDocument): boolean {
 
 function markdownForDisk(
   body: string,
-  doc: Pick<WorkspaceDocument, "postTitle" | "subtitle"> | null | undefined,
+  doc: Partial<
+    Pick<
+      WorkspaceDocument,
+      | "postTitle"
+      | "subtitle"
+      | "notionParentPageId"
+      | "notionEssayPageId"
+      | "notionRenameParent"
+    >
+  > | null | undefined,
 ): string {
   return serializeDocumentWithFrontmatter(body, {
     postTitle: doc?.postTitle ?? "",
     subtitle: doc?.subtitle ?? "",
+    notionParentPageId: doc?.notionParentPageId ?? "",
+    notionEssayPageId: doc?.notionEssayPageId ?? "",
+    notionRenameParent: Boolean(doc?.notionRenameParent),
   });
 }
 
@@ -409,6 +436,9 @@ export function AppShell() {
   /** Resolved system volume name (desktop), or generic label on web. */
   const [workspaceVolumeLabel, setWorkspaceVolumeLabel] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [notionConnected, setNotionConnected] = useState(false);
+  const [notionSyncRunning, setNotionSyncRunning] = useState(false);
+  const [notionEssayLink, setNotionEssayLink] = useState<NotionEssayLink | null>(null);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isFocusModeOpen, setIsFocusModeOpen] = useState(false);
   const [focusSessionEndsAt, setFocusSessionEndsAt] = useState<number | null>(null);
@@ -763,6 +793,10 @@ export function AppShell() {
   const scratchDocumentTitleRef = useRef(scratchDocumentTitle);
   const scratchDiskPathRef = useRef(scratchDiskPath);
   const handleCreateMarkdownFileRef = useRef<() => Promise<void>>(async () => {});
+  const notionEssayLinkRef = useRef<NotionEssayLink | null>(null);
+  const lastNotionSyncedRef = useRef("");
+  const notionSyncedPathRef = useRef<string | null>(null);
+  const notionSyncRunningRef = useRef(false);
   openTabIdsRef.current = openTabIds;
   activeTabIdRef.current = activeTabId;
   openDocumentsRef.current = openDocuments;
@@ -1460,6 +1494,8 @@ export function AppShell() {
         lastSavedNotes: savedNotes,
         criteria: savedCriteria,
         lastSavedCriteria: savedCriteria,
+        ...EMPTY_NOTION_ESSAY_FIELDS,
+        ...notionFieldsFromLink(notionLinkFromFields(activeDocument ?? {})),
       };
       setOpenDocuments((prev) => ({ ...prev, [outPath]: doc }));
       setOpenTabIds([outPath]);
@@ -1651,13 +1687,23 @@ export function AppShell() {
         }
 
         const titleForDisk = documentTitleBaseFromSaveAsFileName(fileName);
+        const notionFields = {
+          ...EMPTY_NOTION_ESSAY_FIELDS,
+          ...notionFieldsFromLink(
+            notionLinkFromFields(activeDocument ?? {}) ?? notionEssayLinkRef.current,
+          ),
+        };
         await invoke("write_text_file", {
           path: outPath,
           contents: markdownForDisk(markdown, {
             postTitle: titleForDisk,
             subtitle: activeDocument?.subtitle ?? "",
+            ...notionFields,
           }),
         });
+        if (notionLinkFromFields(notionFields)) {
+          await saveNotionEssayLink(outPath, notionLinkFromFields(notionFields)!);
+        }
         if (folderContext.hasNotes) {
           await saveDocumentNotes(outPath, activeDocument?.notes ?? "");
         }
@@ -1981,6 +2027,7 @@ export function AppShell() {
           await invoke("rename_fs_path", { fromPath: path, toPath: renamedPath });
           await renameDocumentNotesSidecar(path, renamedPath);
           await renameDocumentCriteriaSidecar(path, renamedPath);
+          await renameNotionEssaySidecar(path, renamedPath);
           path = renamedPath;
         }
         let markdown = getDocumentMarkdown(tiptapEditor, liveDoc.content);
@@ -2026,6 +2073,7 @@ export function AppShell() {
                 if (!ok) return;
               } else {
                 await invoke("rename_fs_path", { fromPath: path, toPath: packagedPath });
+                await renameNotionEssaySidecar(path, packagedPath);
               }
             }
             outPath = packagedPath;
@@ -2085,6 +2133,7 @@ export function AppShell() {
               return;
             }
             await invoke("rename_fs_path", { fromPath: diskPath, toPath: renamedScratchPath });
+            await renameNotionEssaySidecar(diskPath, renamedScratchPath);
             diskPath = renamedScratchPath;
             scratchDiskPathRef.current = renamedScratchPath;
             setScratchDiskPath(renamedScratchPath);
@@ -2430,10 +2479,15 @@ export function AppShell() {
         const { meta, body: rawBody } = parseDocumentFrontmatter(raw);
         content = ingestTextFileContent(rawBody, node.path);
         kind = "text";
-        const [notes, criteria] = await Promise.all([
+        const [notes, criteria, sidecarLink] = await Promise.all([
           loadDocumentNotes(node.path),
           loadDocumentCriteria(node.path),
+          loadNotionEssayLink(node.path),
         ]);
+        const notionFields = {
+          ...EMPTY_NOTION_ESSAY_FIELDS,
+          ...notionFieldsFromLink(notionLinkFromFields(meta) ?? sidecarLink),
+        };
         const nextDoc: WorkspaceDocument = {
           id,
           title: node.name,
@@ -2449,6 +2503,7 @@ export function AppShell() {
           lastSavedNotes: notes,
           criteria,
           lastSavedCriteria: criteria,
+          ...notionFields,
         };
         setOpenDocuments((prev) => ({ ...prev, [id]: nextDoc }));
         setActiveTabId(id);
@@ -2480,6 +2535,7 @@ export function AppShell() {
       lastSavedNotes: notes,
       criteria,
       lastSavedCriteria: criteria,
+      ...EMPTY_NOTION_ESSAY_FIELDS,
     };
 
     setOpenDocuments((prev) => ({ ...prev, [id]: nextDoc }));
@@ -2546,24 +2602,30 @@ export function AppShell() {
     const folder = workspaceBrowsePath ?? supportedTree.path;
     const title = item.preview.trim() || "Untitled";
     const notes = (item.body ?? "").trim();
-    const seed = notes ? `# ${title}\n\n${notes}\n` : `# ${title}\n\n`;
-    const base =
-      title
-        .normalize("NFKD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") || "untitled";
+    const base = sanitizeFileBasename(title) || "Untitled";
+    const seed = markdownForDisk("", {
+      postTitle: title,
+      subtitle: "",
+      notionParentPageId: item.notionPageId ?? "",
+      notionEssayPageId: "",
+      notionRenameParent: false,
+    });
 
     let outPath = normalizeMarkdownSavePath(joinPath(folder, `${base}.md`));
     let suffix = 2;
     while (await invoke<boolean>("path_exists", { path: outPath })) {
-      outPath = normalizeMarkdownSavePath(joinPath(folder, `${base}-${suffix}.md`));
+      outPath = normalizeMarkdownSavePath(joinPath(folder, `${base} ${suffix}.md`));
       suffix += 1;
     }
 
     try {
       await invoke("write_text_file", { path: outPath, contents: seed });
+      if (notes) {
+        await invoke("write_text_file", {
+          path: documentNotesSidecarPath(outPath),
+          contents: notes,
+        });
+      }
       if (item.notionPageId) {
         try {
           await markNotionIdeaStarted(item.notionPageId);
@@ -2573,6 +2635,15 @@ export function AppShell() {
               e instanceof Error ? e.message : String(e)
             }`,
           );
+        }
+        try {
+          await saveNotionEssayLink(outPath, {
+            parentPageId: item.notionPageId,
+            essayPageId: "",
+            renameParent: false,
+          });
+        } catch {
+          // Sync can still create a new database page if this write fails.
         }
       }
       setCollectItems((prev) => prev.filter((row) => row.id !== item.id));
@@ -2680,6 +2751,71 @@ export function AppShell() {
     titleRenameDraft !== null
       ? titleRenameDraft.trim() || "Untitled"
       : editorTitleBase.trim() || "Untitled";
+  const activeSourcePath = (activeDocument?.sourcePath || scratchDiskPath || "").trim();
+  const notionEssayTitle =
+    (activeDocument?.postTitle ?? "").trim() || editorTitleBase.trim() || "Untitled";
+
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      setNotionConnected(false);
+      return;
+    }
+    if (isSettingsOpen) return;
+    let cancelled = false;
+    void getNotionIdeasConfig()
+      .then((config) => {
+        if (!cancelled) setNotionConnected(Boolean(config.connected));
+      })
+      .catch(() => {
+        if (!cancelled) setNotionConnected(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSettingsOpen]);
+
+  useEffect(() => {
+    if (!isTauriRuntime() || !activeSourcePath) {
+      notionEssayLinkRef.current = null;
+      setNotionEssayLink(null);
+      return;
+    }
+    const fromDoc = notionLinkFromFields({
+      notionParentPageId: activeDocument?.notionParentPageId,
+      notionEssayPageId: activeDocument?.notionEssayPageId,
+      notionRenameParent: activeDocument?.notionRenameParent,
+    });
+    if (fromDoc) {
+      notionEssayLinkRef.current = fromDoc;
+      setNotionEssayLink(fromDoc);
+      return;
+    }
+    notionEssayLinkRef.current = null;
+    setNotionEssayLink(null);
+    let cancelled = false;
+    const tabId = activeTabId;
+    void loadNotionEssayLink(activeSourcePath).then((link) => {
+      if (cancelled) return;
+      notionEssayLinkRef.current = link;
+      setNotionEssayLink(link);
+      if (link && tabId) {
+        setOpenDocuments((prev) => {
+          const current = prev[tabId];
+          if (!current || notionLinkFromFields(current)) return prev;
+          return { ...prev, [tabId]: { ...current, ...notionFieldsFromLink(link) } };
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSourcePath,
+    activeTabId,
+    activeDocument?.notionParentPageId,
+    activeDocument?.notionEssayPageId,
+    activeDocument?.notionRenameParent,
+  ]);
 
   useEffect(() => {
     setTitleRenameDraft(null);
@@ -3034,6 +3170,144 @@ export function AppShell() {
   }, [tiptapEditor, copyDocumentFallbackMarkdown, editorTitleBase]);
   printDocumentRef.current = handlePrintDocument;
 
+  const performNotionEssaySync = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (notionSyncRunningRef.current) return;
+      if (!isTauriRuntime()) {
+        if (!opts?.silent) {
+          window.alert("Sync with Notion is only available in the Harvy desktop app.");
+        }
+        return;
+      }
+      if (!notionConnected) {
+        if (!opts?.silent) {
+          window.alert("Connect Notion in Settings → Research before syncing.");
+        }
+        return;
+      }
+      const sourcePath =
+        (activeDocument?.sourcePath || scratchDiskPath || "").trim();
+      if (!sourcePath) {
+        if (!opts?.silent) {
+          window.alert("Save this essay before syncing with Notion.");
+        }
+        return;
+      }
+
+      const markdown = getDocumentMarkdown(
+        tiptapEditor,
+        activeDocument?.content ?? scratchDraftContent,
+      );
+      const title =
+        (activeDocument?.postTitle ?? "").trim() || editorTitleBase.trim() || "Untitled";
+      const payload = `${title}\0${markdown}`;
+      const link = notionEssayLinkRef.current;
+      if (opts?.silent && (!link?.essayPageId || lastNotionSyncedRef.current === payload)) {
+        return;
+      }
+
+      notionSyncRunningRef.current = true;
+      setNotionSyncRunning(true);
+      try {
+        const result = await syncEssayWithNotion({
+          title,
+          markdown,
+          parentPageId: link?.parentPageId,
+          essayPageId: link?.essayPageId,
+          renameParent: link?.renameParent,
+        });
+        const nextLink: NotionEssayLink = {
+          parentPageId: result.parentPageId,
+          essayPageId: result.essayPageId,
+          renameParent: result.renameParent,
+        };
+        const notionFields = notionFieldsFromLink(nextLink);
+        const idsChanged =
+          (link?.parentPageId ?? "") !== nextLink.parentPageId ||
+          (link?.essayPageId ?? "") !== nextLink.essayPageId ||
+          Boolean(link?.renameParent) !== nextLink.renameParent;
+        await saveNotionEssayLink(sourcePath, nextLink);
+        if (idsChanged) {
+          await invoke("write_text_file", {
+            path: sourcePath,
+            contents: markdownForDisk(markdown, {
+              postTitle: title,
+              subtitle: activeDocument?.subtitle ?? "",
+              ...notionFields,
+            }),
+          });
+        }
+        notionEssayLinkRef.current = nextLink;
+        setNotionEssayLink(nextLink);
+        lastNotionSyncedRef.current = payload;
+        notionSyncedPathRef.current = sourcePath;
+        if (activeTabId) {
+          setOpenDocuments((prev) => {
+            const current = prev[activeTabId];
+            if (!current) return prev;
+            return {
+              ...prev,
+              [activeTabId]: {
+                ...current,
+                ...notionFields,
+                ...(idsChanged
+                  ? {
+                      lastSavedContent: markdown,
+                      lastSavedPostTitle: current.postTitle,
+                    }
+                  : {}),
+              },
+            };
+          });
+        }
+      } catch (e) {
+        if (!opts?.silent) {
+          window.alert(e instanceof Error ? e.message : String(e));
+        } else {
+          console.error(e);
+        }
+      } finally {
+        notionSyncRunningRef.current = false;
+        setNotionSyncRunning(false);
+      }
+    },
+    [
+      activeDocument?.content,
+      activeDocument?.postTitle,
+      activeDocument?.sourcePath,
+      activeDocument?.subtitle,
+      activeTabId,
+      editorTitleBase,
+      notionConnected,
+      scratchDiskPath,
+      scratchDraftContent,
+      tiptapEditor,
+    ],
+  );
+
+  useEffect(() => {
+    const payload = `${notionEssayTitle}\0${activeDocument?.content ?? scratchDraftContent}`;
+    if (notionSyncedPathRef.current !== activeSourcePath) {
+      notionSyncedPathRef.current = activeSourcePath || null;
+      lastNotionSyncedRef.current = payload;
+      return;
+    }
+    if (!notionConnected || !notionEssayLink?.essayPageId || !activeSourcePath) return;
+    if (payload === lastNotionSyncedRef.current) return;
+    const timer = window.setTimeout(() => {
+      void performNotionEssaySync({ silent: true });
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeDocument?.content,
+    activeSourcePath,
+    notionConnected,
+    notionEssayLink?.essayPageId,
+    notionEssayTitle,
+    performNotionEssaySync,
+    scratchDraftContent,
+  ]);
+
   const handleInsertImage = useCallback(() => {
     if (!tiptapEditor || !editorEditable) return;
     insertHarvyImagePlaceholderAtCursor(tiptapEditor);
@@ -3172,6 +3446,7 @@ export function AppShell() {
         await invoke("rename_fs_path", { fromPath: sourcePath, toPath: targetPath });
         await renameDocumentNotesSidecar(sourcePath, targetPath);
         await renameDocumentCriteriaSidecar(sourcePath, targetPath);
+        await renameNotionEssaySidecar(sourcePath, targetPath);
       } catch (e) {
         window.alert(e instanceof Error ? e.message : String(e));
         return { ok: false };
@@ -3494,6 +3769,9 @@ export function AppShell() {
                 podcastNotesPreviewOpen ||
                 (saveAsModalOpen && saveAsPurpose === "podcast-notes")
               }
+              onSyncWithNotion={() => void performNotionEssaySync()}
+              notionSyncEnabled={notionConnected}
+              notionSyncRunning={notionSyncRunning}
               syncWithChrome
               chromeHidden={hideBottomToolsWhileTyping && !focusModeActive}
             />

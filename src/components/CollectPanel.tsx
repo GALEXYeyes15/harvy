@@ -1,11 +1,6 @@
-import {
-  Check,
-  FileText,
-  NotepadText,
-  RefreshCw,
-  Trash2,
-} from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { type CollectItem } from "../features/collect/collectItems";
 import {
   COLLECT_SUB_VIEW_LABELS,
@@ -18,6 +13,7 @@ import {
   getNotionIdeasConfig,
   mergeNotionIdeasIntoCollectItems,
   queryNotionIdeaPages,
+  dismissNotionIdeaPage,
   readNotionIdeasLastSyncedAt,
   writeNotionIdeasLastSyncedAt,
 } from "../features/notion/notionIdeas";
@@ -30,125 +26,29 @@ import { HeadlinesView } from "./HeadlinesView";
 import { OutliersView } from "./OutliersView";
 import { WorkspaceSectionMainContent } from "./WorkspaceSectionMainContent";
 
-const SELECTION_ACTION_BUTTON =
-  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-accent/65 transition-colors hover:bg-white/[0.06] hover:text-accent";
-
 const SUB_VIEW_TAB =
   "border-0 bg-transparent p-0 text-[1.375rem] font-semibold leading-none tracking-[-0.02em]";
 
 export type { CollectSubView };
 
-function CollectRowCheckbox({
-  checked,
-  onToggle,
-}: {
-  checked: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={checked}
-      aria-label={checked ? "Deselect idea" : "Select idea"}
-      className={`harvy-checkbox flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-sm transition-opacity duration-150 ${
-        checked
-          ? "harvy-checkbox--checked opacity-100"
-          : "border border-line/45 bg-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 dark:border-white/22"
-      }`}
-      onClick={(event) => {
-        event.stopPropagation();
-        onToggle();
-      }}
-    >
-      {checked ? <Check size={14} strokeWidth={2.75} className="text-white" aria-hidden /> : null}
-    </button>
-  );
-}
-
-function CollectSelectionActions({
-  selectedCount,
-  onDelete,
-  onAddToNotes,
-}: {
-  selectedCount: number;
-  onDelete: () => void;
-  onAddToNotes: () => void;
-}) {
-  const labelSuffix = selectedCount === 1 ? "selected item" : "selected items";
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <button
-        type="button"
-        className={SELECTION_ACTION_BUTTON}
-        aria-label={`Delete ${selectedCount} ${labelSuffix}`}
-        onClick={onDelete}
-      >
-        <Trash2 size={15} strokeWidth={1.75} aria-hidden />
-      </button>
-      <button
-        type="button"
-        className={SELECTION_ACTION_BUTTON}
-        aria-label={`Add ${selectedCount} ${labelSuffix} to Notes`}
-        onClick={onAddToNotes}
-      >
-        <NotepadText size={15} strokeWidth={1.75} aria-hidden />
-      </button>
-    </div>
-  );
-}
-
 function IdeaGalleryCard({
   item,
-  selected,
   onOpen,
-  onToggleSelected,
-  onStartWriting,
 }: {
   item: CollectItem;
-  selected: boolean;
   onOpen: () => void;
-  onToggleSelected: () => void;
-  onStartWriting?: (item: CollectItem) => void | Promise<void>;
 }) {
   const untitled = !item.preview.trim();
   const title = untitled ? "Untitled" : item.preview.trim();
   const notes = (item.body ?? "").trim();
 
   return (
-    <article
-      className={`harvy-outlier-card harvy-idea-card group relative ${selected ? "is-selected" : ""}`}
-      onClick={onOpen}
-    >
-      <div
-        className="absolute right-2 top-2 z-10 flex items-center gap-1"
-        onClick={(event) => event.stopPropagation()}
-      >
-        {onStartWriting ? (
-          <button
-            type="button"
-            className="harvy-notion-row-action opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-            aria-label="Start writing"
-            onClick={() => void onStartWriting(item)}
-          >
-            Write
-          </button>
-        ) : null}
-        <CollectRowCheckbox checked={selected} onToggle={onToggleSelected} />
-      </div>
-
+    <article className="harvy-outlier-card harvy-idea-card relative" onClick={onOpen}>
       <div className="harvy-idea-card-preview">
         {notes ? <p className="harvy-idea-card-preview-text">{notes}</p> : null}
       </div>
 
       <div className="harvy-idea-card-title">
-        <FileText
-          size={15}
-          strokeWidth={1.6}
-          className="harvy-notion-page-icon mt-0.5 shrink-0"
-          aria-hidden
-        />
         <span className={`harvy-idea-card-title-text ${untitled ? "is-untitled" : ""}`}>
           {title}
         </span>
@@ -241,7 +141,6 @@ export function CollectPanel({
     firstEnabledCollectView(views, collectViewOrder),
   );
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [notionConnected, setNotionConnected] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -295,11 +194,6 @@ export function CollectPanel({
     toolsSidebarOpen,
   });
 
-  const selectedItems = useMemo(
-    () => items.filter((item) => selectedIds.has(item.id)),
-    [items, selectedIds],
-  );
-
   /** Ideas are Notion-sourced only — hide any legacy local rows. */
   const ideaItems = useMemo(
     () => items.filter((item) => Boolean(item.notionPageId)),
@@ -317,14 +211,6 @@ export function CollectPanel({
     [ideaItems, activeItemId],
   );
 
-  useEffect(() => {
-    setSelectedIds((current) => {
-      const validIds = new Set(items.map((item) => item.id));
-      const next = new Set([...current].filter((id) => validIds.has(id)));
-      return next.size === current.size ? current : next;
-    });
-  }, [items]);
-
   const updateItem = (itemId: string, patch: Partial<CollectItem>) => {
     onItemsChange(
       items.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
@@ -335,37 +221,18 @@ export function CollectPanel({
     setActiveItemId(itemId);
   };
 
-  const toggleSelected = (itemId: string) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (next.has(itemId)) {
-        next.delete(itemId);
-      } else {
-        next.add(itemId);
-      }
-      return next;
-    });
-  };
-
-  const removeSelectedItems = () => {
-    if (selectedIds.size === 0) return;
-    onItemsChange(items.filter((item) => !selectedIds.has(item.id)));
-    if (activeItemId && selectedIds.has(activeItemId)) {
-      setActiveItemId(null);
+  const deleteItem = async (item: CollectItem) => {
+    const title = item.preview.trim() || "Untitled";
+    const message = `Delete “${title}” from Ideas?`;
+    const ok = isTauriRuntime()
+      ? await confirm(message, { title: "Delete idea", kind: "warning" })
+      : window.confirm(message);
+    if (!ok) return;
+    if (item.notionPageId) {
+      dismissNotionIdeaPage(item.notionPageId);
     }
-    setSelectedIds(new Set());
-  };
-
-  const handleAddSelectedToNotes = () => {
-    if (selectedItems.length === 0 || !onAddPreviewToNotes) return;
-
-    const combined = selectedItems
-      .map((item) => item.preview.trim())
-      .filter(Boolean)
-      .join("\n\n");
-
-    if (!combined) return;
-    onAddPreviewToNotes(combined);
+    onItemsChange(items.filter((row) => row.id !== item.id));
+    setActiveItemId(null);
   };
 
   return (
@@ -413,13 +280,6 @@ export function CollectPanel({
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {selectedIds.size > 0 ? (
-                  <CollectSelectionActions
-                    selectedCount={selectedIds.size}
-                    onDelete={removeSelectedItems}
-                    onAddToNotes={handleAddSelectedToNotes}
-                  />
-                ) : null}
                 {notionConnected ? (
                   <button
                     type="button"
@@ -455,10 +315,7 @@ export function CollectPanel({
                   <IdeaGalleryCard
                     key={item.id}
                     item={item}
-                    selected={selectedIds.has(item.id)}
                     onOpen={() => openItem(item.id)}
-                    onToggleSelected={() => toggleSelected(item.id)}
-                    onStartWriting={onStartWriting}
                   />
                 ))}
               </div>
@@ -493,6 +350,7 @@ export function CollectPanel({
               }
             : undefined
         }
+        onDelete={(item) => void deleteItem(item)}
       />
     </>
   );

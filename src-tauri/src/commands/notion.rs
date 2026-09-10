@@ -5,10 +5,14 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs;
+use std::thread;
 use std::time::Duration;
 use tauri::AppHandle;
 
 use super::app_config_dir;
+
+mod markdown;
+use markdown::markdown_to_notion_blocks;
 
 const NOTION_API_BASE: &str = "https://api.notion.com/v1";
 const NOTION_VERSION: &str = "2022-06-28";
@@ -60,6 +64,9 @@ pub struct NotionPropertyInfo {
     pub name: String,
     /// Notion property type: title, rich_text, status, select, etc.
     pub property_type: String,
+    /// Select / status option names (empty for other types).
+    #[serde(default)]
+    pub options: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -70,6 +77,25 @@ pub struct NotionIdeaPage {
     pub notes: String,
     pub status: String,
     pub created_time: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotionSyncEssayInput {
+    pub title: String,
+    pub markdown: String,
+    pub parent_page_id: Option<String>,
+    pub essay_page_id: Option<String>,
+    #[serde(default)]
+    pub rename_parent: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotionSyncEssayResult {
+    pub parent_page_id: String,
+    pub essay_page_id: String,
+    pub rename_parent: bool,
 }
 
 fn config_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
@@ -186,6 +212,32 @@ fn format_notion_uuid(hex32: &str) -> String {
     )
 }
 
+/// Strict page/block id: the whole string must be a Notion UUID, not a title or file path.
+fn parse_stored_notion_id(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if is_dashed_notion_uuid(trimmed) {
+        return Some(trimmed.to_lowercase());
+    }
+    let mut hex = String::new();
+    for ch in trimmed.chars() {
+        if ch == '-' {
+            continue;
+        }
+        if !ch.is_ascii_hexdigit() {
+            return None;
+        }
+        hex.push(ch.to_ascii_lowercase());
+    }
+    if hex.len() == 32 {
+        Some(format_notion_uuid(&hex))
+    } else {
+        None
+    }
+}
+
 fn rich_text_plain(value: &Value) -> String {
     let Some(arr) = value.as_array() else {
         return String::new();
@@ -219,6 +271,205 @@ fn property_plain_text(prop: &Value) -> String {
             .unwrap_or("")
             .to_string(),
         _ => String::new(),
+    }
+}
+
+fn block_to_plain_line(block: &Value) -> Option<String> {
+    let ty = block.get("type")?.as_str()?;
+    let payload = block.get(ty)?;
+    let text = rich_text_plain(payload.get("rich_text").unwrap_or(&Value::Null));
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn blocks_to_plain_text(blocks: &[Value]) -> String {
+    blocks
+        .iter()
+        .filter_map(block_to_plain_line)
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn format_named_text(name: &str, value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if trimmed
+        .to_ascii_lowercase()
+        .starts_with(&name.trim().to_ascii_lowercase())
+    {
+        trimmed.to_string()
+    } else {
+        format!("{name}: {trimmed}")
+    }
+}
+
+fn push_rich_text_property(
+    name: &str,
+    prop: &Value,
+    parts: &mut Vec<String>,
+    seen: &mut std::collections::HashSet<String>,
+) {
+    let key = name.to_ascii_lowercase();
+    if seen.contains(&key) {
+        return;
+    }
+    let prop_type = prop.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    if !matches!(prop_type, "rich_text" | "text") {
+        return;
+    }
+    let text = property_plain_text(prop);
+    if text.trim().is_empty() {
+        return;
+    }
+    seen.insert(key);
+    parts.push(format_named_text(name, &text));
+}
+
+fn idea_property_notes(properties: &Value, config: &NotionIdeasConfig) -> String {
+    let Some(obj) = properties.as_object() else {
+        return String::new();
+    };
+    let mut parts: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::<String>::new();
+
+    if !config.notes_property.trim().is_empty() {
+        if let Some(prop) = obj.get(&config.notes_property) {
+            push_rich_text_property(&config.notes_property, prop, &mut parts, &mut seen);
+        }
+    }
+
+    for (name, prop) in obj {
+        if name.eq_ignore_ascii_case(&config.title_property)
+            || name.eq_ignore_ascii_case(&config.status_property)
+        {
+            continue;
+        }
+        push_rich_text_property(name, prop, &mut parts, &mut seen);
+    }
+
+    parts.join("\n\n")
+}
+
+fn merge_idea_notes(property_notes: &str, page_body: &str) -> String {
+    let property_notes = property_notes.trim();
+    let page_body = page_body.trim();
+    if property_notes.is_empty() {
+        return page_body.to_string();
+    }
+    if page_body.is_empty() || property_notes.contains(page_body) {
+        return property_notes.to_string();
+    }
+    if page_body.contains(property_notes) {
+        return page_body.to_string();
+    }
+    format!("{property_notes}\n\n{page_body}")
+}
+
+fn fetch_block_children(
+    client: &Client,
+    token: &str,
+    block_id: &str,
+) -> Result<Vec<Value>, String> {
+    let mut blocks: Vec<Value> = Vec::new();
+    let mut start_cursor: Option<String> = None;
+    loop {
+        let url = format!("{}/blocks/{}/children", NOTION_API_BASE, block_id);
+        let mut request = client
+            .get(&url)
+            .headers(notion_headers(token)?)
+            .query(&[("page_size", "100")]);
+        if let Some(cursor) = &start_cursor {
+            request = request.query(&[("start_cursor", cursor.as_str())]);
+        }
+        let response = request
+            .send()
+            .map_err(|e| format!("Notion page request failed: {}", e))?;
+        let status = response.status();
+        let text = response
+            .text()
+            .map_err(|e| format!("Could not read Notion page: {}", e))?;
+        if !status.is_success() {
+            return Err(parse_error_body(&text));
+        }
+        let parsed: Value =
+            serde_json::from_str(&text).map_err(|e| format!("Invalid Notion page JSON: {}", e))?;
+        if let Some(results) = parsed.get("results").and_then(|r| r.as_array()) {
+            blocks.extend(results.iter().cloned());
+        }
+        let has_more = parsed
+            .get("has_more")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if !has_more {
+            break;
+        }
+        start_cursor = parsed
+            .get("next_cursor")
+            .and_then(|c| c.as_str())
+            .map(str::to_string);
+        if start_cursor.is_none() {
+            break;
+        }
+    }
+    Ok(blocks)
+}
+
+fn should_fetch_nested_blocks(block: &Value) -> bool {
+    let ty = block.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    if matches!(ty, "child_page" | "child_database") {
+        return false;
+    }
+    block
+        .get("has_children")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+fn collect_blocks_plain(
+    client: &Client,
+    token: &str,
+    blocks: &[Value],
+    depth: u32,
+) -> Result<String, String> {
+    const MAX_DEPTH: u32 = 4;
+    let mut lines: Vec<String> = Vec::new();
+    for block in blocks {
+        if let Some(line) = block_to_plain_line(block) {
+            lines.push(line);
+        }
+        if depth < MAX_DEPTH && should_fetch_nested_blocks(block) {
+            if let Some(id) = block.get("id").and_then(|v| v.as_str()) {
+                let children = fetch_block_children(client, token, id)?;
+                let nested = collect_blocks_plain(client, token, &children, depth + 1)?;
+                if !nested.trim().is_empty() {
+                    lines.push(nested);
+                }
+            }
+        }
+    }
+    Ok(lines.join("\n\n"))
+}
+
+fn fetch_page_body_plain(client: &Client, token: &str, page_id: &str) -> Result<String, String> {
+    let blocks = fetch_block_children(client, token, page_id)?;
+    collect_blocks_plain(client, token, &blocks, 0)
+}
+
+fn fill_page_bodies(client: &Client, token: &str, pages: &mut [NotionIdeaPage]) {
+    for page in pages.iter_mut() {
+        match fetch_page_body_plain(client, token, &page.page_id) {
+            Ok(body) => page.notes = merge_idea_notes(&page.notes, &body),
+            Err(e) => eprintln!(
+                "[harvy] Could not read Notion page body for {}: {}",
+                page.page_id, e
+            ),
+        }
     }
 }
 
@@ -462,10 +713,33 @@ pub fn notion_fetch_database_schema(
                 .and_then(|t| t.as_str())
                 .unwrap_or("unknown")
                 .to_string(),
+            options: property_select_options(prop),
         })
         .collect();
     out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     Ok(out)
+}
+
+fn property_select_options(prop: &Value) -> Vec<String> {
+    let prop_type = prop.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    let container = match prop_type {
+        "status" => prop.get("status"),
+        "select" => prop.get("select"),
+        _ => return Vec::new(),
+    };
+    let Some(options) = container
+        .and_then(|c| c.get("options"))
+        .and_then(|o| o.as_array())
+    else {
+        return Vec::new();
+    };
+    options
+        .iter()
+        .filter_map(|opt| opt.get("name").and_then(|n| n.as_str()))
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 fn status_property_type(schema_props: &Value, status_property: &str) -> Option<String> {
@@ -480,7 +754,15 @@ fn status_property_type(schema_props: &Value, status_property: &str) -> Option<S
 pub fn notion_query_idea_pages(app: AppHandle) -> Result<Vec<NotionIdeaPage>, String> {
     let config = require_config(&app)?;
     let client = notion_client()?;
+    let mut results = query_idea_database_pages(&client, &config)?;
+    fill_page_bodies(&client, &config.token, &mut results);
+    Ok(results)
+}
 
+fn query_idea_database_pages(
+    client: &Client,
+    config: &NotionIdeasConfig,
+) -> Result<Vec<NotionIdeaPage>, String> {
     // Load schema to know status vs select for filtering.
     let schema = retrieve_database_json(&client, &config.token, &config.database_id)?;
     let props = schema.get("properties").cloned().unwrap_or(Value::Null);
@@ -535,7 +817,7 @@ pub fn notion_query_idea_pages(app: AppHandle) -> Result<Vec<NotionIdeaPage>, St
             }
             // If filter fails (e.g. empty status), fall back to unfiltered + client filter.
             if results.is_empty() && start_cursor.is_none() {
-                return query_ideas_unfiltered(&client, &config, &idea);
+                return query_ideas_unfiltered(client, config, &idea);
             }
             return Err(message);
         }
@@ -660,14 +942,7 @@ fn page_to_idea(page: &Value, config: &NotionIdeasConfig) -> Option<NotionIdeaPa
         .get(&config.title_property)
         .map(property_plain_text)
         .unwrap_or_default();
-    let notes = if config.notes_property.trim().is_empty() {
-        String::new()
-    } else {
-        properties
-            .get(&config.notes_property)
-            .map(property_plain_text)
-            .unwrap_or_default()
-    };
+    let notes = idea_property_notes(properties, config);
     let status = properties
         .get(&config.status_property)
         .map(property_plain_text)
@@ -734,16 +1009,382 @@ pub fn notion_mark_idea_started(app: AppHandle, page_id: String) -> Result<(), S
 
 #[tauri::command]
 pub fn notion_test_ideas_connection(app: AppHandle) -> Result<usize, String> {
-    let pages = notion_query_idea_pages(app)?;
+    let config = require_config(&app)?;
+    let client = notion_client()?;
+    let pages = query_idea_database_pages(&client, &config)?;
     Ok(pages.len())
+}
+
+const NOTION_CHILDREN_PAGE_SIZE: usize = 100;
+const TITLE_LIMIT: usize = 2000;
+
+#[tauri::command]
+pub fn notion_sync_essay(
+    app: AppHandle,
+    input: NotionSyncEssayInput,
+) -> Result<NotionSyncEssayResult, String> {
+    let config = require_config(&app)?;
+    let client = notion_client()?;
+    let title = truncate_chars(input.title.trim(), TITLE_LIMIT);
+    let title = if title.is_empty() {
+        "Untitled".to_string()
+    } else {
+        title
+    };
+    let nested_title = nested_essay_page_title(&title);
+    let blocks = markdown_to_notion_blocks(&input.markdown);
+
+    let mut parent_page_id =
+        trim_option(&input.parent_page_id).and_then(|id| parse_stored_notion_id(&id));
+    let mut essay_page_id =
+        trim_option(&input.essay_page_id).and_then(|id| parse_stored_notion_id(&id));
+    let mut rename_parent = input.rename_parent;
+
+    if let Some(id) = essay_page_id.clone() {
+        if !page_exists(&client, &config.token, &id)? {
+            essay_page_id = None;
+        }
+    }
+    if let Some(id) = parent_page_id.clone() {
+        if !page_exists(&client, &config.token, &id)? {
+            parent_page_id = None;
+        }
+    }
+
+    if parent_page_id.is_none() {
+        let created = create_database_page(&client, &config, &title)?;
+        parent_page_id = Some(created);
+        rename_parent = true;
+    }
+
+    let parent_id = parent_page_id
+        .clone()
+        .ok_or_else(|| "Could not create a Notion page for this essay.".to_string())?;
+
+    if essay_page_id.is_none() {
+        essay_page_id = find_child_page_id(
+            &client,
+            &config.token,
+            &parent_id,
+            &[&nested_title, &title],
+        )?;
+    }
+    if essay_page_id.is_none() {
+        essay_page_id = Some(create_child_page(
+            &client,
+            &config.token,
+            &parent_id,
+            &nested_title,
+            &blocks,
+        )?);
+    } else if let Some(id) = essay_page_id.clone() {
+        patch_child_page_title(&client, &config.token, &id, &nested_title)?;
+        replace_block_children(&client, &config.token, &id, &blocks)?;
+    }
+
+    if rename_parent {
+        patch_database_page_title(&client, &config, &parent_id, &title)?;
+    }
+
+    Ok(NotionSyncEssayResult {
+        parent_page_id: parent_id,
+        essay_page_id: essay_page_id
+            .ok_or_else(|| "Could not create a Notion page for this essay.".to_string())?,
+        rename_parent,
+    })
+}
+
+fn trim_option(value: &Option<String>) -> Option<String> {
+    value
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+fn truncate_chars(value: &str, max_chars: usize) -> String {
+    let mut out = String::new();
+    for (i, ch) in value.chars().enumerate() {
+        if i >= max_chars {
+            break;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn nested_essay_page_title(title: &str) -> String {
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        return "Untitled Essay".to_string();
+    }
+    if trimmed.to_ascii_lowercase().ends_with(" essay") {
+        return truncate_chars(trimmed, TITLE_LIMIT);
+    }
+    const SUFFIX: &str = " Essay";
+    let max_base = TITLE_LIMIT.saturating_sub(SUFFIX.chars().count());
+    format!("{}{}", truncate_chars(trimmed, max_base), SUFFIX)
+}
+
+fn title_rich_text(title: &str) -> Value {
+    json!([{
+        "type": "text",
+        "text": { "content": truncate_chars(title, TITLE_LIMIT) }
+    }])
+}
+
+fn notion_json(
+    client: &Client,
+    token: &str,
+    method: reqwest::Method,
+    url: &str,
+    body: Option<&Value>,
+) -> Result<Value, String> {
+    let mut last_error = "Notion request failed.".to_string();
+    for attempt in 0..6 {
+        let mut request = client
+            .request(method.clone(), url)
+            .headers(notion_headers(token)?);
+        if let Some(payload) = body {
+            request = request.json(payload);
+        }
+        let response = request
+            .send()
+            .map_err(|e| format!("Notion request failed: {}", e))?;
+        let status = response.status();
+        let retry_after = response
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok());
+        let text = response
+            .text()
+            .map_err(|e| format!("Could not read Notion response: {}", e))?;
+        if status.as_u16() == 429 {
+            let wait_ms = retry_after.unwrap_or(1 + attempt as u64) * 250;
+            thread::sleep(Duration::from_millis(wait_ms.max(250)));
+            last_error = parse_error_body(&text);
+            continue;
+        }
+        if !status.is_success() {
+            let message = parse_error_body(&text);
+            if message.to_ascii_lowercase().contains("invalid request url") {
+                return Err(format!("{message} ({method} {url})"));
+            }
+            return Err(message);
+        }
+        if text.trim().is_empty() {
+            return Ok(Value::Null);
+        }
+        return serde_json::from_str(&text).map_err(|e| format!("Invalid Notion JSON: {}", e));
+    }
+    Err(last_error)
+}
+
+fn page_exists(client: &Client, token: &str, page_id: &str) -> Result<bool, String> {
+    let Some(page_id) = parse_stored_notion_id(page_id) else {
+        return Ok(false);
+    };
+    let url = format!("{}/pages/{}", NOTION_API_BASE, page_id);
+    let response = client
+        .get(&url)
+        .headers(notion_headers(token)?)
+        .send()
+        .map_err(|e| format!("Notion page request failed: {}", e))?;
+    let status = response.status();
+    if status.as_u16() == 404 {
+        return Ok(false);
+    }
+    let text = response
+        .text()
+        .map_err(|e| format!("Could not read Notion page: {}", e))?;
+    if !status.is_success() {
+        let message = parse_error_body(&text);
+        let lower = message.to_ascii_lowercase();
+        if looks_like_missing_database(&message) || lower.contains("invalid request url") {
+            return Ok(false);
+        }
+        return Err(message);
+    }
+    let parsed: Value =
+        serde_json::from_str(&text).map_err(|e| format!("Invalid Notion page JSON: {}", e))?;
+    let archived = parsed
+        .get("archived")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    Ok(!archived)
+}
+
+fn create_database_page(
+    client: &Client,
+    config: &NotionIdeasConfig,
+    title: &str,
+) -> Result<String, String> {
+    let schema =
+        retrieve_database_json(client, &config.token, &config.database_id).unwrap_or(Value::Null);
+    let props = schema.get("properties").cloned().unwrap_or(Value::Null);
+    let mut properties = serde_json::Map::new();
+    properties.insert(
+        config.title_property.clone(),
+        json!({ "title": title_rich_text(title) }),
+    );
+    if !config.status_property.trim().is_empty() && !config.started_status_value.trim().is_empty()
+    {
+        let status_type = status_property_type(&props, &config.status_property)
+            .unwrap_or_else(|| "status".to_string());
+        let started = config.started_status_value.trim();
+        let property_value = match status_type.as_str() {
+            "select" => json!({ "select": { "name": started } }),
+            _ => json!({ "status": { "name": started } }),
+        };
+        properties.insert(config.status_property.clone(), property_value);
+    }
+    let body = json!({
+        "parent": { "database_id": config.database_id },
+        "properties": properties
+    });
+    let url = format!("{}/pages", NOTION_API_BASE);
+    let parsed = notion_json(client, &config.token, reqwest::Method::POST, &url, Some(&body))?;
+    parsed
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .ok_or_else(|| "Notion did not return a page id.".to_string())
+}
+
+fn create_child_page(
+    client: &Client,
+    token: &str,
+    parent_page_id: &str,
+    title: &str,
+    blocks: &[Value],
+) -> Result<String, String> {
+    let body = json!({
+        "parent": { "page_id": parent_page_id },
+        "properties": {
+            "title": { "title": title_rich_text(title) }
+        }
+    });
+    let url = format!("{}/pages", NOTION_API_BASE);
+    let parsed = notion_json(client, token, reqwest::Method::POST, &url, Some(&body))?;
+    let page_id = parsed
+        .get("id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "Notion did not return a page id.".to_string())?
+        .to_string();
+    append_block_children(client, token, &page_id, blocks)?;
+    Ok(page_id)
+}
+
+fn patch_child_page_title(
+    client: &Client,
+    token: &str,
+    page_id: &str,
+    title: &str,
+) -> Result<(), String> {
+    let body = json!({
+        "properties": {
+            "title": { "title": title_rich_text(title) }
+        }
+    });
+    let url = format!("{}/pages/{}", NOTION_API_BASE, page_id);
+    notion_json(client, token, reqwest::Method::PATCH, &url, Some(&body))?;
+    Ok(())
+}
+
+fn patch_database_page_title(
+    client: &Client,
+    config: &NotionIdeasConfig,
+    page_id: &str,
+    title: &str,
+) -> Result<(), String> {
+    let body = json!({
+        "properties": {
+            config.title_property.clone(): { "title": title_rich_text(title) }
+        }
+    });
+    let url = format!("{}/pages/{}", NOTION_API_BASE, page_id);
+    notion_json(client, &config.token, reqwest::Method::PATCH, &url, Some(&body))?;
+    Ok(())
+}
+
+fn find_child_page_id(
+    client: &Client,
+    token: &str,
+    parent_page_id: &str,
+    titles: &[&str],
+) -> Result<Option<String>, String> {
+    let wanted: Vec<String> = titles
+        .iter()
+        .map(|title| title.trim().to_string())
+        .filter(|title| !title.is_empty())
+        .collect();
+    let children = fetch_block_children(client, token, parent_page_id)?;
+    for block in children {
+        if block.get("type").and_then(|v| v.as_str()) != Some("child_page") {
+            continue;
+        }
+        let name = block
+            .get("child_page")
+            .and_then(|c| c.get("title"))
+            .and_then(|t| t.as_str())
+            .unwrap_or("")
+            .trim();
+        if wanted.iter().any(|title| title == name) {
+            if let Some(id) = block.get("id").and_then(|v| v.as_str()) {
+                return Ok(Some(id.to_string()));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn append_block_children(
+    client: &Client,
+    token: &str,
+    block_id: &str,
+    blocks: &[Value],
+) -> Result<(), String> {
+    for chunk in blocks.chunks(NOTION_CHILDREN_PAGE_SIZE) {
+        if chunk.is_empty() {
+            continue;
+        }
+        let url = format!("{}/blocks/{}/children", NOTION_API_BASE, block_id);
+        let body = json!({ "children": chunk });
+        // Notion's append-children endpoint is PATCH, not POST.
+        notion_json(client, token, reqwest::Method::PATCH, &url, Some(&body))?;
+    }
+    Ok(())
+}
+
+fn replace_block_children(
+    client: &Client,
+    token: &str,
+    block_id: &str,
+    blocks: &[Value],
+) -> Result<(), String> {
+    let existing = fetch_block_children(client, token, block_id)?;
+    // Write the new body first. If that fails, the previous content is still there.
+    append_block_children(client, token, block_id, blocks)?;
+    for block in existing {
+        let Some(id) = block.get("id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let url = format!("{}/blocks/{}", NOTION_API_BASE, id);
+        notion_json(client, token, reqwest::Method::DELETE, &url, None)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        explain_database_access_error, merge_notion_credentials, normalize_notion_database_id,
-        NotionIdeasConfig,
+        blocks_to_plain_text, explain_database_access_error, idea_property_notes,
+        merge_idea_notes, merge_notion_credentials, nested_essay_page_title,
+        normalize_notion_database_id, parse_stored_notion_id, property_select_options,
+        truncate_chars, NotionIdeasConfig,
     };
+    use serde_json::json;
 
     fn sample_config() -> NotionIdeasConfig {
         NotionIdeasConfig {
@@ -795,5 +1436,124 @@ mod tests {
         assert!(message.contains("Internal"));
         assert!(message.contains("Harvy"));
         assert!(message.contains("fc18c16a-5124-4937-81c2-17f7bf0172cf"));
+    }
+
+    #[test]
+    fn extracts_page_body_paragraphs() {
+        let blocks = json!([
+            {
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{ "plain_text": "Core idea: Ambition supplies energy, not direction." }]
+                }
+            },
+            {
+                "type": "paragraph",
+                "paragraph": { "rich_text": [] }
+            },
+            {
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{ "plain_text": "Podcast expansion: What ambition is genuinely good for." }]
+                }
+            }
+        ]);
+        assert_eq!(
+            blocks_to_plain_text(blocks.as_array().unwrap()),
+            "Core idea: Ambition supplies energy, not direction.\n\nPodcast expansion: What ambition is genuinely good for."
+        );
+    }
+
+    #[test]
+    fn collects_rich_text_properties_as_notes() {
+        let properties = json!({
+            "Name": { "type": "title", "title": [{ "plain_text": "Essay" }] },
+            "Status": { "type": "status", "status": { "name": "Idea" } },
+            "Core idea": {
+                "type": "rich_text",
+                "rich_text": [{ "plain_text": "Ambition supplies energy, not direction." }]
+            },
+            "Podcast expansion": {
+                "type": "rich_text",
+                "rich_text": [{ "plain_text": "What ambition is genuinely good for." }]
+            }
+        });
+        let notes = idea_property_notes(&properties, &sample_config());
+        assert!(notes.contains("Core idea: Ambition supplies energy, not direction."));
+        assert!(notes.contains("Podcast expansion: What ambition is genuinely good for."));
+    }
+
+    #[test]
+    fn merge_keeps_property_notes_when_page_body_is_empty() {
+        assert_eq!(
+            merge_idea_notes("Core idea: Hello", ""),
+            "Core idea: Hello"
+        );
+        assert_eq!(
+            merge_idea_notes("", "Page body"),
+            "Page body"
+        );
+    }
+
+    #[test]
+    fn extracts_status_and_select_options() {
+        let status = json!({
+            "type": "status",
+            "status": {
+                "options": [
+                    { "name": "Idea" },
+                    { "name": "Writing" },
+                    { "name": "  " }
+                ]
+            }
+        });
+        assert_eq!(
+            property_select_options(&status),
+            vec!["Idea".to_string(), "Writing".to_string()]
+        );
+
+        let select = json!({
+            "type": "select",
+            "select": {
+                "options": [{ "name": "Not started" }, { "name": "Done" }]
+            }
+        });
+        assert_eq!(
+            property_select_options(&select),
+            vec!["Not started".to_string(), "Done".to_string()]
+        );
+    }
+
+    #[test]
+    fn truncate_chars_respects_limit() {
+        assert_eq!(truncate_chars("Hello", 3), "Hel");
+        assert_eq!(truncate_chars("ééé", 2), "éé");
+    }
+
+    #[test]
+    fn nested_page_title_appends_essay() {
+        assert_eq!(
+            nested_essay_page_title("Ambition Won't Tell You Where to Go"),
+            "Ambition Won't Tell You Where to Go Essay"
+        );
+        assert_eq!(
+            nested_essay_page_title("Ambition Won't Tell You Where to Go Essay"),
+            "Ambition Won't Tell You Where to Go Essay"
+        );
+        assert_eq!(nested_essay_page_title("  "), "Untitled Essay");
+    }
+
+    #[test]
+    fn stored_notion_ids_must_be_uuids() {
+        assert_eq!(
+            parse_stored_notion_id("277ba25e-3f4a-80c3-bc7f-d3f6c4e8f1a2").as_deref(),
+            Some("277ba25e-3f4a-80c3-bc7f-d3f6c4e8f1a2")
+        );
+        assert_eq!(
+            parse_stored_notion_id("277ba25e3f4a80c3bc7fd3f6c4e8f1a2").as_deref(),
+            Some("277ba25e-3f4a-80c3-bc7f-d3f6c4e8f1a2")
+        );
+        assert_eq!(parse_stored_notion_id("asdfasdfasdf Essay"), None);
+        assert_eq!(parse_stored_notion_id("asdfasdfasdf"), None);
     }
 }

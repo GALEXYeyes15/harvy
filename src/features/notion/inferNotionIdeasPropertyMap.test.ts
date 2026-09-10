@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inferNotionIdeasPropertyMap } from "../../features/notion/notionIdeas";
+import { inferNotionIdeasPropertyMap, statusOptionsFromSchema } from "../../features/notion/notionIdeas";
 
 describe("inferNotionIdeasPropertyMap", () => {
   it("picks title, status, and notes properties", () => {
@@ -23,5 +23,36 @@ describe("inferNotionIdeasPropertyMap", () => {
       { name: "Status", propertyType: "status" },
     ]);
     expect(map.statusProperty).toBe("Status");
+  });
+
+  it("uses a Progress select when Status is missing", () => {
+    const map = inferNotionIdeasPropertyMap([
+      { name: "Name", propertyType: "title" },
+      { name: "Progress", propertyType: "select", options: ["Idea", "Writing"] },
+      { name: "Tag", propertyType: "select" },
+    ]);
+    expect(map.statusProperty).toBe("Progress");
+  });
+
+  it("prefers Status over Progress", () => {
+    const map = inferNotionIdeasPropertyMap([
+      { name: "Name", propertyType: "title" },
+      { name: "Progress", propertyType: "select" },
+      { name: "Status", propertyType: "status" },
+    ]);
+    expect(map.statusProperty).toBe("Status");
+  });
+
+  it("reads options from the Status property", () => {
+    expect(
+      statusOptionsFromSchema([
+        { name: "Name", propertyType: "title" },
+        {
+          name: "Status",
+          propertyType: "status",
+          options: ["Idea", "Writing", "Done"],
+        },
+      ]),
+    ).toEqual(["Idea", "Writing", "Done"]);
   });
 });

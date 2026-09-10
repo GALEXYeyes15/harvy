@@ -36,6 +36,9 @@ type EditorAmbientControlsProps = {
   onPrint: () => void | Promise<void>;
   podcastNotesEnabled?: boolean;
   podcastNotesRunning?: boolean;
+  onSyncWithNotion?: () => void | Promise<void>;
+  notionSyncEnabled?: boolean;
+  notionSyncRunning?: boolean;
   /** When true, use AppShell chrome visibility instead of local idle/typing reveal timing. */
   syncWithChrome?: boolean;
   /** Shared chrome hidden state from AppShell (top + bottom unified). */
@@ -58,6 +61,9 @@ export function EditorAmbientControls({
   onPrint,
   podcastNotesEnabled = false,
   podcastNotesRunning = false,
+  onSyncWithNotion,
+  notionSyncEnabled = false,
+  notionSyncRunning = false,
   syncWithChrome,
   chromeHidden,
 }: EditorAmbientControlsProps) {
@@ -158,6 +164,9 @@ export function EditorAmbientControls({
             onPrint={onPrint}
             podcastNotesEnabled={podcastNotesEnabled}
             podcastNotesRunning={podcastNotesRunning}
+            onSyncWithNotion={onSyncWithNotion}
+            notionSyncEnabled={notionSyncEnabled}
+            notionSyncRunning={notionSyncRunning}
           />
         )}
       </div>

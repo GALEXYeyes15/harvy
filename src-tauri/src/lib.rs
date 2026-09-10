@@ -117,6 +117,7 @@ pub fn run() {
             commands::notion::notion_query_idea_pages,
             commands::notion::notion_mark_idea_started,
             commands::notion::notion_test_ideas_connection,
+            commands::notion::notion_sync_essay,
             commands::ai_check::ai_check_get_config,
             commands::ai_check::ai_check_save_config,
             commands::ai_check::ai_check_set_enabled,
