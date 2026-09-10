@@ -225,8 +225,8 @@ export function locateAiIssuesInText(
 }
 
 /**
- * Drop AI issues that were replaced/edited away, and re-anchor surviving quotes
- * when earlier edits shifted offsets. Used so sidebar counts stay in sync.
+ * Drop AI / related-essay issues that were replaced/edited away, and re-anchor
+ * surviving quotes when earlier edits shifted offsets.
  */
 export function reconcileAiIssuesInText(
   essay: string,
@@ -236,7 +236,7 @@ export function reconcileAiIssuesInText(
   let searchFrom = 0;
 
   for (const issue of issues) {
-    if (issue.type !== "ai") {
+    if (issue.type !== "ai" && issue.type !== "related") {
       kept.push(issue);
       continue;
     }

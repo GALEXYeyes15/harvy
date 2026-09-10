@@ -1366,6 +1366,7 @@ pub fn ai_check_headline_pairs_from_shots(
 const MAX_RELATED_CANDIDATES: usize = 40;
 const MAX_RELATED_MATCHES: usize = 6;
 const RELATED_EXCERPT_CHARS: usize = 800;
+const RELATED_DRAFT_CHARS: usize = 4000;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1382,6 +1383,8 @@ pub struct RelatedEssayMatch {
     pub id: String,
     #[serde(default)]
     pub why: String,
+    #[serde(default)]
+    pub phrase: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1404,9 +1407,10 @@ fn truncate_related_text(value: &str, max_chars: usize) -> String {
 
 fn related_essays_system_prompt() -> &'static str {
     "You rank past essays by how useful they are as related reading for the current draft.\n\
-Return JSON only: {\"matches\":[{\"id\":\"...\",\"why\":\"short reason\"}]}.\n\
+Return JSON only: {\"matches\":[{\"id\":\"...\",\"why\":\"short reason\",\"phrase\":\"verbatim draft phrase\"}]}.\n\
 Use only candidate ids from the user message. Rank at most 6, strongest first.\n\
-Skip weak or unrelated matches. \"why\" is one short sentence."
+Skip weak or unrelated matches. \"why\" is one short sentence about the shared idea.\n\
+\"phrase\" MUST be copied verbatim from the current draft excerpt — a specific 3 to 12 word span, not a paraphrase."
 }
 
 fn compose_related_essays_user_text(
@@ -1418,7 +1422,7 @@ fn compose_related_essays_user_text(
     out.push_str("Current draft title: ");
     out.push_str(&truncate_related_text(title, 200));
     out.push_str("\nCurrent draft excerpt:\n");
-    out.push_str(&truncate_related_text(excerpt, RELATED_EXCERPT_CHARS));
+    out.push_str(&truncate_related_text(excerpt, RELATED_DRAFT_CHARS));
     out.push_str("\n\nCandidates:\n");
     for candidate in candidates.iter().take(MAX_RELATED_CANDIDATES) {
         out.push_str("- id: ");
@@ -1454,9 +1458,14 @@ fn parse_related_matches_from_model_text(
         .map(|m| RelatedEssayMatch {
             id: m.id.trim().to_string(),
             why: m.why.trim().to_string(),
+            phrase: m.phrase.trim().to_string(),
         })
         .filter(|m| {
-            if m.id.is_empty() || !allowed_ids.contains(&m.id) || !seen.insert(m.id.clone()) {
+            if m.id.is_empty()
+                || m.phrase.is_empty()
+                || !allowed_ids.contains(&m.id)
+                || !seen.insert(m.id.clone())
+            {
                 return false;
             }
             true
@@ -1722,16 +1731,23 @@ mod tests {
     #[test]
     fn parses_related_matches_and_drops_unknown_ids() {
         let raw = r#"{"matches":[
-          {"id":" /a.md ","why":" Same theme. "},
-          {"id":"missing.md","why":"skip"},
-          {"id":"/a.md","why":"duplicate"},
-          {"id":"/b.md","why":"Contrasts the claim."}
+          {"id":" /a.md ","why":" Same theme. ","phrase":" rest will not fix "},
+          {"id":"missing.md","why":"skip","phrase":"ignored"},
+          {"id":"/a.md","why":"duplicate","phrase":"rest will not fix"},
+          {"id":"/b.md","why":"Contrasts the claim.","phrase":"coping is not hoping"},
+          {"id":"/c.md","why":"no phrase"}
         ]}"#;
-        let allowed = HashSet::from(["/a.md".to_string(), "/b.md".to_string()]);
+        let allowed = HashSet::from([
+            "/a.md".to_string(),
+            "/b.md".to_string(),
+            "/c.md".to_string(),
+        ]);
         let matches = parse_related_matches_from_model_text(raw, &allowed).unwrap();
         assert_eq!(matches.len(), 2);
         assert_eq!(matches[0].id, "/a.md");
         assert_eq!(matches[0].why, "Same theme.");
+        assert_eq!(matches[0].phrase, "rest will not fix");
         assert_eq!(matches[1].id, "/b.md");
+        assert_eq!(matches[1].phrase, "coping is not hoping");
     }
 }

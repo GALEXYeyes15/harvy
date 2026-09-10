@@ -1761,8 +1761,9 @@
     background-size: 6px 3px;
   }
 
-  /* AI check — solid cyan bar (distinct from dotted green suggestions) */
-  .harvy-mechanics-underline-layer .harvy-mechanics-underline--ai {
+  /* AI check / related essays — solid cyan bar (distinct from dotted green suggestions) */
+  .harvy-mechanics-underline-layer .harvy-mechanics-underline--ai,
+  .harvy-mechanics-underline-layer .harvy-mechanics-underline--related {
     background-image: none;
     background-color: #22d3ee;
     height: 2px;

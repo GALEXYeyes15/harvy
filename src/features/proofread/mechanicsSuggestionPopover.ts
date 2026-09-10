@@ -6,6 +6,7 @@ import {
   openHarvyContextMenuAt,
   type HarvyContextMenuSection,
 } from "../editor/harvyContextMenu";
+import { relatedEssayLinkingRef } from "../related-essays/relatedEssayLinkingRef";
 import type { MechanicsSuggestionPopoverAnchor } from "./mechanicsIssueAtClick";
 import { ignoreMechanicsSuggestionForDocument } from "./mechanics/mechanicsSuggestionIgnore";
 import { spellingContextMenuRef } from "./spellingContextMenuRef";
@@ -27,11 +28,77 @@ function replacementText(issue: ProofreadIssue): string | null {
   return replacement;
 }
 
+function wrapRangeWithLink(view: EditorView, from: number, to: number, href: string): boolean {
+  const markType = view.state.schema.marks.link;
+  if (!markType || from >= to) return false;
+  view.dispatch(view.state.tr.addMark(from, to, markType.create({ href })));
+  return true;
+}
+
+function openRelatedEssayPopover(opts: {
+  view: EditorView;
+  anchor: MechanicsSuggestionPopoverAnchor;
+}): void {
+  const { view, anchor } = opts;
+  const { issue, pmFrom, pmTo } = anchor;
+  const title = issue.relatedTitle?.trim() || "Related essay";
+  const message = displayMessage(issue);
+  const url = issue.relatedUrl?.trim() ?? "";
+  const path = issue.relatedPath?.trim() ?? "";
+
+  openHarvyContextMenuAt({
+    view,
+    anchor: { from: pmFrom, to: pmTo },
+    placement: "below-start",
+    alignToUnderlineMount: true,
+    className: "harvy-mechanics-suggestion-popover",
+    populate: (menuEl, runAction) => {
+      const header = document.createElement("p");
+      header.className = "harvy-context-menu__title harvy-context-menu__title--ai";
+      header.textContent = title;
+      menuEl.appendChild(header);
+
+      const note = document.createElement("p");
+      note.className = "harvy-context-menu__note harvy-context-menu__note--left";
+      note.textContent = message;
+      menuEl.appendChild(note);
+
+      const divider = document.createElement("div");
+      divider.className = HARVY_CONTEXT_MENU_DIVIDER_CLASS;
+      divider.setAttribute("aria-hidden", "true");
+      menuEl.appendChild(divider);
+
+      appendHarvyContextMenuSections(
+        menuEl,
+        [
+          [
+            {
+              label: "Link Essay",
+              disabled: !url,
+              onClick: () => {
+                if (!url || !wrapRangeWithLink(view, pmFrom, pmTo, url)) return;
+                relatedEssayLinkingRef.onLinkEssay({ path, url });
+                spellingContextMenuRef.onRefresh();
+              },
+            },
+          ],
+        ],
+        runAction,
+      );
+    },
+  });
+}
+
 export function openMechanicsSuggestionPopover(opts: {
   view: EditorView;
   anchor: MechanicsSuggestionPopoverAnchor;
 }): void {
   const { view, anchor } = opts;
+  if (anchor.issue.type === "related") {
+    openRelatedEssayPopover(opts);
+    return;
+  }
+
   const { issue, pmFrom, pmTo } = anchor;
   const message = displayMessage(issue);
   const replacement = replacementText(issue);

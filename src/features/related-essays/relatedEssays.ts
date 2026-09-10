@@ -9,6 +9,7 @@ import type { FileNode } from "../workspace/types";
 export const DOCUMENT_RELATED_SUFFIX = ".harvy-related.json";
 export const MAX_RELATED_CANDIDATES = 40;
 export const RELATED_EXCERPT_CHARS = 800;
+export const RELATED_DRAFT_CHARS = 4000;
 
 export type RelatedEssayItem = {
   title: string;
@@ -16,6 +17,12 @@ export type RelatedEssayItem = {
   notionUrl?: string;
   publicUrl?: string;
   why?: string;
+  phrase?: string;
+};
+
+export type RelatedEssaySidecar = {
+  items: RelatedEssayItem[];
+  linkedPaths: string[];
 };
 
 export type RelatedEssayCandidate = {
@@ -29,6 +36,7 @@ export type RelatedEssayCandidate = {
 type RelatedRankMatch = {
   id: string;
   why: string;
+  phrase?: string;
 };
 
 export function documentRelatedSidecarPath(sourcePath: string): string {
@@ -79,6 +87,26 @@ export function preferredRelatedUrl(item: {
 }
 
 export function parseRelatedEssayItems(raw: string): RelatedEssayItem[] {
+  return parseRelatedEssaySidecar(raw).items;
+}
+
+function parseLinkedPaths(parsed: unknown): string[] {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
+  const list = (parsed as { linkedPaths?: unknown }).linkedPaths;
+  if (!Array.isArray(list)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of list) {
+    if (typeof entry !== "string") continue;
+    const path = entry.trim();
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    out.push(path);
+  }
+  return out;
+}
+
+export function parseRelatedEssaySidecar(raw: string): RelatedEssaySidecar {
   try {
     const parsed = JSON.parse(raw) as unknown;
     const list = Array.isArray(parsed)
@@ -99,37 +127,52 @@ export function parseRelatedEssayItems(raw: string): RelatedEssayItem[] {
         notionUrl: typeof record.notionUrl === "string" ? record.notionUrl.trim() : "",
         publicUrl: typeof record.publicUrl === "string" ? record.publicUrl.trim() : "",
         why: typeof record.why === "string" ? record.why.trim() : "",
+        phrase: typeof record.phrase === "string" ? record.phrase.trim() : "",
       });
     }
-    return items;
+    return { items, linkedPaths: parseLinkedPaths(parsed) };
   } catch {
-    return [];
+    return { items: [], linkedPaths: [] };
+  }
+}
+
+export async function loadRelatedEssaySidecar(
+  sourcePath: string,
+): Promise<RelatedEssaySidecar> {
+  if (!isTauriRuntime() || !sourcePath.trim()) return { items: [], linkedPaths: [] };
+  try {
+    const raw = await invoke<string>("read_workspace_text_file", {
+      path: documentRelatedSidecarPath(sourcePath),
+    });
+    return parseRelatedEssaySidecar(raw);
+  } catch {
+    return { items: [], linkedPaths: [] };
   }
 }
 
 export async function loadRelatedEssayItems(
   sourcePath: string,
 ): Promise<RelatedEssayItem[]> {
-  if (!isTauriRuntime() || !sourcePath.trim()) return [];
-  try {
-    const raw = await invoke<string>("read_workspace_text_file", {
-      path: documentRelatedSidecarPath(sourcePath),
-    });
-    return parseRelatedEssayItems(raw);
-  } catch {
-    return [];
-  }
+  return (await loadRelatedEssaySidecar(sourcePath)).items;
+}
+
+export async function saveRelatedEssaySidecar(
+  sourcePath: string,
+  sidecar: RelatedEssaySidecar,
+): Promise<void> {
+  if (!isTauriRuntime() || !sourcePath.trim()) return;
+  await invoke("write_text_file", {
+    path: documentRelatedSidecarPath(sourcePath),
+    contents: `${JSON.stringify({ items: sidecar.items, linkedPaths: sidecar.linkedPaths }, null, 2)}\n`,
+  });
 }
 
 export async function saveRelatedEssayItems(
   sourcePath: string,
   items: RelatedEssayItem[],
 ): Promise<void> {
-  if (!isTauriRuntime() || !sourcePath.trim()) return;
-  await invoke("write_text_file", {
-    path: documentRelatedSidecarPath(sourcePath),
-    contents: `${JSON.stringify({ items }, null, 2)}\n`,
-  });
+  const existing = await loadRelatedEssaySidecar(sourcePath);
+  await saveRelatedEssaySidecar(sourcePath, { items, linkedPaths: existing.linkedPaths });
 }
 
 export async function renameRelatedEssaySidecar(
@@ -211,12 +254,15 @@ export async function rankRelatedEssays(input: {
   for (const match of result.matches ?? []) {
     const candidate = byId.get(match.id.trim());
     if (!candidate) continue;
+    const phrase = match.phrase?.trim() ?? "";
+    if (!phrase) continue;
     items.push({
       title: candidate.title,
       path: candidate.id,
       notionUrl: candidate.notionUrl,
       publicUrl: candidate.publicUrl,
       why: match.why.trim(),
+      phrase,
     });
   }
   return items;

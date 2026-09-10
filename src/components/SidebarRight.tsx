@@ -10,6 +10,7 @@ import type { WorkspaceSection } from "../features/workspace/workspaceSection";
 import { CriteriaSidebarPanel } from "./CriteriaSidebarPanel";
 import { NotesSidebarPanel } from "./NotesSidebarPanel";
 import type { FileNode } from "../features/workspace/types";
+import type { RelatedEssayItem } from "../features/related-essays/relatedEssays";
 
 const PANEL =
   "relative flex h-full min-h-0 w-full flex-col bg-stage font-[system-ui,-apple-system,BlinkMacSystemFont,'Segoe_UI',sans-serif] text-ink antialiased [backdrop-filter:none]";
@@ -52,7 +53,7 @@ export type SidebarRightProps = {
   relatedExcerpt?: string;
   workspaceTree?: FileNode | null;
   relatedAiReady?: boolean;
-  onOpenRelatedFile?: (path: string) => void;
+  onRelatedItemsFound?: (items: RelatedEssayItem[]) => Promise<string | null>;
   /** When on, Criteria appears as a tools tab (Write). */
   showCriteria?: boolean;
   proofreadIssues?: ProofreadIssue[];
@@ -361,7 +362,7 @@ export function SidebarRight({
   relatedExcerpt = "",
   workspaceTree = null,
   relatedAiReady = false,
-  onOpenRelatedFile,
+  onRelatedItemsFound,
   showCriteria = true,
   proofreadIssues = [],
   workspaceSection = "write",
@@ -396,7 +397,7 @@ export function SidebarRight({
             relatedExcerpt={relatedExcerpt}
             workspaceTree={workspaceTree}
             aiReady={relatedAiReady}
-            onOpenRelatedFile={onOpenRelatedFile}
+            onRelatedItemsFound={onRelatedItemsFound}
           />
         </div>
       </div>
@@ -433,7 +434,7 @@ export function SidebarRight({
             relatedExcerpt={relatedExcerpt}
             workspaceTree={workspaceTree}
             aiReady={relatedAiReady}
-            onOpenRelatedFile={onOpenRelatedFile}
+            onRelatedItemsFound={onRelatedItemsFound}
           />
         ) : mode === "criteria" ? (
           <CriteriaSidebarPanel criteria={criteria} onCriteriaChange={onCriteriaChange} />

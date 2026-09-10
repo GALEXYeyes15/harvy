@@ -174,7 +174,23 @@ import {
   serializeDocumentWithFrontmatter,
 } from "../features/editor/documentFrontmatter";
 import { EMPTY_NOTION_ESSAY_FIELDS, type FileNode, type WorkspaceDocument } from "../features/workspace/types";
-import { excerptFromMarkdown, renameRelatedEssaySidecar } from "../features/related-essays/relatedEssays";
+import {
+  excerptFromMarkdown,
+  loadRelatedEssaySidecar,
+  RELATED_DRAFT_CHARS,
+  renameRelatedEssaySidecar,
+  saveRelatedEssaySidecar,
+  type RelatedEssayItem,
+} from "../features/related-essays/relatedEssays";
+import { syncRelatedEssayLinkingRef } from "../features/related-essays/relatedEssayLinkingRef";
+import {
+  collectDocLinkHrefs,
+  locateRelatedPhrasesInText,
+  MAX_RELATED_LINKS,
+  relatedIssuesAfterLinking,
+  uniqueLinkedRelatedPaths,
+  uniqueStrings,
+} from "../features/related-essays/relatedPhrases";
 import {
   PUBLIC_URLS_MATCHED_EVENT,
   type PublishedUrlUpdate,
@@ -235,7 +251,7 @@ import {
   isSidebarModeForSection,
   type SidebarToolsMode,
 } from "../features/sidebar/sidebarToolsMode";
-import { setMechanicsUnderlinesVisible } from "../features/proofread/mechanicsUnderlineLayer";
+import { setMechanicsUnderlinesVisible, proofreadDecorationsViewRef } from "../features/proofread/mechanicsUnderlineLayer";
 import {
   grammarDecorationsKey,
   writingAssistanceViewRef,
@@ -540,6 +556,7 @@ export function AppShell() {
   const [proofreadIssues, setProofreadIssues] = useState<ProofreadIssue[]>([]);
   const [aiCheckConfig, setAiCheckConfig] = useState<AiCheckConfigPublic | null>(null);
   const [aiProofreadIssues, setAiProofreadIssues] = useState<ProofreadIssue[]>([]);
+  const [relatedProofreadIssues, setRelatedProofreadIssues] = useState<ProofreadIssue[]>([]);
   const [aiCheckRunning, setAiCheckRunning] = useState(false);
   const [podcastNotesRunning, setPodcastNotesRunning] = useState(false);
   const exportOverlayOpen = saveAsModalOpen || podcastNotesPreviewOpen;
@@ -551,6 +568,9 @@ export function AppShell() {
   const [headlinePairsError, setHeadlinePairsError] = useState<string | null>(null);
   const [selectedHeadlineIndex, setSelectedHeadlineIndex] = useState<number | null>(null);
   const aiProofreadIssuesRef = useRef<ProofreadIssue[]>([]);
+  const relatedProofreadIssuesRef = useRef<ProofreadIssue[]>([]);
+  const relatedLinkedPathsRef = useRef<string[]>([]);
+  const relatedItemsRef = useRef<RelatedEssayItem[]>([]);
   /** Sidebar inline rename for a newly created (or future: any) folder. */
   const [folderRename, setFolderRename] = useState<{
     path: string;
@@ -2966,8 +2986,15 @@ export function AppShell() {
       : hasWorkspaceFolder
         ? "Select a tab above or pick a file from your workspace."
         : "Choose a workspace folder to open and save files.");
+  const relatedExcerpt = useMemo(() => {
+    if (tiptapEditor) {
+      return proofreadPlainTextAndPositions(tiptapEditor.state.doc).text.slice(0, RELATED_DRAFT_CHARS);
+    }
+    return excerptFromMarkdown(editorText, RELATED_DRAFT_CHARS);
+  }, [tiptapEditor, editorText]);
   const showReadabilityHighlights = readabilityPanelOpen && mode === "edit";
-  const showMechanicsUnderlines = readabilityPanelOpen && mode === "edit";
+  const showMechanicsUnderlines =
+    readabilityPanelOpen && (mode === "edit" || (mode === "notes" && relatedProofreadIssues.length > 0));
   /** Native misspelling underlines: same gate as grammar highlights (Edit tab + readability rail open + user pref). */
   const showEditModeSpellcheck =
     writingAssistancePrefs.spellcheck && readabilityPanelOpen && mode === "edit";
@@ -2980,17 +3007,16 @@ export function AppShell() {
   }, [showReadabilityHighlights, tiptapEditor, parametersPrefs.fkComplexityThreshold]);
 
   useEffect(() => {
-    if (!tiptapEditor) return;
-    setMechanicsUnderlinesVisible(tiptapEditor.view, showMechanicsUnderlines);
-  }, [showMechanicsUnderlines, tiptapEditor]);
-
-  useEffect(() => {
     void ensureHunspellLoaded();
   }, []);
 
   useEffect(() => {
     aiProofreadIssuesRef.current = aiProofreadIssues;
   }, [aiProofreadIssues]);
+
+  useEffect(() => {
+    relatedProofreadIssuesRef.current = relatedProofreadIssues;
+  }, [relatedProofreadIssues]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -3017,6 +3043,10 @@ export function AppShell() {
   useEffect(() => {
     aiProofreadIssuesRef.current = [];
     setAiProofreadIssues([]);
+    relatedProofreadIssuesRef.current = [];
+    setRelatedProofreadIssues([]);
+    relatedLinkedPathsRef.current = [];
+    relatedItemsRef.current = [];
     setAiCheckCostLabel(null);
     setAiCheckError(null);
   }, [editorInstanceKey]);
@@ -3037,9 +3067,39 @@ export function AppShell() {
     setAiProofreadIssues(issues);
   }, []);
 
-  /** Live rule-based mechanics (Spelling / Grammar / Suggestions) — runs in Edit mode regardless of sidebar. */
+  const persistRelatedIssues = useCallback((issues: ProofreadIssue[]) => {
+    const prev = relatedProofreadIssuesRef.current;
+    const unchanged =
+      prev.length === issues.length &&
+      prev.every(
+        (issue, index) =>
+          issue.start === issues[index]!.start &&
+          issue.end === issues[index]!.end &&
+          issue.text === issues[index]!.text &&
+          issue.message === issues[index]!.message &&
+          issue.relatedPath === issues[index]!.relatedPath,
+      );
+    if (unchanged) return;
+    relatedProofreadIssuesRef.current = issues;
+    setRelatedProofreadIssues(issues);
+  }, []);
+
+  const extraProofreadIssues = useCallback(
+    () => [...aiProofreadIssuesRef.current, ...relatedProofreadIssuesRef.current],
+    [],
+  );
+
+  const persistExtraIssues = useCallback(
+    (issues: ProofreadIssue[]) => {
+      persistAiIssues(issues.filter((issue) => issue.type === "ai"));
+      persistRelatedIssues(issues.filter((issue) => issue.type === "related"));
+    },
+    [persistAiIssues, persistRelatedIssues],
+  );
+
+  /** Live rule-based mechanics (Spelling / Grammar / Suggestions) while the document is editable. */
   useEffect(() => {
-    if (!tiptapEditor || mode !== "edit" || !editorEditable) {
+    if (!tiptapEditor || !editorEditable) {
       return;
     }
 
@@ -3047,8 +3107,8 @@ export function AppShell() {
       void syncMechanicsProofread(
         tiptapEditor,
         setProofreadIssues,
-        () => aiProofreadIssuesRef.current,
-        persistAiIssues,
+        extraProofreadIssues,
+        persistExtraIssues,
       );
     };
 
@@ -3065,17 +3125,17 @@ export function AppShell() {
       tiptapEditor.off("update", onUpdate);
       if (debounceId) clearTimeout(debounceId);
     };
-  }, [tiptapEditor, mode, editorEditable, persistAiIssues]);
+  }, [tiptapEditor, editorEditable, extraProofreadIssues, persistExtraIssues]);
 
   const refreshMechanicsProofread = useCallback(() => {
     if (!tiptapEditor) return;
     void syncMechanicsProofread(
       tiptapEditor,
       setProofreadIssues,
-      () => aiProofreadIssuesRef.current,
-      persistAiIssues,
+      extraProofreadIssues,
+      persistExtraIssues,
     );
-  }, [tiptapEditor, persistAiIssues]);
+  }, [tiptapEditor, extraProofreadIssues, persistExtraIssues]);
 
   const handleRunAiCheck = useCallback(async () => {
     if (!tiptapEditor || !isTauriRuntime()) return;
@@ -3101,15 +3161,95 @@ export function AppShell() {
       await syncMechanicsProofread(
         tiptapEditor,
         setProofreadIssues,
-        () => located,
-        persistAiIssues,
+        () => [...located, ...relatedProofreadIssuesRef.current],
+        persistExtraIssues,
       );
     } catch (e) {
       setAiCheckError(e instanceof Error ? e.message : String(e));
     } finally {
       setAiCheckRunning(false);
     }
-  }, [tiptapEditor, persistAiIssues]);
+  }, [tiptapEditor, persistAiIssues, persistExtraIssues]);
+
+  const applyRelatedEssayItems = useCallback(
+    async (items: RelatedEssayItem[]): Promise<string | null> => {
+      if (!tiptapEditor || !activeSourcePath) return "Save this essay first.";
+      relatedItemsRef.current = items;
+      const text = proofreadPlainTextAndPositions(tiptapEditor.state.doc).text;
+      const hrefs = collectDocLinkHrefs(tiptapEditor.state.doc);
+      const linked = uniqueLinkedRelatedPaths({
+        linkedPaths: relatedLinkedPathsRef.current,
+        items,
+        hrefs,
+      });
+      relatedLinkedPathsRef.current = linked;
+      await saveRelatedEssaySidecar(activeSourcePath, { items, linkedPaths: linked });
+      if (linked.length >= MAX_RELATED_LINKS) {
+        persistRelatedIssues([]);
+        refreshMechanicsProofread();
+        return "This essay already links 2 related essays.";
+      }
+      const issues = locateRelatedPhrasesInText(text, items).filter(
+        (issue) => !issue.relatedPath || !linked.includes(issue.relatedPath),
+      );
+      persistRelatedIssues(issues);
+      refreshMechanicsProofread();
+      if (items.length > 0 && issues.length === 0) {
+        return "Found related essays, but no matching phrases in this draft.";
+      }
+      return null;
+    },
+    [tiptapEditor, activeSourcePath, persistRelatedIssues, refreshMechanicsProofread],
+  );
+
+  useEffect(() => {
+    if (!activeSourcePath || !tiptapEditor) return;
+    let cancelled = false;
+    void loadRelatedEssaySidecar(activeSourcePath).then((sidecar) => {
+      if (cancelled) return;
+      relatedItemsRef.current = sidecar.items;
+      relatedLinkedPathsRef.current = sidecar.linkedPaths;
+      const text = proofreadPlainTextAndPositions(tiptapEditor.state.doc).text;
+      const hrefs = collectDocLinkHrefs(tiptapEditor.state.doc);
+      const linked = uniqueLinkedRelatedPaths({
+        linkedPaths: sidecar.linkedPaths,
+        items: sidecar.items,
+        hrefs,
+      });
+      relatedLinkedPathsRef.current = linked;
+      const issues =
+        linked.length >= MAX_RELATED_LINKS
+          ? []
+          : locateRelatedPhrasesInText(text, sidecar.items).filter(
+              (issue) => !issue.relatedPath || !linked.includes(issue.relatedPath),
+            );
+      persistRelatedIssues(issues);
+      refreshMechanicsProofread();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSourcePath, tiptapEditor, editorInstanceKey, persistRelatedIssues, refreshMechanicsProofread]);
+
+  useEffect(() => {
+    syncRelatedEssayLinkingRef({
+      onLinkEssay: ({ path }) => {
+        const linkedPath = path.trim();
+        if (!linkedPath) return;
+        const nextLinked = uniqueStrings([...relatedLinkedPathsRef.current, linkedPath]);
+        relatedLinkedPathsRef.current = nextLinked;
+        persistRelatedIssues(
+          relatedIssuesAfterLinking(relatedProofreadIssuesRef.current, nextLinked, linkedPath),
+        );
+        if (activeSourcePath) {
+          void saveRelatedEssaySidecar(activeSourcePath, {
+            items: relatedItemsRef.current,
+            linkedPaths: nextLinked,
+          });
+        }
+      },
+    });
+  }, [activeSourcePath, persistRelatedIssues]);
 
   const handleGenerateHeadlines = useCallback(async () => {
     if (!isTauriRuntime()) {
@@ -3192,9 +3332,19 @@ export function AppShell() {
   }, [editorInstanceKey]);
 
   useEffect(() => {
+    proofreadDecorationsViewRef.relatedOnly = mode === "notes";
+    if (!tiptapEditor) return;
+    setMechanicsUnderlinesVisible(tiptapEditor.view, showMechanicsUnderlines);
+    refreshMechanicsProofread();
+  }, [showMechanicsUnderlines, mode, tiptapEditor, refreshMechanicsProofread]);
+
+  useEffect(() => {
     syncSpellingContextMenuRef({
       enabled: showMechanicsUnderlines && editorEditable,
-      issues: proofreadIssues,
+      issues:
+        mode === "notes"
+          ? proofreadIssues.filter((issue) => issue.type === "related")
+          : proofreadIssues,
       documentKey: editorInstanceKey,
       onRefresh: refreshMechanicsProofread,
     });
@@ -3204,6 +3354,7 @@ export function AppShell() {
     proofreadIssues,
     editorInstanceKey,
     refreshMechanicsProofread,
+    mode,
   ]);
 
   const copyDocumentFallbackMarkdown = useMemo(
@@ -3667,16 +3818,10 @@ export function AppShell() {
       relatedTitle={
         (activeDocument?.postTitle ?? "").trim() || editorTitleBase.trim() || "Untitled"
       }
-      relatedExcerpt={excerptFromMarkdown(editorText)}
+      relatedExcerpt={relatedExcerpt}
       workspaceTree={workspaceTree}
       relatedAiReady={Boolean(aiCheckConfig?.enabled && aiCheckConfig.hasApiKey)}
-      onOpenRelatedFile={(path) => {
-        void selectNode({
-          name: fileNameFromPath(path),
-          path,
-          kind: "file",
-        });
-      }}
+      onRelatedItemsFound={applyRelatedEssayItems}
       showCriteria={showCriteria}
       aiCheckEnabled={Boolean(
         aiCheckConfig?.enabled && aiCheckConfig.hasApiKey && showAiCheck,

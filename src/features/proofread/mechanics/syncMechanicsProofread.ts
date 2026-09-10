@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import { reconcileAiIssuesInText } from "../../aiCheck/aiCheck";
-import { dispatchProofreadDecorations } from "../mechanicsUnderlineLayer";
+import { dispatchProofreadDecorations, proofreadDecorationsViewRef } from "../mechanicsUnderlineLayer";
 import { proofreadIssuesToPmRanges } from "../mechanicsUnderlineRanges";
 import { proofreadPlainTextAndPositions } from "../proofreadPlainMap";
 import type { ProofreadIssue } from "../types";
@@ -14,13 +14,14 @@ function countByType(issues: ProofreadIssue[]): Record<ProofreadIssue["type"], n
     grammar: issues.filter((i) => i.type === "grammar").length,
     suggestion: issues.filter((i) => i.type === "suggestion").length,
     ai: issues.filter((i) => i.type === "ai").length,
+    related: issues.filter((i) => i.type === "related").length,
   };
 }
 
 /**
  * Run the local mechanics engine, update React state, and paint overlay underlines.
- * `getExtraIssues` merges on-demand AI check hits so they survive local re-syncs.
- * `setExtraIssues` persists reconciled AI hits after Ignore / Replace / edits.
+ * `getExtraIssues` merges on-demand AI / related-essay hits so they survive local re-syncs.
+ * `setExtraIssues` persists reconciled extra hits after Ignore / Replace / edits.
  */
 export async function syncMechanicsProofread(
   editor: Editor,
@@ -44,8 +45,10 @@ export async function syncMechanicsProofread(
   const reconciledExtra = reconcileAiIssuesInText(snapshot.text, getExtraIssues?.() ?? []);
   const extra = filterIgnoredMechanicsSuggestions(reconciledExtra);
   if (setExtraIssues) {
-    const remainingAi = extra.filter((issue) => issue.type === "ai");
-    setExtraIssues(remainingAi);
+    const remainingExtra = extra.filter(
+      (issue) => issue.type === "ai" || issue.type === "related",
+    );
+    setExtraIssues(remainingExtra);
   }
   const merged = extra.length > 0 ? [...extra, ...issues] : issues;
 
@@ -57,6 +60,9 @@ export async function syncMechanicsProofread(
   setProofreadIssues(merged);
 
   const ranges = proofreadIssuesToPmRanges(merged, snapshot.charToPmPos, snapshot.text);
+  const paint = proofreadDecorationsViewRef.relatedOnly
+    ? ranges.filter((range) => range.type === "related")
+    : ranges;
 
   if (import.meta.env.DEV) {
     console.log("[HarvyMechanics] overlay underline ranges", {
@@ -66,7 +72,7 @@ export async function syncMechanicsProofread(
     });
   }
 
-  dispatchProofreadDecorations(editor.view, ranges);
+  dispatchProofreadDecorations(editor.view, paint);
 
   return merged;
 }

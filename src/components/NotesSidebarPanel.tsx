@@ -1,6 +1,7 @@
 import { SquareArrowOutUpRight } from "lucide-react";
 import { handleNotesTextareaTabKey } from "../features/notes/notesTextareaIndent";
 import type { FileNode } from "../features/workspace/types";
+import type { RelatedEssayItem } from "../features/related-essays/relatedEssays";
 import { QuickLinksSidebarPanel } from "./QuickLinksSidebarPanel";
 import { RelatedEssaysSidebarPanel } from "./RelatedEssaysSidebarPanel";
 
@@ -16,7 +17,7 @@ type NotesSidebarPanelProps = {
   relatedExcerpt?: string;
   workspaceTree?: FileNode | null;
   aiReady?: boolean;
-  onOpenRelatedFile?: (path: string) => void;
+  onRelatedItemsFound?: (items: RelatedEssayItem[]) => Promise<string | null>;
 };
 
 export function NotesSidebarPanel({
@@ -29,7 +30,7 @@ export function NotesSidebarPanel({
   relatedExcerpt = "",
   workspaceTree = null,
   aiReady = false,
-  onOpenRelatedFile,
+  onRelatedItemsFound,
 }: NotesSidebarPanelProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -72,7 +73,7 @@ export function NotesSidebarPanel({
           currentExcerpt={relatedExcerpt}
           workspaceTree={workspaceTree}
           aiReady={aiReady}
-          onOpenFile={onOpenRelatedFile}
+          onRelatedItemsFound={onRelatedItemsFound}
         />
       </div>
     </div>
