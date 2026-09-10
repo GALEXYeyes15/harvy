@@ -260,7 +260,7 @@ export function EditorExportMenu({
                       disabled={!publishEnabled || !onPublish}
                       title={
                         publishEnabled
-                          ? "Copy the post and open your publish link in the browser"
+                          ? "Copy the post, sync it to Notion, and open your publish link"
                           : "Add a publish link in Settings → Export"
                       }
                       onClick={() => {
@@ -268,7 +268,7 @@ export function EditorExportMenu({
                         runAction(onPublish);
                       }}
                     >
-                      <span className="min-w-0 flex-1">Copy + Publish</span>
+                      <span className="min-w-0 flex-1">Copy, Sync, + Publish</span>
                       <SquareArrowOutUpRight
                         size={14}
                         strokeWidth={2}

@@ -19,6 +19,7 @@ const NOTION_VERSION: &str = "2022-06-28";
 const CONFIG_FILE_NAME: &str = "notion-ideas.json";
 const DEFAULT_IDEA_STATUS: &str = "Idea";
 const DEFAULT_STARTED_STATUS: &str = "Started";
+const DEFAULT_PUBLISHED_STATUS: &str = "Published";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +35,15 @@ pub struct NotionIdeasConfig {
     /// Status value set when Start writing (removed from Ideas).
     #[serde(default = "default_started_status")]
     pub started_status_value: String,
+    /// Status value set by Copy, Sync, + Publish.
+    #[serde(default = "default_published_status")]
+    pub published_status_value: String,
+    /// Optional URL property on the Ideas database for the published essay link.
+    #[serde(default)]
+    pub url_property: String,
+    /// Optional date property stamped when publishing.
+    #[serde(default)]
+    pub date_property: String,
 }
 
 fn default_idea_status() -> String {
@@ -42,6 +52,10 @@ fn default_idea_status() -> String {
 
 fn default_started_status() -> String {
     DEFAULT_STARTED_STATUS.to_string()
+}
+
+fn default_published_status() -> String {
+    DEFAULT_PUBLISHED_STATUS.to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +68,9 @@ pub struct NotionIdeasConfigPublic {
     pub status_property: String,
     pub idea_status_value: String,
     pub started_status_value: String,
+    pub published_status_value: String,
+    pub url_property: String,
+    pub date_property: String,
     /// Whether a token is stored (never returns the secret).
     pub has_token: bool,
 }
@@ -96,6 +113,8 @@ pub struct NotionSyncEssayResult {
     pub parent_page_id: String,
     pub essay_page_id: String,
     pub rename_parent: bool,
+    pub parent_url: String,
+    pub essay_url: String,
 }
 
 fn config_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
@@ -586,6 +605,9 @@ pub fn notion_get_ideas_config(app: AppHandle) -> Result<NotionIdeasConfigPublic
             status_property: String::new(),
             idea_status_value: DEFAULT_IDEA_STATUS.to_string(),
             started_status_value: DEFAULT_STARTED_STATUS.to_string(),
+            published_status_value: DEFAULT_PUBLISHED_STATUS.to_string(),
+            url_property: String::new(),
+            date_property: String::new(),
             has_token: false,
         }),
         Some(c) => Ok(NotionIdeasConfigPublic {
@@ -604,6 +626,13 @@ pub fn notion_get_ideas_config(app: AppHandle) -> Result<NotionIdeasConfigPublic
             } else {
                 c.started_status_value
             },
+            published_status_value: if c.published_status_value.trim().is_empty() {
+                DEFAULT_PUBLISHED_STATUS.to_string()
+            } else {
+                c.published_status_value
+            },
+            url_property: c.url_property,
+            date_property: c.date_property,
             has_token: !c.token.trim().is_empty(),
         }),
     }
@@ -619,6 +648,9 @@ pub struct NotionSaveConfigInput {
     pub status_property: String,
     pub idea_status_value: Option<String>,
     pub started_status_value: Option<String>,
+    pub published_status_value: Option<String>,
+    pub url_property: Option<String>,
+    pub date_property: Option<String>,
     /// When true and token is empty, keep the previously saved token.
     pub keep_existing_token: Option<bool>,
 }
@@ -669,6 +701,31 @@ pub fn notion_save_ideas_config(
             .filter(|s| !s.is_empty())
             .unwrap_or(DEFAULT_STARTED_STATUS)
             .to_string(),
+        published_status_value: input
+            .published_status_value
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or(DEFAULT_PUBLISHED_STATUS)
+            .to_string(),
+        url_property: input.url_property.as_ref().map_or_else(
+            || {
+                existing
+                    .as_ref()
+                    .map(|c| c.url_property.clone())
+                    .unwrap_or_default()
+            },
+            |s| s.trim().to_string(),
+        ),
+        date_property: input.date_property.as_ref().map_or_else(
+            || {
+                existing
+                    .as_ref()
+                    .map(|c| c.date_property.clone())
+                    .unwrap_or_default()
+            },
+            |s| s.trim().to_string(),
+        ),
     };
     write_config(&app, &config)?;
     notion_get_ideas_config(app)
@@ -1007,6 +1064,117 @@ pub fn notion_mark_idea_started(app: AppHandle, page_id: String) -> Result<(), S
     Ok(())
 }
 
+fn status_property_payload(status_type: &str, name: &str) -> Value {
+    match status_type {
+        "select" => json!({ "select": { "name": name } }),
+        _ => json!({ "status": { "name": name } }),
+    }
+}
+
+fn infer_date_property_name(schema_props: &Value) -> String {
+    let Some(obj) = schema_props.as_object() else {
+        return String::new();
+    };
+    let dates: Vec<String> = obj
+        .iter()
+        .filter(|(_, prop)| prop.get("type").and_then(|t| t.as_str()) == Some("date"))
+        .map(|(name, _)| name.clone())
+        .collect();
+    dates
+        .iter()
+        .find(|name| {
+            let lower = name.to_ascii_lowercase();
+            lower == "publish date"
+                || lower == "published date"
+                || lower == "date published"
+                || lower == "published"
+        })
+        .cloned()
+        .or_else(|| {
+            dates
+                .iter()
+                .find(|name| name.to_ascii_lowercase().contains("publish"))
+                .cloned()
+        })
+        .or_else(|| dates.first().cloned())
+        .unwrap_or_default()
+}
+
+fn looks_like_iso_date(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 10
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes.iter().enumerate().all(|(i, ch)| {
+            if i == 4 || i == 7 {
+                true
+            } else {
+                ch.is_ascii_digit()
+            }
+        })
+}
+
+#[tauri::command]
+pub fn notion_mark_essay_published(
+    app: AppHandle,
+    page_id: String,
+    publish_date: String,
+) -> Result<(), String> {
+    let config = require_config(&app)?;
+    let Some(page_id) = parse_stored_notion_id(&page_id) else {
+        return Err("Missing Notion page for this essay.".to_string());
+    };
+    let publish_date = publish_date.trim().to_string();
+    if !looks_like_iso_date(&publish_date) {
+        return Err("Publish date must be YYYY-MM-DD.".to_string());
+    }
+
+    let client = notion_client()?;
+    let schema =
+        retrieve_database_json(&client, &config.token, &config.database_id).unwrap_or(Value::Null);
+    let props = schema.get("properties").cloned().unwrap_or(Value::Null);
+    let status_type = status_property_type(&props, &config.status_property)
+        .unwrap_or_else(|| "status".to_string());
+    let published = if config.published_status_value.trim().is_empty() {
+        DEFAULT_PUBLISHED_STATUS.to_string()
+    } else {
+        config.published_status_value.trim().to_string()
+    };
+    let date_property = if config.date_property.trim().is_empty() {
+        infer_date_property_name(&props)
+    } else {
+        config.date_property.trim().to_string()
+    };
+
+    let mut properties = serde_json::Map::new();
+    if !config.status_property.trim().is_empty() {
+        properties.insert(
+            config.status_property.clone(),
+            status_property_payload(&status_type, &published),
+        );
+    }
+    if !date_property.trim().is_empty() {
+        properties.insert(
+            date_property,
+            json!({ "date": { "start": publish_date } }),
+        );
+    }
+    if properties.is_empty() {
+        return Err("No Status or date property configured for publish.".to_string());
+    }
+
+    let body = json!({ "properties": properties });
+    let url = format!("{}/pages/{}", NOTION_API_BASE, page_id);
+    notion_json(
+        &client,
+        &config.token,
+        reqwest::Method::PATCH,
+        &url,
+        Some(&body),
+    )?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn notion_test_ideas_connection(app: AppHandle) -> Result<usize, String> {
     let config = require_config(&app)?;
@@ -1086,11 +1254,18 @@ pub fn notion_sync_essay(
         patch_database_page_title(&client, &config, &parent_id, &title)?;
     }
 
+    let essay_id = essay_page_id
+        .clone()
+        .ok_or_else(|| "Could not create a Notion page for this essay.".to_string())?;
+    let parent_url = retrieve_page_url(&client, &config.token, &parent_id).unwrap_or_default();
+    let essay_url = retrieve_page_url(&client, &config.token, &essay_id).unwrap_or_default();
+
     Ok(NotionSyncEssayResult {
         parent_page_id: parent_id,
-        essay_page_id: essay_page_id
-            .ok_or_else(|| "Could not create a Notion page for this essay.".to_string())?,
+        essay_page_id: essay_id,
         rename_parent,
+        parent_url,
+        essay_url,
     })
 }
 
@@ -1213,6 +1388,25 @@ fn page_exists(client: &Client, token: &str, page_id: &str) -> Result<bool, Stri
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     Ok(!archived)
+}
+
+fn page_url_from_json(parsed: &Value) -> String {
+    parsed
+        .get("url")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("")
+        .to_string()
+}
+
+fn retrieve_page_url(client: &Client, token: &str, page_id: &str) -> Result<String, String> {
+    let Some(page_id) = parse_stored_notion_id(page_id) else {
+        return Ok(String::new());
+    };
+    let url = format!("{}/pages/{}", NOTION_API_BASE, page_id);
+    let parsed = notion_json(client, token, reqwest::Method::GET, &url, None)?;
+    Ok(page_url_from_json(&parsed))
 }
 
 fn create_database_page(
@@ -1376,13 +1570,130 @@ fn replace_block_children(
     Ok(())
 }
 
+fn looks_like_http_url(value: &str) -> bool {
+    let lower = value.trim().to_ascii_lowercase();
+    lower.starts_with("http://") || lower.starts_with("https://")
+}
+
+fn block_contains_url(block: &Value, public_url: &str) -> bool {
+    let wanted = public_url.trim();
+    if wanted.is_empty() {
+        return false;
+    }
+    let bookmark = block
+        .get("bookmark")
+        .and_then(|b| b.get("url"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if bookmark == wanted {
+        return true;
+    }
+    let paragraph = block.get("paragraph").or_else(|| block.get("quote"));
+    if let Some(rich) = paragraph
+        .and_then(|p| p.get("rich_text"))
+        .and_then(|v| v.as_array())
+    {
+        for item in rich {
+            let href = item
+                .get("href")
+                .and_then(|v| v.as_str())
+                .or_else(|| {
+                    item.get("text")
+                        .and_then(|t| t.get("link"))
+                        .and_then(|l| l.get("url"))
+                        .and_then(|v| v.as_str())
+                })
+                .unwrap_or("");
+            if href == wanted {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn page_already_has_public_url(
+    client: &Client,
+    token: &str,
+    page_id: &str,
+    public_url: &str,
+) -> Result<bool, String> {
+    let children = fetch_block_children(client, token, page_id)?;
+    Ok(children
+        .iter()
+        .any(|block| block_contains_url(block, public_url)))
+}
+
+fn append_public_url_bookmark(
+    client: &Client,
+    token: &str,
+    page_id: &str,
+    public_url: &str,
+) -> Result<(), String> {
+    if page_already_has_public_url(client, token, page_id, public_url)? {
+        return Ok(());
+    }
+    let blocks = vec![json!({
+        "object": "block",
+        "type": "bookmark",
+        "bookmark": { "url": public_url }
+    })];
+    append_block_children(client, token, page_id, &blocks)
+}
+
+fn patch_page_url_property(
+    client: &Client,
+    token: &str,
+    page_id: &str,
+    property: &str,
+    public_url: &str,
+) -> Result<(), String> {
+    let body = json!({
+        "properties": {
+            property: { "url": public_url }
+        }
+    });
+    let url = format!("{}/pages/{}", NOTION_API_BASE, page_id);
+    notion_json(client, token, reqwest::Method::PATCH, &url, Some(&body))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn notion_set_page_public_url(
+    app: AppHandle,
+    page_id: String,
+    public_url: String,
+) -> Result<(), String> {
+    let config = require_config(&app)?;
+    let public_url = public_url.trim().to_string();
+    if !looks_like_http_url(&public_url) {
+        return Err("Public URL must start with http:// or https://.".to_string());
+    }
+    let Some(page_id) = parse_stored_notion_id(&page_id) else {
+        return Err("Missing Notion page for this essay.".to_string());
+    };
+    let client = notion_client()?;
+    let property = config.url_property.trim();
+    if !property.is_empty() {
+        match patch_page_url_property(&client, &config.token, &page_id, property, &public_url) {
+            Ok(()) => return Ok(()),
+            Err(_) => {
+                append_public_url_bookmark(&client, &config.token, &page_id, &public_url)?;
+                return Ok(());
+            }
+        }
+    }
+    append_public_url_bookmark(&client, &config.token, &page_id, &public_url)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        blocks_to_plain_text, explain_database_access_error, idea_property_notes,
+        block_contains_url, blocks_to_plain_text, explain_database_access_error,
+        idea_property_notes, infer_date_property_name, looks_like_http_url, looks_like_iso_date,
         merge_idea_notes, merge_notion_credentials, nested_essay_page_title,
-        normalize_notion_database_id, parse_stored_notion_id, property_select_options,
-        truncate_chars, NotionIdeasConfig,
+        normalize_notion_database_id, page_url_from_json, parse_stored_notion_id,
+        property_select_options, truncate_chars, NotionIdeasConfig,
     };
     use serde_json::json;
 
@@ -1395,6 +1706,9 @@ mod tests {
             status_property: "Status".to_string(),
             idea_status_value: "Idea".to_string(),
             started_status_value: "Started".to_string(),
+            published_status_value: "Published".to_string(),
+            url_property: String::new(),
+            date_property: String::new(),
         }
     }
 
@@ -1555,5 +1869,48 @@ mod tests {
         );
         assert_eq!(parse_stored_notion_id("asdfasdfasdf Essay"), None);
         assert_eq!(parse_stored_notion_id("asdfasdfasdf"), None);
+    }
+
+    #[test]
+    fn extracts_page_url_from_notion_json() {
+        let parsed = json!({
+            "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "url": "https://www.notion.so/workspace/Hello-aaaaaaaa"
+        });
+        assert_eq!(
+            page_url_from_json(&parsed),
+            "https://www.notion.so/workspace/Hello-aaaaaaaa"
+        );
+        assert_eq!(page_url_from_json(&json!({})), "");
+    }
+
+    #[test]
+    fn detects_http_urls_and_existing_bookmarks() {
+        assert!(looks_like_http_url("https://alex.substack.com/p/hello"));
+        assert!(!looks_like_http_url("notion.so/page"));
+        let bookmark = json!({
+            "type": "bookmark",
+            "bookmark": { "url": "https://alex.substack.com/p/hello" }
+        });
+        assert!(block_contains_url(
+            &bookmark,
+            "https://alex.substack.com/p/hello"
+        ));
+        assert!(!block_contains_url(
+            &bookmark,
+            "https://alex.substack.com/p/other"
+        ));
+    }
+
+    #[test]
+    fn infers_publish_date_property() {
+        let props = json!({
+            "Name": { "type": "title" },
+            "Created": { "type": "date" },
+            "Publish Date": { "type": "date" }
+        });
+        assert_eq!(infer_date_property_name(&props), "Publish Date");
+        assert!(looks_like_iso_date("2026-09-10"));
+        assert!(!looks_like_iso_date("09/10/2026"));
     }
 }

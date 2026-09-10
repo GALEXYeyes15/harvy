@@ -116,8 +116,10 @@ pub fn run() {
             commands::notion::notion_fetch_database_schema,
             commands::notion::notion_query_idea_pages,
             commands::notion::notion_mark_idea_started,
+            commands::notion::notion_mark_essay_published,
             commands::notion::notion_test_ideas_connection,
             commands::notion::notion_sync_essay,
+            commands::notion::notion_set_page_public_url,
             commands::ai_check::ai_check_get_config,
             commands::ai_check::ai_check_save_config,
             commands::ai_check::ai_check_set_enabled,
@@ -130,6 +132,7 @@ pub fn run() {
             commands::ai_check::ai_check_podcast_notes,
             commands::ai_check::ai_check_headline_pairs,
             commands::ai_check::ai_check_headline_pairs_from_shots,
+            commands::ai_check::ai_check_related_essays,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

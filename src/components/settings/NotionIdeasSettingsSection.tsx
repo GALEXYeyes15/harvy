@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { isTauriRuntime } from "../../features/save/saveRuntime";
 import {
   clearNotionIdeasConfig,
+  dateOptionsFromSchema,
   fetchNotionDatabaseSchema,
   getNotionIdeasConfig,
   inferNotionIdeasPropertyMap,
   saveNotionIdeasConfig,
   statusOptionsFromSchema,
   testNotionIdeasConnection,
+  urlOptionsFromSchema,
   type NotionIdeasConfigPublic,
   type NotionPropertyInfo,
 } from "../../features/notion/notionIdeas";
@@ -32,16 +34,43 @@ export function NotionIdeasSettingsSection() {
   const [databaseIdOrUrl, setDatabaseIdOrUrl] = useState("");
   const [ideaStatusValue, setIdeaStatusValue] = useState("Idea");
   const [startedStatusValue, setStartedStatusValue] = useState("Started");
+  const [publishedStatusValue, setPublishedStatusValue] = useState("Published");
   const [statusPropertyName, setStatusPropertyName] = useState("Status");
   const [statusOptions, setStatusOptions] = useState<string[]>([]);
+  const [urlProperty, setUrlProperty] = useState("");
+  const [urlOptions, setUrlOptions] = useState<string[]>([]);
+  const [dateProperty, setDateProperty] = useState("");
+  const [dateOptions, setDateOptions] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const applySchema = (schema: NotionPropertyInfo[]) => {
+  const applySchema = (
+    schema: NotionPropertyInfo[],
+    currentUrlProperty?: string,
+    currentDateProperty?: string,
+  ) => {
     const map = inferNotionIdeasPropertyMap(schema);
     if (map.statusProperty) setStatusPropertyName(map.statusProperty);
     setStatusOptions(statusOptionsFromSchema(schema));
+    const urls = urlOptionsFromSchema(schema);
+    setUrlOptions(urls);
+    if (currentUrlProperty !== undefined) {
+      setUrlProperty(currentUrlProperty.trim());
+    } else if (urlProperty && urls.includes(urlProperty)) {
+      // keep the current selection
+    } else if (map.urlProperty) {
+      setUrlProperty(map.urlProperty);
+    }
+    const dates = dateOptionsFromSchema(schema);
+    setDateOptions(dates);
+    if (currentDateProperty !== undefined) {
+      setDateProperty(currentDateProperty.trim());
+    } else if (dateProperty && dates.includes(dateProperty)) {
+      // keep the current selection
+    } else if (map.dateProperty) {
+      setDateProperty(map.dateProperty);
+    }
     return map;
   };
 
@@ -54,12 +83,15 @@ export function NotionIdeasSettingsSection() {
         setDatabaseIdOrUrl(next.databaseId);
         setIdeaStatusValue(next.ideaStatusValue || "Idea");
         setStartedStatusValue(next.startedStatusValue || "Started");
+        setPublishedStatusValue(next.publishedStatusValue || "Published");
         if (next.statusProperty) setStatusPropertyName(next.statusProperty);
+        if (next.urlProperty) setUrlProperty(next.urlProperty);
+        if (next.dateProperty) setDateProperty(next.dateProperty);
         if (next.connected) {
           const schema = await fetchNotionDatabaseSchema({
             databaseIdOrUrl: next.databaseId || undefined,
           });
-          applySchema(schema);
+          applySchema(schema, next.urlProperty, next.dateProperty);
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -87,7 +119,7 @@ export function NotionIdeasSettingsSection() {
         token: token.trim() || undefined,
         databaseIdOrUrl: databaseIdOrUrl.trim() || undefined,
       });
-      const map = applySchema(schema);
+      const map = applySchema(schema, urlProperty, dateProperty);
       if (!map.titleProperty) {
         throw new Error("Could not find a Title property on that Notion database.");
       }
@@ -105,6 +137,9 @@ export function NotionIdeasSettingsSection() {
         statusProperty: map.statusProperty,
         ideaStatusValue,
         startedStatusValue,
+        publishedStatusValue,
+        urlProperty,
+        dateProperty,
         keepExistingToken: Boolean(config?.hasToken && !token.trim()),
       });
       setConfig(next);
@@ -112,7 +147,10 @@ export function NotionIdeasSettingsSection() {
       setDatabaseIdOrUrl(next.databaseId);
       setIdeaStatusValue(next.ideaStatusValue || "Idea");
       setStartedStatusValue(next.startedStatusValue || "Started");
+      setPublishedStatusValue(next.publishedStatusValue || "Published");
       if (next.statusProperty) setStatusPropertyName(next.statusProperty);
+      setUrlProperty(next.urlProperty || "");
+      setDateProperty(next.dateProperty || "");
       setMessage("Notion Ideas connected.");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -161,8 +199,13 @@ export function NotionIdeasSettingsSection() {
       setDatabaseIdOrUrl("");
       setIdeaStatusValue("Idea");
       setStartedStatusValue("Started");
+      setPublishedStatusValue("Published");
       setStatusPropertyName("Status");
       setStatusOptions([]);
+      setUrlProperty("");
+      setUrlOptions([]);
+      setDateProperty("");
+      setDateOptions([]);
       setMessage("Disconnected Notion Ideas.");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -257,6 +300,75 @@ export function NotionIdeasSettingsSection() {
                 </option>
               ))
             )}
+          </select>
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted/60">
+            Change {statusPropertyName} to when published
+          </span>
+          <select
+            value={publishedStatusValue}
+            onChange={(e) => setPublishedStatusValue(e.target.value)}
+            className={FIELD}
+            aria-label={`Change ${statusPropertyName} to when published`}
+            disabled={busy}
+          >
+            {optionsWithCurrent(statusOptions, publishedStatusValue).length === 0 ? (
+              <option value={publishedStatusValue || ""}>
+                Save connection to load {statusPropertyName} options
+              </option>
+            ) : (
+              optionsWithCurrent(statusOptions, publishedStatusValue).map((option) => (
+                <option key={`published-${option}`} value={option}>
+                  {option}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted/60">
+            Published URL property
+          </span>
+          <select
+            value={urlProperty}
+            onChange={(e) => setUrlProperty(e.target.value)}
+            className={FIELD}
+            aria-label="Published URL property"
+            disabled={busy}
+          >
+            <option value="">None — add a link on the page</option>
+            {optionsWithCurrent(urlOptions, urlProperty)
+              .filter(Boolean)
+              .map((option) => (
+                <option key={`url-${option}`} value={option}>
+                  {option}
+                </option>
+              ))}
+          </select>
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted/60">
+            Publish date property
+          </span>
+          <select
+            value={dateProperty}
+            onChange={(e) => setDateProperty(e.target.value)}
+            className={FIELD}
+            aria-label="Publish date property"
+            disabled={busy}
+          >
+            <option value="">None</option>
+            {optionsWithCurrent(dateOptions, dateProperty)
+              .filter(Boolean)
+              .map((option) => (
+                <option key={`date-${option}`} value={option}>
+                  {option}
+                </option>
+              ))}
           </select>
         </label>
 

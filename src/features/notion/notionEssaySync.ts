@@ -7,12 +7,17 @@ export type NotionEssayLink = {
   parentPageId: string;
   essayPageId: string;
   renameParent: boolean;
+  parentUrl: string;
+  essayUrl: string;
+  publicUrl: string;
 };
 
 export type NotionSyncEssayResult = {
   parentPageId: string;
   essayPageId: string;
   renameParent: boolean;
+  parentUrl: string;
+  essayUrl: string;
 };
 
 export function documentNotionSidecarPath(sourcePath: string): string {
@@ -26,11 +31,17 @@ export function parseNotionEssayLink(raw: string): NotionEssayLink | null {
       typeof parsed.parentPageId === "string" ? parsed.parentPageId.trim() : "";
     const essayPageId =
       typeof parsed.essayPageId === "string" ? parsed.essayPageId.trim() : "";
-    if (!parentPageId && !essayPageId) return null;
+    const parentUrl = typeof parsed.parentUrl === "string" ? parsed.parentUrl.trim() : "";
+    const essayUrl = typeof parsed.essayUrl === "string" ? parsed.essayUrl.trim() : "";
+    const publicUrl = typeof parsed.publicUrl === "string" ? parsed.publicUrl.trim() : "";
+    if (!parentPageId && !essayPageId && !publicUrl) return null;
     return {
       parentPageId,
       essayPageId,
       renameParent: Boolean(parsed.renameParent),
+      parentUrl,
+      essayUrl,
+      publicUrl,
     };
   } catch {
     return null;
@@ -41,14 +52,21 @@ export function notionLinkFromFields(fields: {
   notionParentPageId?: string;
   notionEssayPageId?: string;
   notionRenameParent?: boolean;
+  notionParentUrl?: string;
+  notionEssayUrl?: string;
+  publicUrl?: string;
 }): NotionEssayLink | null {
   const parentPageId = fields.notionParentPageId?.trim() ?? "";
   const essayPageId = fields.notionEssayPageId?.trim() ?? "";
-  if (!parentPageId && !essayPageId) return null;
+  const publicUrl = fields.publicUrl?.trim() ?? "";
+  if (!parentPageId && !essayPageId && !publicUrl) return null;
   return {
     parentPageId,
     essayPageId,
     renameParent: Boolean(fields.notionRenameParent),
+    parentUrl: fields.notionParentUrl?.trim() ?? "",
+    essayUrl: fields.notionEssayUrl?.trim() ?? "",
+    publicUrl,
   };
 }
 
@@ -56,12 +74,35 @@ export function notionFieldsFromLink(link: NotionEssayLink | null): {
   notionParentPageId: string;
   notionEssayPageId: string;
   notionRenameParent: boolean;
+  notionParentUrl: string;
+  notionEssayUrl: string;
+  publicUrl: string;
 } {
   return {
     notionParentPageId: link?.parentPageId.trim() ?? "",
     notionEssayPageId: link?.essayPageId.trim() ?? "",
     notionRenameParent: Boolean(link?.renameParent),
+    notionParentUrl: link?.parentUrl.trim() ?? "",
+    notionEssayUrl: link?.essayUrl.trim() ?? "",
+    publicUrl: link?.publicUrl.trim() ?? "",
   };
+}
+
+export function mergeNotionEssayLink(
+  primary: NotionEssayLink | null,
+  fallback: NotionEssayLink | null,
+): NotionEssayLink | null {
+  if (!primary && !fallback) return null;
+  const merged: NotionEssayLink = {
+    parentPageId: primary?.parentPageId.trim() || fallback?.parentPageId.trim() || "",
+    essayPageId: primary?.essayPageId.trim() || fallback?.essayPageId.trim() || "",
+    renameParent: Boolean(primary?.renameParent || fallback?.renameParent),
+    parentUrl: primary?.parentUrl.trim() || fallback?.parentUrl.trim() || "",
+    essayUrl: primary?.essayUrl.trim() || fallback?.essayUrl.trim() || "",
+    publicUrl: primary?.publicUrl.trim() || fallback?.publicUrl.trim() || "",
+  };
+  if (!merged.parentPageId && !merged.essayPageId && !merged.publicUrl) return null;
+  return merged;
 }
 
 export async function loadNotionEssayLink(
@@ -90,6 +131,9 @@ export async function saveNotionEssayLink(
         parentPageId: link.parentPageId,
         essayPageId: link.essayPageId,
         renameParent: link.renameParent,
+        parentUrl: link.parentUrl,
+        essayUrl: link.essayUrl,
+        publicUrl: link.publicUrl,
       },
       null,
       2,

@@ -4,6 +4,7 @@ import {
   dismissNotionIdeaPage,
   mergeNotionIdeasIntoCollectItems,
   notionPageToCollectItem,
+  todayLocalIsoDate,
 } from "./notionIdeas";
 
 describe("mergeNotionIdeasIntoCollectItems", () => {
@@ -101,5 +102,11 @@ describe("mergeNotionIdeasIntoCollectItems", () => {
 
     expect(merged).toHaveLength(1);
     expect(merged[0]?.notionPageId).toBe("keep");
+  });
+});
+
+describe("todayLocalIsoDate", () => {
+  it("formats the local calendar day as YYYY-MM-DD", () => {
+    expect(todayLocalIsoDate(new Date(2026, 8, 10, 23, 45))).toBe("2026-09-10");
   });
 });

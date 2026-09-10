@@ -6,6 +6,9 @@ export type DocumentFrontmatter = {
   notionParentPageId: string;
   notionEssayPageId: string;
   notionRenameParent: boolean;
+  notionParentUrl: string;
+  notionEssayUrl: string;
+  publicUrl: string;
 };
 
 const EMPTY_META: DocumentFrontmatter = {
@@ -14,6 +17,9 @@ const EMPTY_META: DocumentFrontmatter = {
   notionParentPageId: "",
   notionEssayPageId: "",
   notionRenameParent: false,
+  notionParentUrl: "",
+  notionEssayUrl: "",
+  publicUrl: "",
 };
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
@@ -58,6 +64,9 @@ export function parseDocumentFrontmatter(raw: string): {
   let notionParentPageId = "";
   let notionEssayPageId = "";
   let notionRenameParent = false;
+  let notionParentUrl = "";
+  let notionEssayUrl = "";
+  let publicUrl = "";
   for (const line of yaml.split(/\r?\n/)) {
     const colon = line.indexOf(":");
     if (colon <= 0) continue;
@@ -69,12 +78,23 @@ export function parseDocumentFrontmatter(raw: string): {
     else if (key === "notion_essay" || key === "notion-essay") notionEssayPageId = value.trim();
     else if (key === "notion_created" || key === "notion-created") {
       notionRenameParent = parseYamlBoolean(value);
-    }
+    } else if (key === "notion_url" || key === "notion-url") notionParentUrl = value.trim();
+    else if (key === "notion_essay_url" || key === "notion-essay-url") notionEssayUrl = value.trim();
+    else if (key === "public_url" || key === "public-url") publicUrl = value.trim();
   }
 
   const body = raw.slice(match[0].length).replace(/^\r?\n/, "");
   return {
-    meta: { postTitle, subtitle, notionParentPageId, notionEssayPageId, notionRenameParent },
+    meta: {
+      postTitle,
+      subtitle,
+      notionParentPageId,
+      notionEssayPageId,
+      notionRenameParent,
+      notionParentUrl,
+      notionEssayUrl,
+      publicUrl,
+    },
     body,
   };
 }
@@ -89,7 +109,20 @@ export function serializeDocumentWithFrontmatter(
   const notionParentPageId = (meta.notionParentPageId ?? "").trim();
   const notionEssayPageId = (meta.notionEssayPageId ?? "").trim();
   const notionRenameParent = Boolean(meta.notionRenameParent);
-  if (!postTitle && !subtitle && !notionParentPageId && !notionEssayPageId) return body;
+  const notionParentUrl = (meta.notionParentUrl ?? "").trim();
+  const notionEssayUrl = (meta.notionEssayUrl ?? "").trim();
+  const publicUrl = (meta.publicUrl ?? "").trim();
+  if (
+    !postTitle &&
+    !subtitle &&
+    !notionParentPageId &&
+    !notionEssayPageId &&
+    !notionParentUrl &&
+    !notionEssayUrl &&
+    !publicUrl
+  ) {
+    return body;
+  }
 
   const lines = ["---"];
   if (postTitle) lines.push(`title: ${quoteYamlScalar(postTitle)}`);
@@ -97,6 +130,9 @@ export function serializeDocumentWithFrontmatter(
   if (notionParentPageId) lines.push(`notion_page: ${quoteYamlScalar(notionParentPageId)}`);
   if (notionEssayPageId) lines.push(`notion_essay: ${quoteYamlScalar(notionEssayPageId)}`);
   if (notionRenameParent) lines.push("notion_created: true");
+  if (notionParentUrl) lines.push(`notion_url: ${quoteYamlScalar(notionParentUrl)}`);
+  if (notionEssayUrl) lines.push(`notion_essay_url: ${quoteYamlScalar(notionEssayUrl)}`);
+  if (publicUrl) lines.push(`public_url: ${quoteYamlScalar(publicUrl)}`);
   lines.push("---", "");
   return `${lines.join("\n")}${body.replace(/^\r?\n/, "")}`;
 }

@@ -4,6 +4,7 @@
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::fs;
 use std::time::Duration;
 use tauri::AppHandle;
@@ -1362,6 +1363,271 @@ pub fn ai_check_headline_pairs_from_shots(
     })
 }
 
+const MAX_RELATED_CANDIDATES: usize = 40;
+const MAX_RELATED_MATCHES: usize = 6;
+const RELATED_EXCERPT_CHARS: usize = 800;
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelatedEssayCandidate {
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub excerpt: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelatedEssayMatch {
+    pub id: String,
+    #[serde(default)]
+    pub why: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelatedEssaysResult {
+    pub matches: Vec<RelatedEssayMatch>,
+}
+
+fn truncate_related_text(value: &str, max_chars: usize) -> String {
+    let trimmed = value.trim();
+    let mut out = String::new();
+    for (i, ch) in trimmed.chars().enumerate() {
+        if i >= max_chars {
+            break;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn related_essays_system_prompt() -> &'static str {
+    "You rank past essays by how useful they are as related reading for the current draft.\n\
+Return JSON only: {\"matches\":[{\"id\":\"...\",\"why\":\"short reason\"}]}.\n\
+Use only candidate ids from the user message. Rank at most 6, strongest first.\n\
+Skip weak or unrelated matches. \"why\" is one short sentence."
+}
+
+fn compose_related_essays_user_text(
+    title: &str,
+    excerpt: &str,
+    candidates: &[RelatedEssayCandidate],
+) -> String {
+    let mut out = String::new();
+    out.push_str("Current draft title: ");
+    out.push_str(&truncate_related_text(title, 200));
+    out.push_str("\nCurrent draft excerpt:\n");
+    out.push_str(&truncate_related_text(excerpt, RELATED_EXCERPT_CHARS));
+    out.push_str("\n\nCandidates:\n");
+    for candidate in candidates.iter().take(MAX_RELATED_CANDIDATES) {
+        out.push_str("- id: ");
+        out.push_str(candidate.id.trim());
+        out.push('\n');
+        out.push_str("  title: ");
+        out.push_str(&truncate_related_text(&candidate.title, 200));
+        out.push('\n');
+        out.push_str("  excerpt: ");
+        out.push_str(&truncate_related_text(
+            &candidate.excerpt,
+            RELATED_EXCERPT_CHARS,
+        ));
+        out.push('\n');
+    }
+    out
+}
+
+fn parse_related_matches_from_model_text(
+    raw: &str,
+    allowed_ids: &HashSet<String>,
+) -> Result<Vec<RelatedEssayMatch>, String> {
+    let value = extract_json_object(raw)?;
+    let matches_value = value
+        .get("matches")
+        .cloned()
+        .ok_or_else(|| "Model JSON missing \"matches\" array.".to_string())?;
+    let raw_matches: Vec<RelatedEssayMatch> = serde_json::from_value(matches_value)
+        .map_err(|e| format!("Could not parse related matches from model JSON: {}", e))?;
+    let mut seen = HashSet::new();
+    let matches: Vec<RelatedEssayMatch> = raw_matches
+        .into_iter()
+        .map(|m| RelatedEssayMatch {
+            id: m.id.trim().to_string(),
+            why: m.why.trim().to_string(),
+        })
+        .filter(|m| {
+            if m.id.is_empty() || !allowed_ids.contains(&m.id) || !seen.insert(m.id.clone()) {
+                return false;
+            }
+            true
+        })
+        .take(MAX_RELATED_MATCHES)
+        .collect();
+    Ok(matches)
+}
+
+fn run_openai_json_prompt(
+    client: &Client,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_text: &str,
+) -> Result<ModelCheckResponse, String> {
+    let body = json!({
+        "model": model,
+        "temperature": 0.2,
+        "response_format": { "type": "json_object" },
+        "messages": [
+            { "role": "system", "content": system_prompt },
+            { "role": "user", "content": user_text }
+        ]
+    });
+    let response = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .bearer_auth(api_key.trim())
+        .json(&body)
+        .send()
+        .map_err(|e| format!("OpenAI related-essays request failed: {}", e))?;
+    let status = response.status();
+    let text = response
+        .text()
+        .map_err(|e| format!("Could not read OpenAI related-essays response: {}", e))?;
+    if !status.is_success() {
+        return Err(format_api_error("OpenAI", status.as_u16(), &text));
+    }
+    let parsed: Value = serde_json::from_str(&text)
+        .map_err(|e| format!("Could not parse OpenAI related-essays JSON: {}", e))?;
+    let content = parsed
+        .pointer("/choices/0/message/content")
+        .and_then(|c| c.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "OpenAI response missing message content.".to_string())?;
+    let input_tokens = parsed
+        .pointer("/usage/prompt_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    let output_tokens = parsed
+        .pointer("/usage/completion_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    Ok(ModelCheckResponse {
+        text: content,
+        usage: AiCheckUsage {
+            input_tokens,
+            output_tokens,
+        },
+    })
+}
+
+fn run_anthropic_json_prompt(
+    client: &Client,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_text: &str,
+) -> Result<ModelCheckResponse, String> {
+    let body = json!({
+        "model": model,
+        "max_tokens": 1024,
+        "temperature": 0.2,
+        "system": system_prompt,
+        "messages": [
+            { "role": "user", "content": user_text }
+        ]
+    });
+    let response = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key.trim())
+        .header("anthropic-version", ANTHROPIC_VERSION)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .map_err(|e| format!("Anthropic related-essays request failed: {}", e))?;
+    let status = response.status();
+    let text = response
+        .text()
+        .map_err(|e| format!("Could not read Anthropic related-essays response: {}", e))?;
+    if !status.is_success() {
+        return Err(format_api_error("Anthropic", status.as_u16(), &text));
+    }
+    let parsed: Value = serde_json::from_str(&text)
+        .map_err(|e| format!("Could not parse Anthropic related-essays JSON: {}", e))?;
+    let content = parsed
+        .get("content")
+        .and_then(|c| c.as_array())
+        .ok_or_else(|| "Anthropic response missing content.".to_string())?;
+    let mut out = String::new();
+    for block in content {
+        if block.get("type").and_then(|t| t.as_str()) == Some("text") {
+            if let Some(t) = block.get("text").and_then(|t| t.as_str()) {
+                out.push_str(t);
+            }
+        }
+    }
+    if out.is_empty() {
+        return Err("Anthropic response had no text blocks.".to_string());
+    }
+    let input_tokens = parsed
+        .pointer("/usage/input_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    let output_tokens = parsed
+        .pointer("/usage/output_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    Ok(ModelCheckResponse {
+        text: out,
+        usage: AiCheckUsage {
+            input_tokens,
+            output_tokens,
+        },
+    })
+}
+
+#[tauri::command]
+pub fn ai_check_related_essays(
+    app: AppHandle,
+    title: String,
+    excerpt: String,
+    candidates: Vec<RelatedEssayCandidate>,
+) -> Result<RelatedEssaysResult, String> {
+    let candidates: Vec<RelatedEssayCandidate> = candidates
+        .into_iter()
+        .filter(|c| !c.id.trim().is_empty())
+        .take(MAX_RELATED_CANDIDATES)
+        .map(|c| RelatedEssayCandidate {
+            id: c.id.trim().to_string(),
+            title: truncate_related_text(&c.title, 200),
+            excerpt: truncate_related_text(&c.excerpt, RELATED_EXCERPT_CHARS),
+        })
+        .collect();
+    if candidates.is_empty() {
+        return Ok(RelatedEssaysResult { matches: vec![] });
+    }
+    let config = require_ai_config_for_generation(&app)?;
+    let allowed_ids: HashSet<String> = candidates.iter().map(|c| c.id.clone()).collect();
+    let user_text = compose_related_essays_user_text(&title, &excerpt, &candidates);
+    let client = http_client()?;
+    let generated = match config.provider {
+        AiProvider::Openai => run_openai_json_prompt(
+            &client,
+            &config.api_key,
+            &config.model,
+            related_essays_system_prompt(),
+            &user_text,
+        )?,
+        AiProvider::Anthropic => run_anthropic_json_prompt(
+            &client,
+            &config.api_key,
+            &config.model,
+            related_essays_system_prompt(),
+            &user_text,
+        )?,
+    };
+    let matches = parse_related_matches_from_model_text(&generated.text, &allowed_ids)?;
+    Ok(RelatedEssaysResult { matches })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1451,5 +1717,21 @@ mod tests {
         }];
         let content = openai_headline_user_content("Hello essay", &images);
         assert_eq!(content[1]["image_url"]["url"], "data:image/jpeg;base64,abc");
+    }
+
+    #[test]
+    fn parses_related_matches_and_drops_unknown_ids() {
+        let raw = r#"{"matches":[
+          {"id":" /a.md ","why":" Same theme. "},
+          {"id":"missing.md","why":"skip"},
+          {"id":"/a.md","why":"duplicate"},
+          {"id":"/b.md","why":"Contrasts the claim."}
+        ]}"#;
+        let allowed = HashSet::from(["/a.md".to_string(), "/b.md".to_string()]);
+        let matches = parse_related_matches_from_model_text(raw, &allowed).unwrap();
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].id, "/a.md");
+        assert_eq!(matches[0].why, "Same theme.");
+        assert_eq!(matches[1].id, "/b.md");
     }
 }

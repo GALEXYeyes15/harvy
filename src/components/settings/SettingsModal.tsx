@@ -89,6 +89,11 @@ import { NotionIdeasSettingsSection } from "./NotionIdeasSettingsSection";
 import { AiCheckSettingsSection } from "./AiCheckSettingsSection";
 import { SETTINGS_NAV, type SettingsSectionId } from "./sectionIds";
 import {
+  readCriteriaSidebarSettings,
+  writeCriteriaSidebarSettings,
+} from "../../features/sidebar/criteriaSidebarSettings";
+import { matchPublishedEssayUrls } from "../../features/related-essays/matchPublishedUrls";
+import {
   getAiCheckConfig,
   setAiCheckEnabled,
   setAiCheckShowReplaceSuggestions,
@@ -2477,20 +2482,27 @@ function ExportPanel({
   publishUrl: string;
   onPublishUrlChange: (value: string) => void;
 }) {
+  const [essaysArchiveUrl, setEssaysArchiveUrl] = useState(
+    () => readCriteriaSidebarSettings().essaysArchiveUrl,
+  );
+  const [matching, setMatching] = useState(false);
+  const [matchMessage, setMatchMessage] = useState<string | null>(null);
+  const [matchError, setMatchError] = useState<string | null>(null);
+
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
         title="Export"
-        description="Copy + Publish copies the current post and opens this link in your browser so you can paste."
+        description="Copies the current post, syncs it to Notion, and opens this link so you can paste."
       />
       <div>
-        <p className="mb-2 text-[12px] italic leading-snug text-muted/75">Copy + Publish</p>
+        <p className="mb-2 text-[12px] italic leading-snug text-muted/75">Copy, Sync, + Publish</p>
         <div className={SETTINGS_BOX_PAD}>
           <label htmlFor="export-publish-url" className="block text-[13px] font-medium text-ink">
             Publish link
           </label>
           <p className="mt-1 mb-2 text-[12px] leading-snug text-muted/75">
-            Used by Copy + Publish in the export menu.
+            Used by Copy, Sync, + Publish in the export menu.
           </p>
           <input
             id="export-publish-url"
@@ -2503,6 +2515,62 @@ function ExportPanel({
             placeholder="https://…"
             className={`w-full ${SETTINGS_FIELD_INPUT}`}
           />
+        </div>
+      </div>
+      <div>
+        <p className="mb-2 text-[12px] italic leading-snug text-muted/75">Your essays</p>
+        <div className={SETTINGS_BOX_PAD}>
+          <label htmlFor="export-essays-archive-url" className="block text-[13px] font-medium text-ink">
+            Substack URL
+          </label>
+          <p className="mt-1 mb-2 text-[12px] leading-snug text-muted/75">
+            Matches published posts to essays in this workspace.
+          </p>
+          <input
+            id="export-essays-archive-url"
+            type="url"
+            inputMode="url"
+            autoComplete="url"
+            aria-label="Your essays Substack URL"
+            value={essaysArchiveUrl}
+            onChange={(event) => {
+              const next = event.target.value;
+              setEssaysArchiveUrl(next);
+              writeCriteriaSidebarSettings({ essaysArchiveUrl: next });
+            }}
+            placeholder="https://yourname.substack.com"
+            className={`w-full ${SETTINGS_FIELD_INPUT}`}
+          />
+          <button
+            type="button"
+            disabled={matching || !essaysArchiveUrl.trim()}
+            onClick={() => {
+              setMatching(true);
+              setMatchError(null);
+              setMatchMessage(null);
+              void matchPublishedEssayUrls({ archiveUrl: essaysArchiveUrl, tree: null })
+                .then((result) => {
+                  setMatchMessage(
+                    result.matched === 0
+                      ? "No matching titles."
+                      : `Matched ${result.matched} essay${result.matched === 1 ? "" : "s"}.`,
+                  );
+                })
+                .catch((e) => {
+                  setMatchError(e instanceof Error ? e.message : String(e));
+                })
+                .finally(() => setMatching(false));
+            }}
+            className="mt-3 rounded-md bg-page px-2.5 py-1.5 text-[12px] font-medium text-ink ring-1 ring-line/15 transition-colors hover:bg-ink/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {matching ? "Matching…" : "Match published URLs"}
+          </button>
+          {matchError ? (
+            <p className="mt-2 text-[12px] leading-snug text-muted/75">{matchError}</p>
+          ) : null}
+          {matchMessage ? (
+            <p className="mt-2 text-[12px] leading-snug text-muted/75">{matchMessage}</p>
+          ) : null}
         </div>
       </div>
     </div>

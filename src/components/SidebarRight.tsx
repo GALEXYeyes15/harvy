@@ -9,6 +9,7 @@ import type { ProofreadIssue } from "../features/proofread/types";
 import type { WorkspaceSection } from "../features/workspace/workspaceSection";
 import { CriteriaSidebarPanel } from "./CriteriaSidebarPanel";
 import { NotesSidebarPanel } from "./NotesSidebarPanel";
+import type { FileNode } from "../features/workspace/types";
 
 const PANEL =
   "relative flex h-full min-h-0 w-full flex-col bg-stage font-[system-ui,-apple-system,BlinkMacSystemFont,'Segoe_UI',sans-serif] text-ink antialiased [backdrop-filter:none]";
@@ -46,6 +47,12 @@ export type SidebarRightProps = {
   onToggleNotesPopout?: () => void;
   /** When on, Quick Links appears below Notes. */
   showQuickLinks?: boolean;
+  relatedSourcePath?: string;
+  relatedTitle?: string;
+  relatedExcerpt?: string;
+  workspaceTree?: FileNode | null;
+  relatedAiReady?: boolean;
+  onOpenRelatedFile?: (path: string) => void;
   /** When on, Criteria appears as a tools tab (Write). */
   showCriteria?: boolean;
   proofreadIssues?: ProofreadIssue[];
@@ -349,6 +356,12 @@ export function SidebarRight({
   onCriteriaChange,
   onToggleNotesPopout,
   showQuickLinks = false,
+  relatedSourcePath = "",
+  relatedTitle = "",
+  relatedExcerpt = "",
+  workspaceTree = null,
+  relatedAiReady = false,
+  onOpenRelatedFile,
   showCriteria = true,
   proofreadIssues = [],
   workspaceSection = "write",
@@ -378,6 +391,12 @@ export function SidebarRight({
             onNotesChange={onNotesChange}
             onTogglePopout={onToggleNotesPopout}
             showQuickLinks={showQuickLinks}
+            sourcePath={relatedSourcePath}
+            relatedTitle={relatedTitle}
+            relatedExcerpt={relatedExcerpt}
+            workspaceTree={workspaceTree}
+            aiReady={relatedAiReady}
+            onOpenRelatedFile={onOpenRelatedFile}
           />
         </div>
       </div>
@@ -409,6 +428,12 @@ export function SidebarRight({
             onNotesChange={onNotesChange}
             onTogglePopout={onToggleNotesPopout}
             showQuickLinks={showQuickLinks}
+            sourcePath={relatedSourcePath}
+            relatedTitle={relatedTitle}
+            relatedExcerpt={relatedExcerpt}
+            workspaceTree={workspaceTree}
+            aiReady={relatedAiReady}
+            onOpenRelatedFile={onOpenRelatedFile}
           />
         ) : mode === "criteria" ? (
           <CriteriaSidebarPanel criteria={criteria} onCriteriaChange={onCriteriaChange} />

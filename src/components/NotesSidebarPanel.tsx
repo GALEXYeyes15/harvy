@@ -1,6 +1,8 @@
 import { SquareArrowOutUpRight } from "lucide-react";
 import { handleNotesTextareaTabKey } from "../features/notes/notesTextareaIndent";
+import type { FileNode } from "../features/workspace/types";
 import { QuickLinksSidebarPanel } from "./QuickLinksSidebarPanel";
+import { RelatedEssaysSidebarPanel } from "./RelatedEssaysSidebarPanel";
 
 type NotesSidebarPanelProps = {
   notes: string;
@@ -9,6 +11,12 @@ type NotesSidebarPanelProps = {
   onTogglePopout?: () => void;
   /** When on, Quick Links appears below Notes. */
   showQuickLinks?: boolean;
+  sourcePath?: string;
+  relatedTitle?: string;
+  relatedExcerpt?: string;
+  workspaceTree?: FileNode | null;
+  aiReady?: boolean;
+  onOpenRelatedFile?: (path: string) => void;
 };
 
 export function NotesSidebarPanel({
@@ -16,6 +24,12 @@ export function NotesSidebarPanel({
   onNotesChange,
   onTogglePopout,
   showQuickLinks = false,
+  sourcePath = "",
+  relatedTitle = "",
+  relatedExcerpt = "",
+  workspaceTree = null,
+  aiReady = false,
+  onOpenRelatedFile,
 }: NotesSidebarPanelProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -51,6 +65,16 @@ export function NotesSidebarPanel({
           <QuickLinksSidebarPanel />
         </div>
       ) : null}
+      <div className="mt-6 shrink-0">
+        <RelatedEssaysSidebarPanel
+          sourcePath={sourcePath}
+          currentTitle={relatedTitle}
+          currentExcerpt={relatedExcerpt}
+          workspaceTree={workspaceTree}
+          aiReady={aiReady}
+          onOpenFile={onOpenRelatedFile}
+        />
+      </div>
     </div>
   );
 }

@@ -51,10 +51,13 @@ import {
 } from "../features/collect/collectItemsPersistence";
 import {
   getNotionIdeasConfig,
+  markNotionEssayPublished,
   markNotionIdeaStarted,
+  todayLocalIsoDate,
 } from "../features/notion/notionIdeas";
 import {
   loadNotionEssayLink,
+  mergeNotionEssayLink,
   notionFieldsFromLink,
   notionLinkFromFields,
   renameNotionEssaySidecar,
@@ -148,6 +151,7 @@ import {
 } from "../features/workspace/pdfImport";
 import { isPathUnderWorkspaceRoot, normalizeFsPath } from "../features/workspace/workspacePaths";
 import {
+  isExactOpenDocument,
   resolveOpenDocumentPath,
   visibleOpenDocumentTrailPath,
 } from "../features/workspace/openDocumentTrail";
@@ -170,6 +174,11 @@ import {
   serializeDocumentWithFrontmatter,
 } from "../features/editor/documentFrontmatter";
 import { EMPTY_NOTION_ESSAY_FIELDS, type FileNode, type WorkspaceDocument } from "../features/workspace/types";
+import { excerptFromMarkdown, renameRelatedEssaySidecar } from "../features/related-essays/relatedEssays";
+import {
+  PUBLIC_URLS_MATCHED_EVENT,
+  type PublishedUrlUpdate,
+} from "../features/related-essays/matchPublishedUrls";
 import { nextActiveTabIdAfterClose, toPageTabs } from "../features/tabs/pageTabs";
 import {
   defaultPdfFileName,
@@ -354,6 +363,9 @@ function markdownForDisk(
       | "notionParentPageId"
       | "notionEssayPageId"
       | "notionRenameParent"
+      | "notionParentUrl"
+      | "notionEssayUrl"
+      | "publicUrl"
     >
   > | null | undefined,
 ): string {
@@ -363,6 +375,9 @@ function markdownForDisk(
     notionParentPageId: doc?.notionParentPageId ?? "",
     notionEssayPageId: doc?.notionEssayPageId ?? "",
     notionRenameParent: Boolean(doc?.notionRenameParent),
+    notionParentUrl: doc?.notionParentUrl ?? "",
+    notionEssayUrl: doc?.notionEssayUrl ?? "",
+    publicUrl: doc?.publicUrl ?? "",
   });
 }
 
@@ -2028,6 +2043,7 @@ export function AppShell() {
           await renameDocumentNotesSidecar(path, renamedPath);
           await renameDocumentCriteriaSidecar(path, renamedPath);
           await renameNotionEssaySidecar(path, renamedPath);
+          await renameRelatedEssaySidecar(path, renamedPath);
           path = renamedPath;
         }
         let markdown = getDocumentMarkdown(tiptapEditor, liveDoc.content);
@@ -2074,6 +2090,7 @@ export function AppShell() {
               } else {
                 await invoke("rename_fs_path", { fromPath: path, toPath: packagedPath });
                 await renameNotionEssaySidecar(path, packagedPath);
+                await renameRelatedEssaySidecar(path, packagedPath);
               }
             }
             outPath = packagedPath;
@@ -2134,6 +2151,7 @@ export function AppShell() {
             }
             await invoke("rename_fs_path", { fromPath: diskPath, toPath: renamedScratchPath });
             await renameNotionEssaySidecar(diskPath, renamedScratchPath);
+            await renameRelatedEssaySidecar(diskPath, renamedScratchPath);
             diskPath = renamedScratchPath;
             scratchDiskPathRef.current = renamedScratchPath;
             setScratchDiskPath(renamedScratchPath);
@@ -2486,7 +2504,7 @@ export function AppShell() {
         ]);
         const notionFields = {
           ...EMPTY_NOTION_ESSAY_FIELDS,
-          ...notionFieldsFromLink(notionLinkFromFields(meta) ?? sidecarLink),
+          ...notionFieldsFromLink(mergeNotionEssayLink(notionLinkFromFields(meta), sidecarLink)),
         };
         const nextDoc: WorkspaceDocument = {
           id,
@@ -2641,6 +2659,9 @@ export function AppShell() {
             parentPageId: item.notionPageId,
             essayPageId: "",
             renameParent: false,
+            parentUrl: "",
+            essayUrl: "",
+            publicUrl: "",
           });
         } catch {
           // Sync can still create a new database page if this write fails.
@@ -2784,25 +2805,32 @@ export function AppShell() {
       notionParentPageId: activeDocument?.notionParentPageId,
       notionEssayPageId: activeDocument?.notionEssayPageId,
       notionRenameParent: activeDocument?.notionRenameParent,
+      notionParentUrl: activeDocument?.notionParentUrl,
+      notionEssayUrl: activeDocument?.notionEssayUrl,
+      publicUrl: activeDocument?.publicUrl,
     });
-    if (fromDoc) {
-      notionEssayLinkRef.current = fromDoc;
-      setNotionEssayLink(fromDoc);
-      return;
-    }
-    notionEssayLinkRef.current = null;
-    setNotionEssayLink(null);
     let cancelled = false;
     const tabId = activeTabId;
-    void loadNotionEssayLink(activeSourcePath).then((link) => {
+    void loadNotionEssayLink(activeSourcePath).then((sidecar) => {
       if (cancelled) return;
-      notionEssayLinkRef.current = link;
-      setNotionEssayLink(link);
-      if (link && tabId) {
+      const merged = mergeNotionEssayLink(fromDoc, sidecar);
+      notionEssayLinkRef.current = merged;
+      setNotionEssayLink(merged);
+      if (merged && tabId) {
         setOpenDocuments((prev) => {
           const current = prev[tabId];
-          if (!current || notionLinkFromFields(current)) return prev;
-          return { ...prev, [tabId]: { ...current, ...notionFieldsFromLink(link) } };
+          if (!current) return prev;
+          const fields = notionFieldsFromLink(merged);
+          if (
+            current.notionParentPageId === fields.notionParentPageId &&
+            current.notionEssayPageId === fields.notionEssayPageId &&
+            current.notionParentUrl === fields.notionParentUrl &&
+            current.notionEssayUrl === fields.notionEssayUrl &&
+            current.publicUrl === fields.publicUrl
+          ) {
+            return prev;
+          }
+          return { ...prev, [tabId]: { ...current, ...fields } };
         });
       }
     });
@@ -2815,7 +2843,47 @@ export function AppShell() {
     activeDocument?.notionParentPageId,
     activeDocument?.notionEssayPageId,
     activeDocument?.notionRenameParent,
+    activeDocument?.notionParentUrl,
+    activeDocument?.notionEssayUrl,
+    activeDocument?.publicUrl,
   ]);
+
+  useEffect(() => {
+    const onMatched = (event: Event) => {
+      const updates = (event as CustomEvent<PublishedUrlUpdate[]>).detail;
+      if (!Array.isArray(updates) || updates.length === 0) return;
+      setOpenDocuments((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const [id, doc] of Object.entries(prev)) {
+          const update = updates.find((item) =>
+            isExactOpenDocument(item.path, doc.sourcePath || id),
+          );
+          if (!update || doc.publicUrl === update.publicUrl) continue;
+          next[id] = { ...doc, publicUrl: update.publicUrl };
+          changed = true;
+        }
+        return changed ? next : prev;
+      });
+      const activePath = (activeDocument?.sourcePath || scratchDiskPath || "").trim();
+      const activeUpdate = updates.find((item) => isExactOpenDocument(item.path, activePath));
+      if (activeUpdate) {
+        const current = notionEssayLinkRef.current;
+        const nextLink = {
+          parentPageId: current?.parentPageId ?? "",
+          essayPageId: current?.essayPageId ?? "",
+          renameParent: Boolean(current?.renameParent),
+          parentUrl: current?.parentUrl ?? "",
+          essayUrl: current?.essayUrl ?? "",
+          publicUrl: activeUpdate.publicUrl,
+        };
+        notionEssayLinkRef.current = nextLink;
+        setNotionEssayLink(nextLink);
+      }
+    };
+    window.addEventListener(PUBLIC_URLS_MATCHED_EVENT, onMatched);
+    return () => window.removeEventListener(PUBLIC_URLS_MATCHED_EVENT, onMatched);
+  }, [activeDocument?.sourcePath, scratchDiskPath]);
 
   useEffect(() => {
     setTitleRenameDraft(null);
@@ -3147,18 +3215,6 @@ export function AppShell() {
     return copyDocumentToClipboard(tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath);
   }, [tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath]);
 
-  const handlePublishDocument = useCallback(async () => {
-    const destination = normalizeQuickLinkUrl(publishUrl);
-    if (!destination) return;
-    // Open on the click itself so the system browser is not blocked by clipboard work.
-    openSafeExternalUrl(destination);
-    try {
-      await copyDocumentToClipboard(tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath);
-    } catch {
-      // The destination is already opening; paste if the copy succeeds in the background.
-    }
-  }, [publishUrl, tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath]);
-
   const handlePrintDocument = useCallback(() => {
     void printDocumentFromEditor(
       tiptapEditor,
@@ -3171,19 +3227,19 @@ export function AppShell() {
   printDocumentRef.current = handlePrintDocument;
 
   const performNotionEssaySync = useCallback(
-    async (opts?: { silent?: boolean }) => {
-      if (notionSyncRunningRef.current) return;
+    async (opts?: { silent?: boolean }): Promise<NotionEssayLink | null> => {
+      if (notionSyncRunningRef.current) return null;
       if (!isTauriRuntime()) {
         if (!opts?.silent) {
           window.alert("Sync with Notion is only available in the Harvy desktop app.");
         }
-        return;
+        return null;
       }
       if (!notionConnected) {
         if (!opts?.silent) {
           window.alert("Connect Notion in Settings → Research before syncing.");
         }
-        return;
+        return null;
       }
       const sourcePath =
         (activeDocument?.sourcePath || scratchDiskPath || "").trim();
@@ -3191,7 +3247,7 @@ export function AppShell() {
         if (!opts?.silent) {
           window.alert("Save this essay before syncing with Notion.");
         }
-        return;
+        return null;
       }
 
       const markdown = getDocumentMarkdown(
@@ -3203,7 +3259,7 @@ export function AppShell() {
       const payload = `${title}\0${markdown}`;
       const link = notionEssayLinkRef.current;
       if (opts?.silent && (!link?.essayPageId || lastNotionSyncedRef.current === payload)) {
-        return;
+        return link ?? null;
       }
 
       notionSyncRunningRef.current = true;
@@ -3220,12 +3276,17 @@ export function AppShell() {
           parentPageId: result.parentPageId,
           essayPageId: result.essayPageId,
           renameParent: result.renameParent,
+          parentUrl: result.parentUrl || link?.parentUrl || "",
+          essayUrl: result.essayUrl || link?.essayUrl || "",
+          publicUrl: link?.publicUrl || activeDocument?.publicUrl || "",
         };
         const notionFields = notionFieldsFromLink(nextLink);
         const idsChanged =
           (link?.parentPageId ?? "") !== nextLink.parentPageId ||
           (link?.essayPageId ?? "") !== nextLink.essayPageId ||
-          Boolean(link?.renameParent) !== nextLink.renameParent;
+          Boolean(link?.renameParent) !== nextLink.renameParent ||
+          (link?.parentUrl ?? "") !== nextLink.parentUrl ||
+          (link?.essayUrl ?? "") !== nextLink.essayUrl;
         await saveNotionEssayLink(sourcePath, nextLink);
         if (idsChanged) {
           await invoke("write_text_file", {
@@ -3260,12 +3321,14 @@ export function AppShell() {
             };
           });
         }
+        return nextLink;
       } catch (e) {
         if (!opts?.silent) {
           window.alert(e instanceof Error ? e.message : String(e));
         } else {
           console.error(e);
         }
+        return null;
       } finally {
         notionSyncRunningRef.current = false;
         setNotionSyncRunning(false);
@@ -3284,6 +3347,35 @@ export function AppShell() {
       tiptapEditor,
     ],
   );
+
+  const handlePublishDocument = useCallback(async () => {
+    const destination = normalizeQuickLinkUrl(publishUrl);
+    if (!destination) return;
+    // Open on the click itself so the system browser is not blocked by clipboard work.
+    openSafeExternalUrl(destination);
+    try {
+      await copyDocumentToClipboard(tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath);
+    } catch {
+      // The destination is already opening; paste if the copy succeeds in the background.
+    }
+    const link = await performNotionEssaySync();
+    if (!link?.parentPageId) return;
+    try {
+      await markNotionEssayPublished(link.parentPageId, todayLocalIsoDate());
+    } catch (e) {
+      window.alert(
+        e instanceof Error
+          ? e.message
+          : "Copied and synced, but Notion Status / publish date could not be updated.",
+      );
+    }
+  }, [
+    publishUrl,
+    tiptapEditor,
+    copyDocumentFallbackMarkdown,
+    workspaceRootPath,
+    performNotionEssaySync,
+  ]);
 
   useEffect(() => {
     const payload = `${notionEssayTitle}\0${activeDocument?.content ?? scratchDraftContent}`;
@@ -3447,6 +3539,7 @@ export function AppShell() {
         await renameDocumentNotesSidecar(sourcePath, targetPath);
         await renameDocumentCriteriaSidecar(sourcePath, targetPath);
         await renameNotionEssaySidecar(sourcePath, targetPath);
+        await renameRelatedEssaySidecar(sourcePath, targetPath);
       } catch (e) {
         window.alert(e instanceof Error ? e.message : String(e));
         return { ok: false };
@@ -3570,6 +3663,20 @@ export function AppShell() {
       proofreadIssues={proofreadIssues}
       workspaceSection={activeWorkspaceSection}
       showQuickLinks={showQuickLinks}
+      relatedSourcePath={activeSourcePath}
+      relatedTitle={
+        (activeDocument?.postTitle ?? "").trim() || editorTitleBase.trim() || "Untitled"
+      }
+      relatedExcerpt={excerptFromMarkdown(editorText)}
+      workspaceTree={workspaceTree}
+      relatedAiReady={Boolean(aiCheckConfig?.enabled && aiCheckConfig.hasApiKey)}
+      onOpenRelatedFile={(path) => {
+        void selectNode({
+          name: fileNameFromPath(path),
+          path,
+          kind: "file",
+        });
+      }}
       showCriteria={showCriteria}
       aiCheckEnabled={Boolean(
         aiCheckConfig?.enabled && aiCheckConfig.hasApiKey && showAiCheck,

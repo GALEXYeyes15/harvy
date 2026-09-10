@@ -32,10 +32,19 @@ export type WorkspaceDocument = {
   notionEssayPageId: string;
   /** When true, Harvy created the parent database row and may rename it. */
   notionRenameParent: boolean;
+  /** Notion URL for the parent Ideas row. */
+  notionParentUrl: string;
+  /** Notion URL for the nested essay page. */
+  notionEssayUrl: string;
+  /** Public published URL (Substack / site) when matched. */
+  publicUrl: string;
 };
 
 export const EMPTY_NOTION_ESSAY_FIELDS = {
   notionParentPageId: "",
   notionEssayPageId: "",
   notionRenameParent: false,
+  notionParentUrl: "",
+  notionEssayUrl: "",
+  publicUrl: "",
 } as const;

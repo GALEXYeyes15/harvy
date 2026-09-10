@@ -13,6 +13,8 @@ describe("inferNotionIdeasPropertyMap", () => {
       titleProperty: "Name",
       notesProperty: "Notes",
       statusProperty: "Status",
+      urlProperty: "",
+      dateProperty: "Publish Date",
     });
   });
 
@@ -54,5 +56,25 @@ describe("inferNotionIdeasPropertyMap", () => {
         },
       ]),
     ).toEqual(["Idea", "Writing", "Done"]);
+  });
+
+  it("picks a URL property named Published or URL", () => {
+    const map = inferNotionIdeasPropertyMap([
+      { name: "Name", propertyType: "title" },
+      { name: "Status", propertyType: "status" },
+      { name: "Published", propertyType: "url" },
+      { name: "Other", propertyType: "url" },
+    ]);
+    expect(map.urlProperty).toBe("Published");
+  });
+
+  it("picks a date property named Publish Date", () => {
+    const map = inferNotionIdeasPropertyMap([
+      { name: "Name", propertyType: "title" },
+      { name: "Status", propertyType: "status" },
+      { name: "Created", propertyType: "date" },
+      { name: "Publish Date", propertyType: "date" },
+    ]);
+    expect(map.dateProperty).toBe("Publish Date");
   });
 });

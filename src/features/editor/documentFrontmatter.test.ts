@@ -8,6 +8,9 @@ const EMPTY_NOTION = {
   notionParentPageId: "",
   notionEssayPageId: "",
   notionRenameParent: false,
+  notionParentUrl: "",
+  notionEssayUrl: "",
+  publicUrl: "",
 };
 
 describe("documentFrontmatter", () => {
@@ -78,14 +81,26 @@ Body.
       notionParentPageId: "parent-1",
       notionEssayPageId: "essay-2",
       notionRenameParent: true,
+      notionParentUrl: "",
+      notionEssayUrl: "",
+      publicUrl: "",
     });
   });
 
-  it("keeps a parent-only Notion link without a title", () => {
-    const serialized = serializeDocumentWithFrontmatter("", {
-      notionParentPageId: "idea-card",
+  it("round-trips Notion urls and public url in frontmatter", () => {
+    const serialized = serializeDocumentWithFrontmatter("Body.\n", {
+      postTitle: "Ambition",
+      notionParentPageId: "parent-1",
+      notionEssayPageId: "essay-2",
+      notionParentUrl: "https://www.notion.so/parent",
+      notionEssayUrl: "https://www.notion.so/essay",
+      publicUrl: "https://alex.substack.com/p/ambition",
     });
-    expect(serialized).toContain("notion_page: idea-card");
-    expect(parseDocumentFrontmatter(serialized).meta.notionParentPageId).toBe("idea-card");
+    expect(serialized).toContain('notion_url: "https://www.notion.so/parent"');
+    expect(serialized).toContain('notion_essay_url: "https://www.notion.so/essay"');
+    expect(serialized).toContain('public_url: "https://alex.substack.com/p/ambition"');
+    expect(parseDocumentFrontmatter(serialized).meta.publicUrl).toBe(
+      "https://alex.substack.com/p/ambition",
+    );
   });
 });

@@ -127,7 +127,7 @@ fn build_tree(path: &Path, depth: usize, root_label: &str) -> Result<FileNode, S
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| child_path.to_string_lossy().to_string());
-            if name.ends_with(".harvy-notion.json") {
+            if name.ends_with(".harvy-notion.json") || name.ends_with(".harvy-related.json") {
                 continue;
             }
             children.push(FileNode {
