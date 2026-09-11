@@ -2,6 +2,7 @@ import { Clock } from "lucide-react";
 import { SidebarLayoutIcon } from "./SidebarLayoutIcon";
 import { EditorExportMenu } from "./EditorExportMenu";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
+import { formatHotkeyChord } from "../features/settings/hotkeys";
 
 /** Idle wait (ms) before starting the 1s reveal animation. */
 const IDLE_BEFORE_REVEAL_MS = 2000;
@@ -29,11 +30,15 @@ type EditorAmbientControlsProps = {
   focusRemainingLabel?: string;
   /** Copy full document to clipboard (rich HTML + plain text when supported). */
   onCopyDocument: () => Promise<boolean>;
+  onPublish?: () => void | Promise<void>;
+  publishEnabled?: boolean;
   onPodcastNotesPdf: () => void | Promise<void>;
-  onSaveAsPdf: () => void | Promise<void>;
   onPrint: () => void | Promise<void>;
   podcastNotesEnabled?: boolean;
   podcastNotesRunning?: boolean;
+  onSyncWithNotion?: () => void | Promise<void>;
+  notionSyncEnabled?: boolean;
+  notionSyncRunning?: boolean;
   /** When true, use AppShell chrome visibility instead of local idle/typing reveal timing. */
   syncWithChrome?: boolean;
   /** Shared chrome hidden state from AppShell (top + bottom unified). */
@@ -50,11 +55,15 @@ export function EditorAmbientControls({
   focusModeActive = false,
   focusRemainingLabel,
   onCopyDocument,
+  onPublish,
+  publishEnabled = false,
   onPodcastNotesPdf,
-  onSaveAsPdf,
   onPrint,
   podcastNotesEnabled = false,
   podcastNotesRunning = false,
+  onSyncWithNotion,
+  notionSyncEnabled = false,
+  notionSyncRunning = false,
   syncWithChrome,
   chromeHidden,
 }: EditorAmbientControlsProps) {
@@ -113,8 +122,8 @@ export function EditorAmbientControls({
           <button
             type="button"
             className={ICON_BTN}
-            aria-label="Toggle sidebars"
-            title="Toggle sidebars"
+            aria-label={`Toggle sidebars (${formatHotkeyChord(["Option", "ArrowDown"])})`}
+            title={`Toggle sidebars (${formatHotkeyChord(["Option", "ArrowDown"])})`}
             onClick={onToggleBothSidebars}
           >
             <SidebarLayoutIcon size={ICON_SIZE} strokeWidth={ICON_STROKE} />
@@ -149,11 +158,15 @@ export function EditorAmbientControls({
         {focusModeActive ? null : (
           <EditorExportMenu
             onCopyDocument={onCopyDocument}
+            onPublish={onPublish}
+            publishEnabled={publishEnabled}
             onPodcastNotesPdf={onPodcastNotesPdf}
-            onSaveAsPdf={onSaveAsPdf}
             onPrint={onPrint}
             podcastNotesEnabled={podcastNotesEnabled}
             podcastNotesRunning={podcastNotesRunning}
+            onSyncWithNotion={onSyncWithNotion}
+            notionSyncEnabled={notionSyncEnabled}
+            notionSyncRunning={notionSyncRunning}
           />
         )}
       </div>

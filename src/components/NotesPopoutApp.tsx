@@ -11,6 +11,7 @@ import {
   applyAppearanceStyle,
   readStoredAppearanceStyleId,
 } from "../theme/appearanceStyles";
+import { applySystemTypography, SYSTEM_TYPOGRAPHY_KEY } from "../theme/systemTypography";
 import {
   applyResolvedTheme,
   readStoredThemeMode,
@@ -22,6 +23,7 @@ function applyTheme(mode: ThemeMode, systemPrefersDark: boolean) {
   const resolved = resolveTheme(mode, systemPrefersDark);
   applyResolvedTheme(resolved);
   applyAppearanceStyle(readStoredAppearanceStyleId(), resolved);
+  applySystemTypography();
 }
 
 /**
@@ -38,7 +40,7 @@ export function NotesPopoutApp() {
     syncTheme();
     mq.addEventListener("change", syncTheme);
     const onStorage = (event: StorageEvent) => {
-      if (event.key === "harvy-theme" || event.key === "harvy-style" || event.key === "harvy:appearance-styles:v1") {
+      if (event.key === "harvy-theme" || event.key === "harvy-style" || event.key === "harvy:appearance-styles:v1" || event.key === SYSTEM_TYPOGRAPHY_KEY) {
         syncTheme();
       }
     };

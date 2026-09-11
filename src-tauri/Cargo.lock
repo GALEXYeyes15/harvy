@@ -1493,12 +1493,14 @@ dependencies = [
 name = "harvy"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "block2",
  "dotenvy",
  "image",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
+ "objc2-pdf-kit",
  "printpdf",
  "pulldown-cmark",
  "regex",
@@ -1509,6 +1511,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
+ "time",
 ]
 
 [[package]]
@@ -2506,6 +2509,20 @@ dependencies = [
  "bitflags 2.11.0",
  "objc2",
  "objc2-core-foundation",
+]
+
+[[package]]
+name = "objc2-pdf-kit"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c14ed801ae810c6ba487cedd7616bb48f9a8e37940042f57e862538e2c7db117"
+dependencies = [
+ "bitflags 2.11.0",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation",
 ]
 
 [[package]]

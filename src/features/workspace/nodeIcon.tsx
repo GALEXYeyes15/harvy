@@ -50,19 +50,10 @@ export const WORKSPACE_ICON_PROPS = {
 export function WorkspaceNodeIcon({
   node,
   isExpanded,
-  selected,
 }: {
   node: FileNode;
   isExpanded: boolean;
-  selected: boolean;
 }) {
   const Icon = getNodeIcon(node, node.kind === "directory" ? isExpanded : undefined);
-  return (
-    <Icon
-      {...WORKSPACE_ICON_PROPS}
-      className={
-        selected ? `${WORKSPACE_ICON_PROPS.className} text-muted` : WORKSPACE_ICON_PROPS.className
-      }
-    />
-  );
+  return <Icon {...WORKSPACE_ICON_PROPS} />;
 }

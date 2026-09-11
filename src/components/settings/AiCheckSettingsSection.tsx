@@ -101,7 +101,7 @@ export function AiCheckSettingsSection({
     return (
       <div className={shellClass}>
         {embedded ? null : <p className="text-[13px] font-medium text-ink">AI check</p>}
-        <p className={`${embedded ? "" : "mt-0.5 "}text-[11px] leading-snug text-muted/75`}>
+        <p className={`${embedded ? "" : "mt-0.5 "}text-[12px] leading-snug text-muted/75`}>
           Add an OpenAI or Anthropic API key in the Harvy desktop app to enable on-demand essay
           review.
         </p>

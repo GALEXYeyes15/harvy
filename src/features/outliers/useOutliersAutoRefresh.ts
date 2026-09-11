@@ -1,11 +1,11 @@
 import { useEffect } from "react";
-import { fetchSubstackOutlierPosts } from "./fetchSubstackOutliers";
+import { fetchAllOutlierPosts } from "./fetchOutlierPosts";
 import {
   OUTLIERS_SETTINGS_CHANGED_EVENT,
   outliersFetchIntervalMs,
   readOutliersSettings,
 } from "./outliersSettings";
-import { readSubstackOutliersCache } from "./substackOutliersCache";
+import { outliersCacheKey, readOutliersCacheEntry } from "./outliersCache";
 
 /** Fired after a successful auto-refresh writes the Outliers cache. */
 export const OUTLIERS_CACHE_UPDATED_EVENT = "harvy:outliers-cache-updated";
@@ -18,6 +18,18 @@ export function msUntilNextOutliersRefresh(
 ): number {
   if (lastFetchedAt == null || lastFetchedAt <= 0 || intervalMs <= 0) return 0;
   return Math.max(0, intervalMs - (nowMs - lastFetchedAt));
+}
+
+function latestFetchedAtForSources(): number | null {
+  const settings = readOutliersSettings();
+  let latest: number | null = null;
+  for (const source of settings.sources) {
+    const key = outliersCacheKey(source.id, source.platform, source.url);
+    const entry = readOutliersCacheEntry(key);
+    if (!entry) continue;
+    if (latest == null || entry.fetchedAt > latest) latest = entry.fetchedAt;
+  }
+  return latest;
 }
 
 /**
@@ -38,17 +50,14 @@ export function useOutliersAutoRefresh(enabled: boolean): void {
       timerId = null;
     };
 
-    const runFetch = async (url: string) => {
+    const runFetch = async () => {
       if (inFlight) return;
       inFlight = true;
       try {
-        const result = await fetchSubstackOutlierPosts(url, { forceRefresh: true });
-        if (cancelled || !result.refreshed) return;
-        window.dispatchEvent(
-          new CustomEvent(OUTLIERS_CACHE_UPDATED_EVENT, {
-            detail: { accountUrl: url },
-          }),
-        );
+        const settings = readOutliersSettings();
+        const result = await fetchAllOutlierPosts(settings.sources, { forceRefresh: true });
+        if (cancelled || !result.refreshedAny) return;
+        window.dispatchEvent(new CustomEvent(OUTLIERS_CACHE_UPDATED_EVENT));
       } catch {
         // Keep the schedule; next tick retries. Cache stays as-is.
       } finally {
@@ -62,11 +71,10 @@ export function useOutliersAutoRefresh(enabled: boolean): void {
 
       const settings = readOutliersSettings();
       if (!settings.autoFetchEnabled || !settings.autoRefreshArmed) return;
-      const url = settings.accountLink.trim();
-      if (!url) return;
+      if (settings.sources.length === 0) return;
 
       const intervalMs = outliersFetchIntervalMs(settings.fetchIntervalMinutes);
-      const lastFetchedAt = readSubstackOutliersCache(url)?.fetchedAt ?? null;
+      const lastFetchedAt = latestFetchedAtForSources();
       const delay = msUntilNextOutliersRefresh(lastFetchedAt, intervalMs);
 
       timerId = window.setTimeout(() => {
@@ -74,9 +82,8 @@ export function useOutliersAutoRefresh(enabled: boolean): void {
           if (cancelled) return;
           const latest = readOutliersSettings();
           if (!latest.autoFetchEnabled || !latest.autoRefreshArmed) return;
-          const latestUrl = latest.accountLink.trim();
-          if (!latestUrl) return;
-          await runFetch(latestUrl);
+          if (latest.sources.length === 0) return;
+          await runFetch();
           if (!cancelled) schedule();
         })();
       }, delay);

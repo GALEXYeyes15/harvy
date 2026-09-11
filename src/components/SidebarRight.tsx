@@ -9,6 +9,8 @@ import type { ProofreadIssue } from "../features/proofread/types";
 import type { WorkspaceSection } from "../features/workspace/workspaceSection";
 import { CriteriaSidebarPanel } from "./CriteriaSidebarPanel";
 import { NotesSidebarPanel } from "./NotesSidebarPanel";
+import type { FileNode } from "../features/workspace/types";
+import type { RelatedEssayItem } from "../features/related-essays/relatedEssays";
 
 const PANEL =
   "relative flex h-full min-h-0 w-full flex-col bg-stage font-[system-ui,-apple-system,BlinkMacSystemFont,'Segoe_UI',sans-serif] text-ink antialiased [backdrop-filter:none]";
@@ -46,6 +48,14 @@ export type SidebarRightProps = {
   onToggleNotesPopout?: () => void;
   /** When on, Quick Links appears below Notes. */
   showQuickLinks?: boolean;
+  /** When on, Find Related Essays appears below Notes. */
+  showRelatedEssays?: boolean;
+  relatedSourcePath?: string;
+  relatedTitle?: string;
+  relatedExcerpt?: string;
+  workspaceTree?: FileNode | null;
+  relatedAiReady?: boolean;
+  onRelatedItemsFound?: (items: RelatedEssayItem[]) => Promise<string | null>;
   /** When on, Criteria appears as a tools tab (Write). */
   showCriteria?: boolean;
   proofreadIssues?: ProofreadIssue[];
@@ -82,7 +92,7 @@ function SidebarToolsTab({
       className="group flex min-w-0 flex-col items-stretch gap-1 py-0.5 text-center"
     >
       <span
-        className={`text-[11px] font-medium leading-normal tracking-wide transition-colors ${
+        className={`text-[12px] font-medium leading-normal tracking-wide transition-colors ${
           active ? "text-ink" : "text-muted/60 group-hover:text-muted/85"
         }`}
       >
@@ -349,6 +359,13 @@ export function SidebarRight({
   onCriteriaChange,
   onToggleNotesPopout,
   showQuickLinks = false,
+  showRelatedEssays = true,
+  relatedSourcePath = "",
+  relatedTitle = "",
+  relatedExcerpt = "",
+  workspaceTree = null,
+  relatedAiReady = false,
+  onRelatedItemsFound,
   showCriteria = true,
   proofreadIssues = [],
   workspaceSection = "write",
@@ -378,6 +395,13 @@ export function SidebarRight({
             onNotesChange={onNotesChange}
             onTogglePopout={onToggleNotesPopout}
             showQuickLinks={showQuickLinks}
+            showRelatedEssays={showRelatedEssays}
+            sourcePath={relatedSourcePath}
+            relatedTitle={relatedTitle}
+            relatedExcerpt={relatedExcerpt}
+            workspaceTree={workspaceTree}
+            aiReady={relatedAiReady}
+            onRelatedItemsFound={onRelatedItemsFound}
           />
         </div>
       </div>
@@ -386,7 +410,7 @@ export function SidebarRight({
 
   return (
     <div className={PANEL}>
-      {/* pt-1 mirrors SidebarLeft first block after the h-8 chrome band (toggle → content rhythm) */}
+      {/* pt-1 mirrors SidebarLeft first block after the tab-bar chrome band (toggle → content rhythm) */}
       <div
         className={`grid shrink-0 items-end gap-x-5 px-7 pb-3 pt-1 ${tabColsClass}`}
         role="tablist"
@@ -409,6 +433,13 @@ export function SidebarRight({
             onNotesChange={onNotesChange}
             onTogglePopout={onToggleNotesPopout}
             showQuickLinks={showQuickLinks}
+            showRelatedEssays={showRelatedEssays}
+            sourcePath={relatedSourcePath}
+            relatedTitle={relatedTitle}
+            relatedExcerpt={relatedExcerpt}
+            workspaceTree={workspaceTree}
+            aiReady={relatedAiReady}
+            onRelatedItemsFound={onRelatedItemsFound}
           />
         ) : mode === "criteria" ? (
           <CriteriaSidebarPanel criteria={criteria} onCriteriaChange={onCriteriaChange} />

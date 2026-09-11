@@ -1,150 +1,94 @@
-import {
-  Check,
-  FileText,
-  NotepadText,
-  RefreshCw,
-  Trash2,
-  Type as TypeIcon,
-} from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { type CollectItem } from "../features/collect/collectItems";
+import {
+  COLLECT_SUB_VIEW_LABELS,
+  enabledCollectViews,
+  firstEnabledCollectView,
+  isCollectViewEnabled,
+  type CollectSubView,
+} from "../features/workspace/collectViews";
 import {
   getNotionIdeasConfig,
   mergeNotionIdeasIntoCollectItems,
   queryNotionIdeaPages,
+  dismissNotionIdeaPage,
   readNotionIdeasLastSyncedAt,
   writeNotionIdeasLastSyncedAt,
 } from "../features/notion/notionIdeas";
 import { formatFetchedAgo } from "../features/outliers/outlierPosts";
+import { useOutlierColumnCount } from "../features/outliers/useOutlierColumnCount";
 import { isTauriRuntime } from "../features/save/saveRuntime";
 import { AvatarView } from "./AvatarView";
 import { CollectItemModal } from "./CollectItemModal";
+import { HeadlinesView } from "./HeadlinesView";
 import { OutliersView } from "./OutliersView";
 import { WorkspaceSectionMainContent } from "./WorkspaceSectionMainContent";
-
-const SELECTION_ACTION_BUTTON =
-  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-accent/65 transition-colors hover:bg-white/[0.06] hover:text-accent";
 
 const SUB_VIEW_TAB =
   "border-0 bg-transparent p-0 text-[1.375rem] font-semibold leading-none tracking-[-0.02em]";
 
-export type CollectSubView = "outliers" | "collect" | "avatar";
+export type { CollectSubView };
 
-function CollectRowCheckbox({
-  checked,
-  onToggle,
+function IdeaGalleryCard({
+  item,
+  onOpen,
 }: {
-  checked: boolean;
-  onToggle: () => void;
+  item: CollectItem;
+  onOpen: () => void;
 }) {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={checked}
-      aria-label={checked ? "Deselect row" : "Select row"}
-      className={`harvy-checkbox flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-sm transition-opacity duration-150 ${
-        checked
-          ? "harvy-checkbox--checked opacity-100"
-          : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-      }`}
-      onClick={(event) => {
-        event.stopPropagation();
-        onToggle();
-      }}
-    >
-      {checked ? <Check size={14} strokeWidth={2.75} className="text-white" aria-hidden /> : null}
-    </button>
-  );
-}
-
-function CollectSelectionActions({
-  selectedCount,
-  onDelete,
-  onAddToNotes,
-}: {
-  selectedCount: number;
-  onDelete: () => void;
-  onAddToNotes: () => void;
-}) {
-  const labelSuffix = selectedCount === 1 ? "selected item" : "selected items";
+  const untitled = !item.preview.trim();
+  const title = untitled ? "Untitled" : item.preview.trim();
+  const notes = (item.body ?? "").trim();
 
   return (
-    <div className="flex items-center gap-1.5">
-      <button
-        type="button"
-        className={SELECTION_ACTION_BUTTON}
-        aria-label={`Delete ${selectedCount} ${labelSuffix}`}
-        onClick={onDelete}
-      >
-        <Trash2 size={15} strokeWidth={1.75} aria-hidden />
-      </button>
-      <button
-        type="button"
-        className={SELECTION_ACTION_BUTTON}
-        aria-label={`Add ${selectedCount} ${labelSuffix} to Notes`}
-        onClick={onAddToNotes}
-      >
-        <NotepadText size={15} strokeWidth={1.75} aria-hidden />
-      </button>
-    </div>
+    <article className="harvy-outlier-card harvy-idea-card relative" onClick={onOpen}>
+      <div className="harvy-idea-card-preview">
+        {notes ? <p className="harvy-idea-card-preview-text">{notes}</p> : null}
+      </div>
+
+      <div className="harvy-idea-card-title">
+        <span className={`harvy-idea-card-title-text ${untitled ? "is-untitled" : ""}`}>
+          {title}
+        </span>
+      </div>
+    </article>
   );
 }
 
 function CollectSubViewTabs({
   activeView,
   onViewChange,
-  showOutliersView,
-  showCollectView,
-  showAvatarView,
+  views,
+  collectViewOrder,
 }: {
   activeView: CollectSubView;
   onViewChange: (view: CollectSubView) => void;
-  showOutliersView: boolean;
-  showCollectView: boolean;
-  showAvatarView: boolean;
+  views: {
+    showOutliersView: boolean;
+    showCollectView: boolean;
+    showHeadlinesView: boolean;
+    showAvatarView: boolean;
+  };
+  collectViewOrder: CollectSubView[];
 }) {
   return (
     <div className="flex items-baseline gap-7" role="tablist" aria-label="Research views">
-      {showOutliersView ? (
+      {enabledCollectViews(views, collectViewOrder).map((view) => (
         <button
+          key={view}
           type="button"
           role="tab"
-          aria-selected={activeView === "outliers"}
+          aria-selected={activeView === view}
           className={`${SUB_VIEW_TAB} text-ink ${
-            activeView === "outliers" ? "opacity-100" : "opacity-40"
+            activeView === view ? "opacity-100" : "opacity-40"
           }`}
-          onClick={() => onViewChange("outliers")}
+          onClick={() => onViewChange(view)}
         >
-          Outliers
+          {COLLECT_SUB_VIEW_LABELS[view]}
         </button>
-      ) : null}
-      {showCollectView ? (
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeView === "collect"}
-          className={`${SUB_VIEW_TAB} text-ink ${
-            activeView === "collect" ? "opacity-100" : "opacity-40"
-          }`}
-          onClick={() => onViewChange("collect")}
-        >
-          Ideas
-        </button>
-      ) : null}
-      {showAvatarView ? (
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeView === "avatar"}
-          className={`${SUB_VIEW_TAB} text-ink ${
-            activeView === "avatar" ? "opacity-100" : "opacity-40"
-          }`}
-          onClick={() => onViewChange("avatar")}
-        >
-          Avatar
-        </button>
-      ) : null}
+      ))}
     </div>
   );
 }
@@ -152,35 +96,11 @@ function CollectSubViewTabs({
 function soleCollectViewTitle(views: {
   showOutliersView: boolean;
   showCollectView: boolean;
+  showHeadlinesView: boolean;
   showAvatarView: boolean;
 }): string {
-  if (views.showOutliersView && !views.showCollectView && !views.showAvatarView) return "Outliers";
-  if (views.showCollectView && !views.showOutliersView && !views.showAvatarView) return "Ideas";
-  if (views.showAvatarView && !views.showOutliersView && !views.showCollectView) return "Avatar";
-  return "Research";
-}
-
-function firstEnabledCollectView(views: {
-  showOutliersView: boolean;
-  showCollectView: boolean;
-  showAvatarView: boolean;
-}): CollectSubView {
-  if (views.showCollectView) return "collect";
-  if (views.showOutliersView) return "outliers";
-  return "avatar";
-}
-
-function isCollectViewEnabled(
-  view: CollectSubView,
-  views: {
-    showOutliersView: boolean;
-    showCollectView: boolean;
-    showAvatarView: boolean;
-  },
-): boolean {
-  if (view === "outliers") return views.showOutliersView;
-  if (view === "collect") return views.showCollectView;
-  return views.showAvatarView;
+  const labels = enabledCollectViews(views).map((view) => COLLECT_SUB_VIEW_LABELS[view]);
+  return labels.length === 1 ? labels[0]! : "Research";
 }
 
 type CollectPanelProps = {
@@ -190,7 +110,9 @@ type CollectPanelProps = {
   onStartWriting?: (item: CollectItem) => void | Promise<void>;
   showOutliersView?: boolean;
   showCollectView?: boolean;
+  showHeadlinesView?: boolean;
   showAvatarView?: boolean;
+  collectViewOrder?: CollectSubView[];
   workspaceSidebarOpen?: boolean;
   toolsSidebarOpen?: boolean;
 };
@@ -202,19 +124,23 @@ export function CollectPanel({
   onStartWriting,
   showOutliersView = true,
   showCollectView = true,
+  showHeadlinesView = true,
   showAvatarView = true,
+  collectViewOrder,
   workspaceSidebarOpen = true,
   toolsSidebarOpen = true,
 }: CollectPanelProps) {
-  const views = { showOutliersView, showCollectView, showAvatarView };
+  const views = { showOutliersView, showCollectView, showHeadlinesView, showAvatarView };
   const enabledCount =
-    Number(showOutliersView) + Number(showCollectView) + Number(showAvatarView);
+    Number(showOutliersView) +
+    Number(showCollectView) +
+    Number(showHeadlinesView) +
+    Number(showAvatarView);
 
   const [activeCollectView, setActiveCollectView] = useState<CollectSubView>(() =>
-    firstEnabledCollectView(views),
+    firstEnabledCollectView(views, collectViewOrder),
   );
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [notionConnected, setNotionConnected] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -226,9 +152,9 @@ export function CollectPanel({
 
   useEffect(() => {
     if (!isCollectViewEnabled(activeCollectView, views)) {
-      setActiveCollectView(firstEnabledCollectView(views));
+      setActiveCollectView(firstEnabledCollectView(views, collectViewOrder));
     }
-  }, [activeCollectView, showOutliersView, showCollectView, showAvatarView]);
+  }, [activeCollectView, collectViewOrder, showOutliersView, showCollectView, showHeadlinesView, showAvatarView]);
 
   const syncFromNotion = useCallback(async () => {
     if (!isTauriRuntime()) return;
@@ -263,10 +189,10 @@ export function CollectPanel({
     };
   }, [activeCollectView]);
 
-  const selectedItems = useMemo(
-    () => items.filter((item) => selectedIds.has(item.id)),
-    [items, selectedIds],
-  );
+  const { columnCount, isReflowing } = useOutlierColumnCount({
+    workspaceSidebarOpen,
+    toolsSidebarOpen,
+  });
 
   /** Ideas are Notion-sourced only — hide any legacy local rows. */
   const ideaItems = useMemo(
@@ -285,14 +211,6 @@ export function CollectPanel({
     [ideaItems, activeItemId],
   );
 
-  useEffect(() => {
-    setSelectedIds((current) => {
-      const validIds = new Set(items.map((item) => item.id));
-      const next = new Set([...current].filter((id) => validIds.has(id)));
-      return next.size === current.size ? current : next;
-    });
-  }, [items]);
-
   const updateItem = (itemId: string, patch: Partial<CollectItem>) => {
     onItemsChange(
       items.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
@@ -303,37 +221,18 @@ export function CollectPanel({
     setActiveItemId(itemId);
   };
 
-  const toggleSelected = (itemId: string) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (next.has(itemId)) {
-        next.delete(itemId);
-      } else {
-        next.add(itemId);
-      }
-      return next;
-    });
-  };
-
-  const removeSelectedItems = () => {
-    if (selectedIds.size === 0) return;
-    onItemsChange(items.filter((item) => !selectedIds.has(item.id)));
-    if (activeItemId && selectedIds.has(activeItemId)) {
-      setActiveItemId(null);
+  const deleteItem = async (item: CollectItem) => {
+    const title = item.preview.trim() || "Untitled";
+    const message = `Delete “${title}” from Ideas?`;
+    const ok = isTauriRuntime()
+      ? await confirm(message, { title: "Delete idea", kind: "warning" })
+      : window.confirm(message);
+    if (!ok) return;
+    if (item.notionPageId) {
+      dismissNotionIdeaPage(item.notionPageId);
     }
-    setSelectedIds(new Set());
-  };
-
-  const handleAddSelectedToNotes = () => {
-    if (selectedItems.length === 0 || !onAddPreviewToNotes) return;
-
-    const combined = selectedItems
-      .map((item) => item.preview.trim())
-      .filter(Boolean)
-      .join("\n\n");
-
-    if (!combined) return;
-    onAddPreviewToNotes(combined);
+    onItemsChange(items.filter((row) => row.id !== item.id));
+    setActiveItemId(null);
   };
 
   return (
@@ -344,9 +243,8 @@ export function CollectPanel({
             <CollectSubViewTabs
               activeView={activeCollectView}
               onViewChange={setActiveCollectView}
-              showOutliersView={showOutliersView}
-              showCollectView={showCollectView}
-              showAvatarView={showAvatarView}
+              views={views}
+              collectViewOrder={collectViewOrder ?? []}
             />
           ) : (
             <h2 className="text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-ink">
@@ -357,9 +255,14 @@ export function CollectPanel({
 
         {activeCollectView === "avatar" && showAvatarView ? (
           <AvatarView />
+        ) : activeCollectView === "headlines" && showHeadlinesView ? (
+          <HeadlinesView
+            workspaceSidebarOpen={workspaceSidebarOpen}
+            toolsSidebarOpen={toolsSidebarOpen}
+          />
         ) : activeCollectView === "collect" && showCollectView ? (
-        <div className="harvy-notion-db mt-7">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="mt-7 flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0 text-[12px] text-muted/65 dark:text-white/45">
                 {notionConnected ? (
                   <>
@@ -377,13 +280,6 @@ export function CollectPanel({
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {selectedIds.size > 0 ? (
-                  <CollectSelectionActions
-                    selectedCount={selectedIds.size}
-                    onDelete={removeSelectedItems}
-                    onAddToNotes={handleAddSelectedToNotes}
-                  />
-                ) : null}
                 {notionConnected ? (
                   <button
                     type="button"
@@ -403,102 +299,36 @@ export function CollectPanel({
               </div>
             </div>
 
-            <div className="harvy-notion-db-frame">
-              <table className="harvy-notion-db-table">
-                <thead>
-                  <tr>
-                    <th className="harvy-notion-db-th harvy-notion-db-th--name">
-                      <span className="harvy-notion-db-th-inner">
-                        <TypeIcon size={13} strokeWidth={1.75} aria-hidden />
-                        Name
-                      </span>
-                    </th>
-                    <th className="harvy-notion-db-th harvy-notion-db-th--check" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {ideaItems.length === 0 ? (
-                    <tr>
-                      <td colSpan={2} className="harvy-notion-db-empty">
-                        {notionConnected
-                          ? 'No pages with Status “Idea”. Add one in Notion, then Sync.'
-                          : "Connect Notion in Settings → Research to load ideas."}
-                      </td>
-                    </tr>
-                  ) : (
-                    ideaItems.map((item) => {
-                      const isSelected = selectedIds.has(item.id);
-                      return (
-                        <tr
-                          key={item.id}
-                          className={`harvy-notion-db-row group ${isSelected ? "is-selected" : ""}`}
-                          onClick={() => openItem(item.id)}
-                        >
-                          <td className="harvy-notion-db-td harvy-notion-db-td--name">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <FileText
-                                size={15}
-                                strokeWidth={1.6}
-                                className="harvy-notion-page-icon shrink-0"
-                                aria-hidden
-                              />
-                              <span
-                                className={`min-w-0 flex-1 truncate text-[14px] ${
-                                  item.preview.trim()
-                                    ? "text-ink dark:text-white/90"
-                                    : "text-muted/50 dark:text-white/35"
-                                }`}
-                              >
-                                {item.preview.trim() || "Untitled"}
-                              </span>
-                              <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                {onStartWriting ? (
-                                  <button
-                                    type="button"
-                                    className="harvy-notion-row-action"
-                                    aria-label="Start writing"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      void onStartWriting(item);
-                                    }}
-                                  >
-                                    Write
-                                  </button>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  className="harvy-notion-row-action"
-                                  aria-label="Open idea"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    openItem(item.id);
-                                  }}
-                                >
-                                  Open
-                                </button>
-                              </div>
-                            </div>
-                          </td>
-                          <td
-                            className="harvy-notion-db-td harvy-notion-db-td--check"
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            <CollectRowCheckbox
-                              checked={isSelected}
-                              onToggle={() => toggleSelected(item.id)}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+            {ideaItems.length === 0 ? (
+              <p className="mt-5 text-[13px] text-muted/65">
+                {notionConnected
+                  ? 'No pages with Status “Idea”. Add one in Notion, then Sync.'
+                  : "Connect Notion in Settings → Research to load ideas."}
+              </p>
+            ) : (
+              <div
+                className="harvy-idea-gallery mt-5"
+                data-reflowing={isReflowing ? "true" : undefined}
+                style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
+              >
+                {ideaItems.map((item) => (
+                  <IdeaGalleryCard
+                    key={item.id}
+                    item={item}
+                    onOpen={() => openItem(item.id)}
+                  />
+                ))}
+              </div>
+            )}
         </div>
         ) : showOutliersView ? (
           <OutliersView
             onAddToNotes={onAddPreviewToNotes}
+            workspaceSidebarOpen={workspaceSidebarOpen}
+            toolsSidebarOpen={toolsSidebarOpen}
+          />
+        ) : showHeadlinesView ? (
+          <HeadlinesView
             workspaceSidebarOpen={workspaceSidebarOpen}
             toolsSidebarOpen={toolsSidebarOpen}
           />
@@ -520,6 +350,7 @@ export function CollectPanel({
               }
             : undefined
         }
+        onDelete={(item) => void deleteItem(item)}
       />
     </>
   );

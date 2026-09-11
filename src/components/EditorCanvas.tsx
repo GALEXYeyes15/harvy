@@ -1,7 +1,9 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
+  useState,
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type RefObject,
@@ -38,6 +40,9 @@ import {
   tryOpenMechanicsSuggestionPopover,
   tryOpenSpellingSuggestionPopover,
 } from "../features/editor/editorContextMenu";
+import { closeHarvyContextMenu } from "../features/editor/harvyContextMenu";
+import type { HeadlinePair } from "../features/aiCheck/aiCheck";
+import { HeadlineSuggestMenu } from "./HeadlineSuggestMenu";
 import {
   attachEditorLinkModifierCursor,
   handleEditorLinkPointerDown,
@@ -104,6 +109,16 @@ type EditorCanvasProps = {
   loadImageAt?: (pos: number, attrs: HarvyImageLoadAttrs) => void;
   /** Insert image block at cursor (same flow as context menu action). */
   onInsertImage?: () => void | Promise<void>;
+  /** When on, two-finger click (context menu) on Title or Subtitle opens Suggest titles. */
+  showTitleGeneration?: boolean;
+  headlinesRunning?: boolean;
+  headlinesRunningFromHeadlines?: boolean;
+  headlinesError?: string | null;
+  headlinePairs?: HeadlinePair[];
+  selectedHeadlineIndex?: number | null;
+  onGenerateHeadlines?: () => void | Promise<void>;
+  onGenerateHeadlinesFromShots?: () => void | Promise<void>;
+  onSelectHeadlinePair?: (pair: HeadlinePair, index: number) => void;
   /** Visual inactive mode — hides caret/selection until user clicks the writing surface. */
   editorVisuallyInactive?: boolean;
   /** When true, block focus until the user clicks the writing surface. */
@@ -137,6 +152,15 @@ export function EditorCanvas({
   pickLocalImage,
   loadImageAt,
   onInsertImage,
+  showTitleGeneration = false,
+  headlinesRunning = false,
+  headlinesRunningFromHeadlines = false,
+  headlinesError = null,
+  headlinePairs = [],
+  selectedHeadlineIndex = null,
+  onGenerateHeadlines,
+  onGenerateHeadlinesFromShots,
+  onSelectHeadlinePair,
   editorVisuallyInactive = false,
   editorFocusSuppressedRef,
   onEditorUserActivated,
@@ -159,6 +183,28 @@ export function EditorCanvas({
   blockBackspaceRef.current = blockBackspace;
   const writingSurfaceRef = useRef<HTMLDivElement | null>(null);
   const dropInFlightRef = useRef(false);
+  const [headlineMenuOpen, setHeadlineMenuOpen] = useState(false);
+  const [headlineAnchorEl, setHeadlineAnchorEl] = useState<HTMLElement | null>(null);
+  const [headlineMountEl, setHeadlineMountEl] = useState<HTMLElement | null>(null);
+
+  const closeHeadlineMenu = useCallback(() => {
+    setHeadlineMenuOpen(false);
+  }, []);
+
+  const openHeadlineMenu = useCallback(
+    (el: HTMLElement) => {
+      if (!isEditable || !showTitleGeneration) return;
+      closeHarvyContextMenu();
+      setHeadlineAnchorEl(el);
+      setHeadlineMountEl(writingSurfaceRef.current);
+      setHeadlineMenuOpen(true);
+    },
+    [isEditable, showTitleGeneration],
+  );
+
+  useEffect(() => {
+    if (!showTitleGeneration || !isEditable) setHeadlineMenuOpen(false);
+  }, [showTitleGeneration, isEditable]);
 
   const editorFocusControl = useMemo<EditorCanvasFocusControl>(
     () => ({
@@ -496,6 +542,7 @@ export function EditorCanvas({
     if (editor.view.dom.contains(event.target as Node)) return;
     const target = event.target;
     if (target instanceof Element && target.closest(".harvy-doc-header")) return;
+    if (target instanceof Element && target.closest(".harvy-context-menu")) return;
     handleEditorWritingSurfacePointerDown(event.nativeEvent, editorFocusControl);
     if (handleEditorCanvasFocusPointerDown(editor.view, event.nativeEvent, editorFocusControl)) {
       event.preventDefault();
@@ -538,7 +585,7 @@ export function EditorCanvas({
     >
       <div
         ref={writingSurfaceRef}
-        className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain ${focusModeActive ? "cursor-none" : isEditable ? "cursor-text" : ""}`}
+        className={`relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain ${focusModeActive ? "cursor-none" : isEditable ? "cursor-text" : ""}`}
         onMouseDown={handleCanvasMouseDown}
         onDragOver={handleSurfaceDragOver}
         onDrop={handleSurfaceDrop}
@@ -573,6 +620,11 @@ export function EditorCanvas({
                         return;
                       }
                       editor?.commands.focus("start");
+                    }}
+                    onContextMenu={(event) => {
+                      if (!isEditable || !showTitleGeneration) return;
+                      event.preventDefault();
+                      openHeadlineMenu(event.currentTarget);
                     }}
                     onInput={(event) => {
                       const el = event.currentTarget;
@@ -612,6 +664,11 @@ export function EditorCanvas({
                       event.preventDefault();
                       editor?.commands.focus("start");
                     }}
+                    onContextMenu={(event) => {
+                      if (!isEditable || !showTitleGeneration) return;
+                      event.preventDefault();
+                      openHeadlineMenu(event.currentTarget);
+                    }}
                     onInput={(event) => {
                       const el = event.currentTarget;
                       el.style.height = "auto";
@@ -633,6 +690,31 @@ export function EditorCanvas({
           </label>
           <EditorContent editor={editor} className="block min-h-full w-full flex-1 pb-52" />
         </div>
+        <HeadlineSuggestMenu
+          open={headlineMenuOpen}
+          anchorEl={headlineAnchorEl}
+          mountEl={headlineMountEl}
+          running={headlinesRunning}
+          runningFromHeadlines={headlinesRunningFromHeadlines}
+          error={headlinesError}
+          pairs={headlinePairs}
+          selectedIndex={selectedHeadlineIndex}
+          onGenerate={() => {
+            void onGenerateHeadlines?.();
+          }}
+          onGenerateFromHeadlines={
+            onGenerateHeadlinesFromShots
+              ? () => {
+                  void onGenerateHeadlinesFromShots();
+                }
+              : undefined
+          }
+          onSelectPair={(pair, index) => {
+            closeHeadlineMenu();
+            onSelectHeadlinePair?.(pair, index);
+          }}
+          onClose={closeHeadlineMenu}
+        />
       </div>
     </div>
   );

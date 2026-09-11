@@ -22,23 +22,9 @@ type EditorDocumentHeaderProps = {
 };
 
 const TITLE_EMPHASIS = "text-ink/88";
-const TITLE_ROW_TYPOGRAPHY = "text-[11px] font-normal tracking-wide text-muted/58";
+const TITLE_ROW_TYPOGRAPHY = "text-[12px] font-normal tracking-wide text-muted/58";
 
 const LEADING_PAD_SYNC = "transition-[padding-left] duration-500 ease-in-out";
-
-function parsePx(value: string): number {
-  const n = Number.parseFloat(value);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function measureTextWidthWithSpacing(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  letterSpacingPx: number,
-): number {
-  if (!text) return 0;
-  return ctx.measureText(text).width + letterSpacingPx * Math.max(0, text.length - 1);
-}
 
 export function EditorDocumentHeader({
   documentTitleBase,
@@ -56,8 +42,6 @@ export function EditorDocumentHeader({
   const [draftTitle, setDraftTitle] = useState(documentTitleBase);
   const inputRef = useRef<HTMLInputElement>(null);
   const skipBlurCommitRef = useRef(false);
-  const pendingCaretIndexRef = useRef<number | null>(null);
-  const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const titlePaddingLeft = documentTitlePaddingLeft(workspaceSidebarOpen, isWindowFullscreen);
 
@@ -79,6 +63,13 @@ export function EditorDocumentHeader({
   }, [isEditingTitle, draftTitle, onTitleDraftChange]);
 
   useEffect(() => {
+    if (titleRenameEnabled || !isEditingTitle) return;
+    skipBlurCommitRef.current = true;
+    setIsEditingTitle(false);
+    setDraftTitle(documentTitleBase);
+  }, [titleRenameEnabled, isEditingTitle, documentTitleBase]);
+
+  useEffect(() => {
     if (!import.meta.env.DEV) return;
     console.log("[HarvyTitle] header props", {
       titleRenameEnabled,
@@ -96,12 +87,8 @@ export function EditorDocumentHeader({
       console.log("[HarvyTitle] input mount/focus", { documentTitleBase });
     }
     el.focus();
-    const fallbackIndex = draftTitle.length;
-    const nextIndex = pendingCaretIndexRef.current ?? fallbackIndex;
-    const safeIndex = Math.max(0, Math.min(nextIndex, draftTitle.length));
-    el.setSelectionRange(safeIndex, safeIndex);
-    pendingCaretIndexRef.current = null;
-  }, [isEditingTitle, documentTitleBase, draftTitle]);
+    el.select();
+  }, [isEditingTitle]);
 
   const exitViewMode = useCallback(() => {
     setIsEditingTitle(false);
@@ -148,63 +135,20 @@ export function EditorDocumentHeader({
     void commitAndClose();
   }, [commitAndClose]);
 
-  const startEditing = useCallback(
-    (e: React.MouseEvent<HTMLButtonElement>) => {
-      if (!titleRenameEnabled) {
-        if (import.meta.env.DEV) {
-          console.log("[HarvyTitle] startEditing blocked (titleRenameEnabled is false)");
-        }
-        return;
-      }
-
-      let caretIndex = documentTitleBase.length;
-      const text = documentTitleBase;
-      const button = e.currentTarget;
-      const width = button.clientWidth;
-
-      if (width > 0 && text.length > 0) {
-        const rect = button.getBoundingClientRect();
-        const style = window.getComputedStyle(button);
-        const clickX = Math.max(0, Math.min(e.clientX - rect.left, width));
-        const letterSpacingPx = style.letterSpacing === "normal" ? 0 : parsePx(style.letterSpacing);
-
-        const canvas = measureCanvasRef.current ?? document.createElement("canvas");
-        measureCanvasRef.current = canvas;
-        const ctx = canvas.getContext("2d");
-
-        if (ctx) {
-          // Use the rendered button font so click→caret placement feels native.
-          ctx.font = style.font;
-          let low = 0;
-          let high = text.length;
-          while (low < high) {
-            const mid = Math.floor((low + high) / 2);
-            const midWidth = measureTextWidthWithSpacing(ctx, text.slice(0, mid), letterSpacingPx);
-            if (midWidth < clickX) low = mid + 1;
-            else high = mid;
-          }
-
-          const rightIdx = low;
-          const leftIdx = Math.max(0, rightIdx - 1);
-          const leftWidth = measureTextWidthWithSpacing(ctx, text.slice(0, leftIdx), letterSpacingPx);
-          const rightWidth = measureTextWidthWithSpacing(ctx, text.slice(0, rightIdx), letterSpacingPx);
-          caretIndex =
-            Math.abs(clickX - leftWidth) <= Math.abs(rightWidth - clickX) ? leftIdx : rightIdx;
-        } else {
-          // Fallback if text metrics are unavailable: place caret by click ratio.
-          caretIndex = Math.round((clickX / width) * text.length);
-        }
-      }
-
-      pendingCaretIndexRef.current = caretIndex;
+  const startEditing = useCallback(() => {
+    if (!titleRenameEnabled) {
       if (import.meta.env.DEV) {
-        console.log("[HarvyTitle] title click → edit mode", { caretIndex });
+        console.log("[HarvyTitle] startEditing blocked (titleRenameEnabled is false)");
       }
-      setDraftTitle(documentTitleBase);
-      setIsEditingTitle(true);
-    },
-    [documentTitleBase, titleRenameEnabled],
-  );
+      return;
+    }
+
+    if (import.meta.env.DEV) {
+      console.log("[HarvyTitle] title click → edit mode");
+    }
+    setDraftTitle(documentTitleBase);
+    setIsEditingTitle(true);
+  }, [documentTitleBase, titleRenameEnabled]);
 
   const titleRowClass = `inline-flex w-fit max-w-full min-h-[1.25rem] items-center gap-1.5 ${TITLE_ROW_TYPOGRAPHY}`;
   const titleFieldClass = `${TITLE_EMPHASIS} border-0 bg-transparent p-0 font-inherit text-inherit tracking-inherit shadow-none outline-none ring-0`;
@@ -237,7 +181,11 @@ export function EditorDocumentHeader({
                     ref={inputRef}
                     type="text"
                     value={draftTitle}
-                    onChange={(e) => setDraftTitle(e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setDraftTitle(next);
+                      onTitleDraftChange?.(next);
+                    }}
                     onKeyDown={onTitleKeyDown}
                     onBlur={onTitleBlur}
                     aria-label="Document name"

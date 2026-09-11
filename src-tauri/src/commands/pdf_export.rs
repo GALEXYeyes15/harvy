@@ -1,19 +1,24 @@
-//! Markdown → PDF with simple editorial typography (A4, margins, heading sizes, lists).
-//! Built-in Helvetica (Windows-1252); other characters are mapped to ASCII-ish fallbacks.
+//! Markdown → PDF with editorial typography (A4, margins, heading sizes, lists).
+//! Always embeds Libre Baskerville (Regular + Bold), independent of editor appearance.
+//! Other characters are mapped to ASCII-ish fallbacks.
 //! Embedded Harvy `<figure data-harvy-image>` blocks (and CommonMark images) are drawn
 //! from workspace-relative paths or http(s) URLs when possible.
 
 use image::GenericImageView;
 use printpdf::{
-    Actions, BorderArray, BuiltinFont, Color, ColorArray, HighlightingMode, Image, ImageTransform,
-    Line, LinkAnnotation, Mm, PdfDocument, PdfDocumentReference, PdfLayerIndex, PdfPageIndex,
-    Point, Rect, Rgb,
+    Actions, BorderArray, Color, ColorArray, HighlightingMode, Image, ImageTransform, Line,
+    LinkAnnotation, Mm, PdfDocument, PdfDocumentReference, PdfLayerIndex, PdfPageIndex, Point,
+    Rect, Rgb,
 };
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use regex::Regex;
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufWriter, Cursor};
 use std::path::{Path, PathBuf};
+
+const LIBRE_BASKERVILLE_REGULAR: &[u8] =
+    include_bytes!("../../fonts/LibreBaskerville-Regular.ttf");
+const LIBRE_BASKERVILLE_BOLD: &[u8] = include_bytes!("../../fonts/LibreBaskerville-Bold.ttf");
 
 const PAGE_W_MM: f32 = 210.0;
 const PAGE_H_MM: f32 = 297.0;
@@ -323,11 +328,11 @@ impl Writer {
         let (doc, page, layer) =
             PdfDocument::new(title, Mm(PAGE_W_MM), Mm(PAGE_H_MM), "Content");
         let font = doc
-            .add_builtin_font(BuiltinFont::Helvetica)
-            .map_err(|e| e.to_string())?;
+            .add_external_font(Cursor::new(LIBRE_BASKERVILLE_REGULAR))
+            .map_err(|e| format!("Could not embed Libre Baskerville for PDF export: {e}"))?;
         let font_bold = doc
-            .add_builtin_font(BuiltinFont::HelveticaBold)
-            .map_err(|e| e.to_string())?;
+            .add_external_font(Cursor::new(LIBRE_BASKERVILLE_BOLD))
+            .map_err(|e| format!("Could not embed Libre Baskerville Bold for PDF export: {e}"))?;
         let y = PAGE_H_MM - MARGIN_MM - 6.0;
         Ok(Self {
             doc,
@@ -837,4 +842,31 @@ pub fn write_markdown_pdf(path: &str, markdown: &str, workspace_root: &Path) -> 
     }
 
     w.save(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::write_markdown_pdf;
+    use std::env;
+
+    #[test]
+    fn pdf_export_embeds_libre_baskerville() {
+        let dir = env::temp_dir();
+        let path = dir.join("harvy-baskerville-export-test.pdf");
+        write_markdown_pdf(
+            path.to_str().expect("utf8 path"),
+            "# Title\n\nHello world.\n",
+            &dir,
+        )
+        .expect("write pdf");
+        let bytes = std::fs::read(&path).expect("read pdf");
+        let _ = std::fs::remove_file(&path);
+        let has = |needle: &[u8]| {
+            bytes
+                .windows(needle.len())
+                .any(|window| window.eq_ignore_ascii_case(needle))
+        };
+        assert!(has(b"Baskerville"), "expected embedded Baskerville in PDF");
+        assert!(!has(b"/Helvetica"), "PDF export should not use Helvetica");
+    }
 }

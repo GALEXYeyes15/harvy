@@ -78,7 +78,7 @@ export function openGrammarContextMenu(opts: {
   } else if (kind === "passive-voice" || kind === "adverb-hint") {
     const note = document.createElement("p");
     note.className =
-      "m-0 max-w-[14rem] px-3 py-2 text-left text-[11px] leading-snug text-muted/90";
+      "m-0 max-w-[14rem] px-3 py-2 text-left text-[12px] leading-snug text-muted/90";
     note.textContent =
       kind === "passive-voice"
         ? "Passive voice — fine when intentional; consider active verbs for clarity."

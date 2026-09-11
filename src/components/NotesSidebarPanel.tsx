@@ -1,14 +1,25 @@
 import { SquareArrowOutUpRight } from "lucide-react";
 import { handleNotesTextareaTabKey } from "../features/notes/notesTextareaIndent";
+import type { FileNode } from "../features/workspace/types";
+import type { RelatedEssayItem } from "../features/related-essays/relatedEssays";
 import { QuickLinksSidebarPanel } from "./QuickLinksSidebarPanel";
+import { RelatedEssaysSidebarPanel } from "./RelatedEssaysSidebarPanel";
 
 type NotesSidebarPanelProps = {
   notes: string;
   onNotesChange: (value: string) => void;
   /** Open / close the centered majority-screen Notes window. */
   onTogglePopout?: () => void;
-  /** When on, Quick Links appears below the notes box. */
+  /** When on, Quick Links appears below Notes. */
   showQuickLinks?: boolean;
+  /** When on, Find Related Essays appears below Notes. */
+  showRelatedEssays?: boolean;
+  sourcePath?: string;
+  relatedTitle?: string;
+  relatedExcerpt?: string;
+  workspaceTree?: FileNode | null;
+  aiReady?: boolean;
+  onRelatedItemsFound?: (items: RelatedEssayItem[]) => Promise<string | null>;
 };
 
 export function NotesSidebarPanel({
@@ -16,9 +27,16 @@ export function NotesSidebarPanel({
   onNotesChange,
   onTogglePopout,
   showQuickLinks = false,
+  showRelatedEssays = true,
+  sourcePath = "",
+  relatedTitle = "",
+  relatedExcerpt = "",
+  workspaceTree = null,
+  aiReady = false,
+  onRelatedItemsFound,
 }: NotesSidebarPanelProps) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <header className="flex shrink-0 items-center gap-2">
         <h2 className="text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-ink">Notes</h2>
         {onTogglePopout ? (
@@ -43,12 +61,24 @@ export function NotesSidebarPanel({
         onChange={(e) => onNotesChange(e.target.value)}
         onKeyDown={(e) => handleNotesTextareaTabKey(e, e.currentTarget, onNotesChange)}
         placeholder="Ideas, references, reminders…"
-        className="mt-6 h-[30rem] w-full shrink-0 resize-none overflow-y-auto rounded-md border-0 bg-mist px-3 py-2.5 text-[13px] leading-relaxed text-ink focus:outline-none focus:ring-0"
+        className="mt-6 h-[var(--harvy-notes-panel-height)] min-h-0 w-full shrink-0 resize-none overflow-y-auto rounded-md border-0 bg-mist px-3 py-2.5 text-[13px] leading-relaxed text-ink focus:outline-none focus:ring-0"
       />
 
       {showQuickLinks ? (
         <div className="mt-6 shrink-0">
           <QuickLinksSidebarPanel />
+        </div>
+      ) : null}
+      {showRelatedEssays ? (
+        <div className="mt-6 shrink-0">
+          <RelatedEssaysSidebarPanel
+            sourcePath={sourcePath}
+            currentTitle={relatedTitle}
+            currentExcerpt={relatedExcerpt}
+            workspaceTree={workspaceTree}
+            aiReady={aiReady}
+            onRelatedItemsFound={onRelatedItemsFound}
+          />
         </div>
       ) : null}
     </div>

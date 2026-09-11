@@ -266,7 +266,7 @@ export function SaveAsModal({
         </div>
 
         {!destinationPath ? (
-          <p className="text-[11px] leading-relaxed text-muted/62">Choose a destination with Where before saving.</p>
+          <p className="text-[12px] leading-relaxed text-muted/62">Choose a destination with Where before saving.</p>
         ) : null}
 
         <div className="flex items-center justify-end gap-3 pt-5">

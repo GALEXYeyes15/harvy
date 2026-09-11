@@ -6,11 +6,16 @@ use tauri::Manager;
 
 pub mod unsplash;
 pub mod substack;
+pub mod medium;
+pub mod youtube;
 pub mod google_fonts;
 pub mod color_picker;
 pub mod notion;
 pub mod ai_check;
 mod pdf_export;
+pub mod pdf_import;
+pub mod print;
+pub mod share;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -32,8 +37,54 @@ fn sort_nodes(nodes: &mut [FileNode]) {
     nodes.sort_by(|a, b| match (&a.kind, &b.kind) {
         (NodeKind::Directory, NodeKind::File) => std::cmp::Ordering::Less,
         (NodeKind::File, NodeKind::Directory) => std::cmp::Ordering::Greater,
-        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        _ => cmp_natural_ignore_case(&a.name, &b.name),
     });
+}
+
+/// Compare names so digit runs use their full numeric value (`6:7` before `6:14`).
+fn cmp_natural_ignore_case(a: &str, b: &str) -> std::cmp::Ordering {
+    let a = a.to_lowercase();
+    let b = b.to_lowercase();
+    let a = a.as_bytes();
+    let b = b.as_bytes();
+    let mut i = 0usize;
+    let mut j = 0usize;
+    while i < a.len() && j < b.len() {
+        if a[i].is_ascii_digit() && b[j].is_ascii_digit() {
+            while i < a.len() && a[i] == b'0' {
+                i += 1;
+            }
+            while j < b.len() && b[j] == b'0' {
+                j += 1;
+            }
+            let start_a = i;
+            let start_b = j;
+            while i < a.len() && a[i].is_ascii_digit() {
+                i += 1;
+            }
+            while j < b.len() && b[j].is_ascii_digit() {
+                j += 1;
+            }
+            let len_a = i - start_a;
+            let len_b = j - start_b;
+            if len_a != len_b {
+                return len_a.cmp(&len_b);
+            }
+            match a[start_a..i].cmp(&b[start_b..j]) {
+                std::cmp::Ordering::Equal => {}
+                other => return other,
+            }
+        } else {
+            match a[i].cmp(&b[j]) {
+                std::cmp::Ordering::Equal => {
+                    i += 1;
+                    j += 1;
+                }
+                other => return other,
+            }
+        }
+    }
+    a.len().cmp(&b.len())
 }
 
 fn build_tree(path: &Path, depth: usize, root_label: &str) -> Result<FileNode, String> {
@@ -76,6 +127,9 @@ fn build_tree(path: &Path, depth: usize, root_label: &str) -> Result<FileNode, S
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| child_path.to_string_lossy().to_string());
+            if name.ends_with(".harvy-notion.json") || name.ends_with(".harvy-related.json") {
+                continue;
+            }
             children.push(FileNode {
                 name,
                 path: child_path.to_string_lossy().to_string(),
@@ -551,6 +605,326 @@ pub fn import_workspace_image(app: AppHandle, source_path: String) -> Result<Str
     Ok(format!(".harvy/assets/{}", filename))
 }
 
+fn headlines_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = workspace_root_dir(app)?.join(".harvy").join("headlines");
+    fs::create_dir_all(&dir).map_err(|e| {
+        format!(
+            "Could not create headlines folder '{}': {}",
+            dir.display(),
+            e
+        )
+    })?;
+    migrate_legacy_headline_files(app, &dir);
+    Ok(dir)
+}
+
+fn headlines_catalog_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let harvy_dir = workspace_root_dir(app)?.join(".harvy");
+    fs::create_dir_all(&harvy_dir).map_err(|e| {
+        format!(
+            "Could not create Harvy workspace folder '{}': {}",
+            harvy_dir.display(),
+            e
+        )
+    })?;
+    Ok(harvy_dir.join("headlines.json"))
+}
+
+fn migrate_legacy_headline_files(app: &AppHandle, dest_dir: &Path) {
+    let Ok(legacy) = app_config_dir(app).map(|dir| dir.join("headlines")) else {
+        return;
+    };
+    if !legacy.is_dir() {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(&legacy) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name() else {
+            continue;
+        };
+        let dest = dest_dir.join(name);
+        if dest.exists() {
+            continue;
+        }
+        let _ = fs::copy(&path, dest);
+    }
+}
+
+fn allowed_headline_image_ext(ext: &str) -> bool {
+    matches!(
+        ext,
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "heic" | "heif" | "bmp" | "tif" | "tiff"
+    )
+}
+
+fn unique_headline_dest(dir: &Path, ext: &str) -> Result<PathBuf, String> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    for suffix in 0u32..10_000 {
+        let name = if suffix == 0 {
+            format!("hl_{}.{}", stamp, ext)
+        } else {
+            format!("hl_{}_{}.{}", stamp, suffix, ext)
+        };
+        let dest = dir.join(name);
+        if !dest.exists() {
+            return Ok(dest);
+        }
+    }
+    Err("Could not find an available headline screenshot file name.".to_string())
+}
+
+fn ensure_within_headlines_dir(app: &AppHandle, requested: &Path) -> Result<PathBuf, String> {
+    let root = canonical(&headlines_dir(app)?)?;
+    if !requested.exists() {
+        let requested_abs = if requested.is_absolute() {
+            requested.to_path_buf()
+        } else {
+            root.join(requested)
+        };
+        if requested_abs.starts_with(&root) {
+            return Ok(requested_abs);
+        }
+        return Err("Path is outside headlines storage.".to_string());
+    }
+    let canonical_requested = canonical(requested)?;
+    if !canonical_requested.starts_with(&root) {
+        return Err("Path is outside headlines storage.".to_string());
+    }
+    Ok(canonical_requested)
+}
+
+fn headline_ext_from_source(source: &Path, fallback: &str) -> String {
+    source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .filter(|e| allowed_headline_image_ext(e))
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+/// Copy a user-selected image into the app headlines folder and return its absolute path.
+#[tauri::command]
+pub fn import_headline_screenshot(app: AppHandle, source_path: String) -> Result<String, String> {
+    let source = PathBuf::from(source_path.trim());
+    if !source.is_file() {
+        return Err("Selected file is not a readable image.".to_string());
+    }
+
+    let dir = headlines_dir(&app)?;
+    let ext = headline_ext_from_source(&source, "png");
+    let dest = unique_headline_dest(&dir, &ext)?;
+
+    fs::copy(&source, &dest).map_err(|e| {
+        format!(
+            "Could not copy screenshot to '{}': {}",
+            dest.display(),
+            e
+        )
+    })?;
+
+    Ok(dest.to_string_lossy().to_string())
+}
+
+/// Write screenshot bytes into the app headlines folder and return the absolute path.
+#[tauri::command]
+pub fn write_headline_screenshot(
+    app: AppHandle,
+    extension: String,
+    contents: Vec<u8>,
+) -> Result<String, String> {
+    if contents.is_empty() {
+        return Err("Screenshot data is empty.".to_string());
+    }
+    let ext = extension.trim().to_ascii_lowercase();
+    let ext = if allowed_headline_image_ext(&ext) {
+        ext
+    } else {
+        "png".to_string()
+    };
+
+    let dir = headlines_dir(&app)?;
+    let dest = unique_headline_dest(&dir, &ext)?;
+    fs::write(&dest, contents).map_err(|e| {
+        format!(
+            "Could not save screenshot to '{}': {}",
+            dest.display(),
+            e
+        )
+    })?;
+
+    Ok(dest.to_string_lossy().to_string())
+}
+
+/// Delete a screenshot that lives in the app headlines folder.
+#[tauri::command]
+pub fn delete_headline_screenshot(app: AppHandle, path: String) -> Result<(), String> {
+    let requested = PathBuf::from(path.trim());
+    if requested.as_os_str().is_empty() {
+        return Err("Empty path.".to_string());
+    }
+    let safe = ensure_within_headlines_dir(&app, &requested)?;
+    if safe.exists() {
+        fs::remove_file(&safe).map_err(|e| format!("Could not delete screenshot: {}", e))?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeadlineScreenshotData {
+    pub mime_type: String,
+    pub data_base64: String,
+}
+
+fn mime_type_for_headline_ext(ext: &str) -> &'static str {
+    match ext {
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "tif" | "tiff" => "image/tiff",
+        _ => "image/png",
+    }
+}
+
+/// Read a screenshot from the app headlines folder as base64 (for model vision).
+#[tauri::command]
+pub fn read_headline_screenshot(app: AppHandle, path: String) -> Result<HeadlineScreenshotData, String> {
+    let requested = PathBuf::from(path.trim());
+    if requested.as_os_str().is_empty() {
+        return Err("Empty path.".to_string());
+    }
+    let safe = ensure_within_headlines_dir(&app, &requested)?;
+    if !safe.is_file() {
+        return Err("Screenshot file is missing.".to_string());
+    }
+    let bytes = fs::read(&safe).map_err(|e| format!("Could not read screenshot: {}", e))?;
+    if bytes.is_empty() {
+        return Err("Screenshot file is empty.".to_string());
+    }
+    let ext = safe
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_else(|| "png".to_string());
+    Ok(HeadlineScreenshotData {
+        mime_type: mime_type_for_headline_ext(&ext).to_string(),
+        data_base64: {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        },
+    })
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeadlineShotRecord {
+    pub id: String,
+    pub src: String,
+    #[serde(default)]
+    pub created_at: u64,
+}
+
+fn headline_file_created_at(path: &Path) -> u64 {
+    path.metadata()
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn scan_headline_files(dir: &Path) -> Vec<HeadlineShotRecord> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut shots: Vec<HeadlineShotRecord> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            if !path.is_file() {
+                return None;
+            }
+            let ext = path
+                .extension()
+                .and_then(|value| value.to_str())
+                .map(|value| value.to_ascii_lowercase())
+                .unwrap_or_default();
+            if !allowed_headline_image_ext(&ext) {
+                return None;
+            }
+            let src = path.to_string_lossy().to_string();
+            Some(HeadlineShotRecord {
+                id: path
+                    .file_stem()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("headline")
+                    .to_string(),
+                src,
+                created_at: headline_file_created_at(&path),
+            })
+        })
+        .collect();
+    shots.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    shots
+}
+
+fn read_headline_catalog(path: &Path) -> Vec<HeadlineShotRecord> {
+    let Ok(raw) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    serde_json::from_str(&raw).unwrap_or_default()
+}
+
+/// Load the workspace headline catalog, migrating leftover app-support screenshots.
+#[tauri::command]
+pub fn load_headline_shots(app: AppHandle) -> Result<Vec<HeadlineShotRecord>, String> {
+    let dir = headlines_dir(&app)?;
+    let catalog_path = headlines_catalog_path(&app)?;
+    let mut shots = read_headline_catalog(&catalog_path)
+        .into_iter()
+        .filter(|shot| {
+            let src = shot.src.trim();
+            if src.is_empty() {
+                return false;
+            }
+            let path = PathBuf::from(src);
+            path.is_file()
+        })
+        .collect::<Vec<_>>();
+    if shots.is_empty() {
+        shots = scan_headline_files(&dir);
+        if !shots.is_empty() {
+            let _ = save_headline_shots(app.clone(), shots.clone());
+        }
+    }
+    Ok(shots)
+}
+
+/// Persist the headline catalog in the workspace `.harvy` folder.
+#[tauri::command]
+pub fn save_headline_shots(app: AppHandle, shots: Vec<HeadlineShotRecord>) -> Result<(), String> {
+    let path = headlines_catalog_path(&app)?;
+    let body = serde_json::to_string_pretty(&shots)
+        .map_err(|e| format!("Could not serialize headline catalog: {}", e))?;
+    fs::write(&path, format!("{body}\n")).map_err(|e| {
+        format!(
+            "Could not save headline catalog '{}': {}",
+            path.display(),
+            e
+        )
+    })
+}
+
 #[tauri::command]
 pub fn write_text_file(app: AppHandle, path: String, contents: String) -> Result<(), String> {
     let p = PathBuf::from(&path);
@@ -806,4 +1180,26 @@ pub fn write_user_editor_rules(app: AppHandle, contents: String) -> Result<(), S
     let path = user_rules_path(&app)?;
     fs::write(&path, contents)
         .map_err(|e| format!("Could not write user rules '{}': {}", path.display(), e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cmp_natural_ignore_case;
+    use std::cmp::Ordering;
+
+    #[test]
+    fn week_folders_sort_by_full_day_number() {
+        let mut names = vec!["6:14-6:20", "6:21-6:27", "6:28-7:4", "6:7-6:13"];
+        names.sort_by(|a, b| cmp_natural_ignore_case(a, b));
+        assert_eq!(
+            names,
+            vec!["6:7-6:13", "6:14-6:20", "6:21-6:27", "6:28-7:4"]
+        );
+    }
+
+    #[test]
+    fn seven_comes_before_fourteen() {
+        assert_eq!(cmp_natural_ignore_case("6:7", "6:14"), Ordering::Less);
+        assert_eq!(cmp_natural_ignore_case("6:14", "6:7"), Ordering::Greater);
+    }
 }

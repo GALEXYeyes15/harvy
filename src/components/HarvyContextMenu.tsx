@@ -29,6 +29,8 @@ type HarvyContextMenuShellProps = {
   ariaLabel?: string;
   className?: string;
   onMouseDown?: (e: React.MouseEvent) => void;
+  onPointerEnter?: (e: React.PointerEvent) => void;
+  onPointerLeave?: (e: React.PointerEvent) => void;
 };
 
 export function HarvyContextMenuShell({
@@ -38,6 +40,8 @@ export function HarvyContextMenuShell({
   ariaLabel,
   className,
   onMouseDown,
+  onPointerEnter,
+  onPointerLeave,
 }: HarvyContextMenuShellProps) {
   return (
     <div
@@ -46,6 +50,8 @@ export function HarvyContextMenuShell({
       role={role}
       aria-label={ariaLabel}
       onMouseDown={onMouseDown ?? ((e) => e.preventDefault())}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
     >
       {children}
     </div>

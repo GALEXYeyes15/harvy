@@ -9,6 +9,7 @@ type CollectItemModalProps = {
   onClose: () => void;
   onUpdateItem: (itemId: string, patch: Partial<CollectItem>) => void;
   onStartWriting?: (item: CollectItem) => void;
+  onDelete?: (item: CollectItem) => void | Promise<void>;
 };
 
 function PropertyRow({
@@ -39,6 +40,7 @@ export function CollectItemModal({
   onClose,
   onUpdateItem,
   onStartWriting,
+  onDelete,
 }: CollectItemModalProps) {
   if (!item) return null;
 
@@ -109,15 +111,26 @@ export function CollectItemModal({
           />
         </div>
 
-        {onStartWriting ? (
-          <div className="pt-6">
-            <button
-              type="button"
-              className="harvy-notion-start-writing"
-              onClick={() => onStartWriting(item)}
-            >
-              Start writing
-            </button>
+        {onStartWriting || onDelete ? (
+          <div className="flex flex-wrap items-center gap-2 pt-6">
+            {onStartWriting ? (
+              <button
+                type="button"
+                className="harvy-notion-start-writing"
+                onClick={() => onStartWriting(item)}
+              >
+                Start writing
+              </button>
+            ) : null}
+            {onDelete ? (
+              <button
+                type="button"
+                className="harvy-notion-delete-idea"
+                onClick={() => void onDelete(item)}
+              >
+                Delete
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>

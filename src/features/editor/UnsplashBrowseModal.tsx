@@ -324,7 +324,7 @@ export function UnsplashBrowseModal({
                         draggable={false}
                         className="aspect-[4/3] w-full rounded-md object-cover bg-ink/[0.04]"
                       />
-                      <span className="truncate text-[11px] leading-snug text-muted/75">
+                      <span className="truncate text-[12px] leading-snug text-muted/75">
                         {img.photographer}
                       </span>
                     </button>

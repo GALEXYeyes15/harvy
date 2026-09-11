@@ -1,10 +1,12 @@
 import {
   Check,
+  CircleUser,
   Heart,
   MessageCircle,
   Plus,
   Search,
   SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
 import {
   useCallback,
@@ -15,13 +17,19 @@ import {
   type RefObject,
 } from "react";
 import {
-  fetchSubstackOutlierPosts,
-  readCachedSubstackOutlierPosts,
-} from "../features/outliers/fetchSubstackOutliers";
+  fetchAllOutlierPosts,
+  readCachedOutlierSourcesPosts,
+} from "../features/outliers/fetchOutlierPosts";
+import {
+  latestOutliersCacheFetchedAt,
+  outliersCacheKey,
+  removeOutliersCacheForSource,
+} from "../features/outliers/outliersCache";
 import { distributeOutlierPosts } from "../features/outliers/outlierMasonry";
 import {
   filterOutlierPosts,
   formatFetchedAgo,
+  isOutlierNote,
   toggleContentType,
   type ContentTypeFilter,
   type OutlierPost,
@@ -36,7 +44,14 @@ import {
   readOutliersSettings,
   writeOutliersSettings,
 } from "../features/outliers/outliersSettings";
-import { readSubstackOutliersCache } from "../features/outliers/substackOutliersCache";
+import {
+  createOutlierSource,
+  detectOutlierPlatformFromUrl,
+  formatOutlierSourceListLabel,
+  OUTLIER_SOURCE_URL_PLACEHOLDER,
+  validateOutlierSourceUrlAuto,
+  type OutlierSource,
+} from "../features/outliers/outlierSources";
 import {
   isSubstackNoteDoc,
   SubstackNoteBody,
@@ -195,74 +210,170 @@ function useOutliersPopoverDismiss(
   }, [open, onClose, rootRef]);
 }
 
-type OutliersAccountDropdownProps = {
-  accountLink: string;
-  onAccountLinkChange: (value: string) => void;
-  onApplyAccount: () => void;
-  isLoading: boolean;
+type OutliersSourcesDropdownProps = {
+  sources: OutlierSource[];
+  onSourcesChange: (sources: OutlierSource[]) => void;
 };
 
-function OutliersAccountDropdown({
-  accountLink,
-  onAccountLinkChange,
-  onApplyAccount,
-  isLoading,
-}: OutliersAccountDropdownProps) {
+function OutliersSourcesDropdown({ sources, onSourcesChange }: OutliersSourcesDropdownProps) {
   const [open, setOpen] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [draftUrl, setDraftUrl] = useState("");
+  const [draftError, setDraftError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const closeMenu = useCallback(() => {
     setOpen(false);
+    setShowAddForm(false);
+    setDraftUrl("");
+    setDraftError(null);
   }, []);
 
   useOutliersPopoverDismiss(open, closeMenu, rootRef);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !showAddForm) return;
     inputRef.current?.focus();
-    inputRef.current?.select();
-  }, [open]);
+  }, [open, showAddForm]);
+
+  const handleAdd = () => {
+    const validationError = validateOutlierSourceUrlAuto(draftUrl);
+    if (validationError) {
+      setDraftError(validationError);
+      return;
+    }
+    const platform = detectOutlierPlatformFromUrl(draftUrl);
+    if (!platform) {
+      setDraftError("Use a Substack, Medium, or YouTube URL.");
+      return;
+    }
+    const normalized = draftUrl.trim().replace(/\/+$/, "");
+    const duplicate = sources.some(
+      (source) =>
+        source.platform === platform &&
+        source.url.trim().replace(/\/+$/, "").toLowerCase() === normalized.toLowerCase(),
+    );
+    if (duplicate) {
+      setDraftError("That source is already saved.");
+      return;
+    }
+    const next = [
+      ...sources,
+      createOutlierSource({ platform, url: normalized }),
+    ];
+    onSourcesChange(next);
+    setDraftUrl("");
+    setDraftError(null);
+    setShowAddForm(false);
+  };
+
+  const handleRemove = (id: string) => {
+    removeOutliersCacheForSource(id);
+    onSourcesChange(sources.filter((source) => source.id !== id));
+  };
 
   return (
     <div ref={rootRef} className="relative shrink-0">
       <button
         type="button"
         className={BAR_ACTION}
-        aria-label="Account link"
-        title="Account link"
+        aria-label="Sources"
+        title="Sources"
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
-        <Plus size={15} strokeWidth={2} aria-hidden />
+        <CircleUser size={15} strokeWidth={2} aria-hidden />
       </button>
       {open ? (
         <div
           role="dialog"
-          aria-label="Account link"
-          className="absolute right-0 top-[calc(100%+8px)] z-50 w-[17.5rem] rounded-lg bg-page px-3.5 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.28)] ring-1 ring-line/40 dark:bg-[#1e1e1e] dark:ring-white/10"
+          aria-label="Outlier sources"
+          className="absolute right-0 top-[calc(100%+8px)] z-50 w-[17.5rem] rounded-lg bg-page px-3 py-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.28)] ring-1 ring-line/40 dark:bg-[#1e1e1e] dark:ring-white/10"
         >
-          <p className="text-[13px] font-semibold tracking-tight text-ink">Account link</p>
-          <label htmlFor="harvy-outlier-account-link" className="mt-3 block">
-            <span className="sr-only">Substack profile URL</span>
-            <input
-              ref={inputRef}
-              id="harvy-outlier-account-link"
-              type="url"
-              value={accountLink}
-              onChange={(event) => onAccountLinkChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter") return;
-                event.preventDefault();
-                if (isLoading || !accountLink.trim()) return;
-                onApplyAccount();
-                closeMenu();
-              }}
-              placeholder="https://substack.com/@…"
-              className="mt-0 w-full rounded-md border-0 bg-canvas/45 px-2.5 py-2 text-[13px] text-ink outline-none ring-1 ring-line/20 placeholder:text-muted/55 focus:ring-ink/20 dark:bg-canvas/35"
-            />
-          </label>
+          {sources.length > 0 ? (
+            <ul className="max-h-36 space-y-0.5 overflow-y-auto">
+              {sources.map((source) => (
+                <li
+                  key={source.id}
+                  className="group flex items-center gap-1.5 rounded-md py-1 pl-1 pr-0.5 hover:bg-ink/[0.04] dark:hover:bg-white/[0.04]"
+                >
+                  <p className="min-w-0 flex-1 truncate text-[12px] text-ink">
+                    {(() => {
+                      const { handle, suffix } = formatOutlierSourceListLabel(source);
+                      return (
+                        <>
+                          {handle}
+                          <span className="text-muted/50">{suffix}</span>
+                        </>
+                      );
+                    })()}
+                  </p>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${source.label}`}
+                    onClick={() => handleRemove(source.id)}
+                    className="shrink-0 rounded p-1 text-muted/45 opacity-0 transition-opacity hover:text-ink focus:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
+                  >
+                    <Trash2 size={12} strokeWidth={2} aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="py-1 pl-1 text-[12px] text-muted/55">No sources yet.</p>
+          )}
+
+          {showAddForm ? (
+            <div className="mt-3 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <input
+                  ref={inputRef}
+                  type="url"
+                  value={draftUrl}
+                  onChange={(event) => {
+                    setDraftUrl(event.target.value);
+                    if (draftError) setDraftError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    handleAdd();
+                  }}
+                  placeholder={OUTLIER_SOURCE_URL_PLACEHOLDER}
+                  aria-label="Source URL"
+                  className="min-w-0 flex-1 rounded-md border-0 bg-canvas/45 px-2 py-1.5 text-[12px] text-ink outline-none ring-1 ring-line/20 placeholder:text-muted/50 focus:ring-ink/20 dark:bg-canvas/35"
+                />
+                <button
+                  type="button"
+                  onClick={handleAdd}
+                  aria-label="Add source"
+                  title="Add source"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-ink/[0.07] text-ink transition-colors hover:bg-ink/[0.11] dark:bg-white/[0.07] dark:hover:bg-white/[0.11]"
+                >
+                  <Check size={15} strokeWidth={2} aria-hidden />
+                </button>
+              </div>
+              {draftError ? (
+                <p className="text-[10px] leading-snug text-red-600/90 dark:text-red-400/90">{draftError}</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!showAddForm ? (
+            <div className="mt-2.5">
+              <button
+                type="button"
+                aria-label="Add source"
+                title="Add source"
+                onClick={() => setShowAddForm(true)}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-accent/65 transition-colors hover:bg-white/[0.06] hover:text-accent dark:hover:text-accent"
+              >
+                <Plus size={15} strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -343,7 +454,7 @@ function OutliersSettingsDropdown({
           >
             {isFetching ? "Loading..." : "Fetch posts"}
           </button>
-          <p className="mt-1.5 text-center text-[11px] text-muted/65 dark:text-white/45">
+          <p className="mt-1.5 text-center text-[12px] text-muted/65 dark:text-white/45">
             {lastFetchedAt != null ? `Last fetch ${lastFetchedLabel}` : lastFetchedLabel}
           </p>
 
@@ -435,12 +546,12 @@ function OutliersSearchBar({
   value,
   onChange,
   settings,
-  account,
+  sources,
 }: {
   value: string;
   onChange: (value: string) => void;
   settings: OutliersSettingsDropdownProps;
-  account: OutliersAccountDropdownProps;
+  sources: OutliersSourcesDropdownProps;
 }) {
   return (
     <div className="harvy-outlier-search-bar w-full">
@@ -454,7 +565,7 @@ function OutliersSearchBar({
         aria-label="Search posts"
       />
       <div className="harvy-outlier-search-actions shrink-0">
-        <OutliersAccountDropdown {...account} />
+        <OutliersSourcesDropdown {...sources} />
         <OutliersSettingsDropdown {...settings} />
       </div>
     </div>
@@ -495,19 +606,67 @@ function OutlierThumbnail({ post }: { post: OutlierPost }) {
   );
 }
 
+/** Substack-style article link preview: cover image over author + title bar. */
+function OutlierArticleLinkCard({ post }: { post: OutlierPost }) {
+  const title = post.preview.trim() || "Untitled";
+  const tone = THUMBNAIL_TONE_CLASS[post.thumbnailTone ?? "slate"];
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-xl ring-1 ring-line/20 dark:ring-white/[0.08]">
+      {post.thumbnailUrl ? (
+        <div className="aspect-[16/10] w-full overflow-hidden bg-ink/[0.04] dark:bg-white/[0.04]">
+          <img
+            src={post.thumbnailUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            loading="lazy"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      ) : post.hasThumbnail ? (
+        <div className={`aspect-[16/10] w-full ${tone}`} aria-hidden />
+      ) : null}
+
+      <div className="flex items-start gap-2.5 bg-ink/[0.04] px-3 py-2.5 dark:bg-white/[0.06]">
+        <OutlierCardAvatar
+          name={post.creatorName}
+          photoUrl={post.creatorPhotoUrl}
+          size="sm"
+          rounded="md"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12px] leading-snug text-muted/70 dark:text-white/50">
+            {post.creatorName}
+          </p>
+          <p className="mt-0.5 break-words text-[13px] font-semibold leading-snug text-ink [overflow-wrap:anywhere]">
+            {title}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OutlierCardAvatar({
   name,
   photoUrl,
+  size = "md",
+  rounded = "full",
 }: {
   name: string;
   photoUrl?: string | null;
+  size?: "sm" | "md";
+  rounded?: "full" | "md";
 }) {
+  const sizeClass = size === "sm" ? "h-7 w-7 text-[9px]" : "h-8 w-8 text-[10px]";
+  const roundClass = rounded === "md" ? "rounded-md" : "rounded-full";
+
   if (photoUrl) {
     return (
       <img
         src={photoUrl}
         alt=""
-        className="h-8 w-8 shrink-0 rounded-full object-cover"
+        className={`${sizeClass} ${roundClass} shrink-0 object-cover`}
       />
     );
   }
@@ -520,7 +679,7 @@ function OutlierCardAvatar({
     .join("");
   return (
     <div
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink/[0.08] text-[10px] font-semibold text-ink/70 dark:bg-white/[0.08] dark:text-white/70"
+      className={`flex ${sizeClass} ${roundClass} shrink-0 items-center justify-center bg-ink/[0.08] font-semibold text-ink/70 dark:bg-white/[0.08] dark:text-white/70`}
       aria-hidden
     >
       {initials || "?"}
@@ -537,8 +696,10 @@ function OutlierCard({
   onAddToNotes?: (text: string) => void;
   onOpen: (post: OutlierPost) => void;
 }) {
+  const isNote = isOutlierNote(post) || isSubstackNoteDoc(post.noteBodyJson);
+
   return (
-    <article className="harvy-outlier-card flex flex-col px-4 py-4">
+    <article className="harvy-outlier-card flex min-w-0 flex-col overflow-hidden px-4 py-4">
       <div className="flex items-start justify-between gap-3">
         <button
           type="button"
@@ -550,7 +711,7 @@ function OutlierCard({
             <p className="truncate text-[13px] font-semibold leading-snug text-ink">
               {post.creatorName}
             </p>
-            <p className="mt-0.5 truncate text-[11px] text-muted/65 dark:text-white/45">
+            <p className="mt-0.5 truncate text-[12px] text-muted/65 dark:text-white/45">
               {post.handle} · {post.platform} · {post.postedAgo}
             </p>
           </span>
@@ -574,24 +735,33 @@ function OutlierCard({
         </button>
       </div>
 
-      <button type="button" onClick={() => onOpen(post)} className="mt-3 w-full text-left">
-        {isSubstackNoteDoc(post.noteBodyJson) ? (
-          <SubstackNoteBody doc={post.noteBodyJson} />
-        ) : (
-          <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-ink/88 dark:text-white/82">
-            {post.preview}
-          </p>
-        )}
-      </button>
+      {isNote ? (
+        <button type="button" onClick={() => onOpen(post)} className="mt-3 min-w-0 w-full overflow-hidden text-left">
+          {isSubstackNoteDoc(post.noteBodyJson) ? (
+            <SubstackNoteBody doc={post.noteBodyJson} />
+          ) : (
+            <p className="break-words whitespace-pre-wrap text-[12px] leading-relaxed text-ink/88 dark:text-white/82 [overflow-wrap:anywhere]">
+              {post.preview}
+            </p>
+          )}
+        </button>
+      ) : (
+        <button type="button" onClick={() => onOpen(post)} className="min-w-0 w-full overflow-hidden text-left">
+          <OutlierArticleLinkCard post={post} />
+        </button>
+      )}
 
-      <button type="button" onClick={() => onOpen(post)} className="text-left">
-        <OutlierThumbnail post={post} />
-      </button>
-
-      {post.captionBelowThumbnail ? (
-        <p className="mt-2.5 text-[11px] leading-snug text-muted/70 dark:text-white/50">
-          {post.captionBelowThumbnail}
-        </p>
+      {isNote ? (
+        <>
+          <button type="button" onClick={() => onOpen(post)} className="text-left">
+            <OutlierThumbnail post={post} />
+          </button>
+          {post.captionBelowThumbnail ? (
+            <p className="mt-2.5 text-[12px] leading-snug text-muted/70 dark:text-white/50">
+              {post.captionBelowThumbnail}
+            </p>
+          ) : null}
+        </>
       ) : null}
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-line/15 pt-3 dark:border-white/[0.06]">
@@ -623,7 +793,9 @@ export function OutliersView({
   toolsSidebarOpen?: boolean;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [accountLink, setAccountLink] = useState(() => readOutliersSettings().accountLink);
+  const [sources, setSources] = useState<OutlierSource[]>(
+    () => readOutliersSettings().sources,
+  );
   const [contentType, setContentType] = useState<ContentTypeFilter>(
     () => readOutliersSettings().contentType,
   );
@@ -633,49 +805,56 @@ export function OutliersView({
   const [postedWithin, setPostedWithin] = useState<PostedWithinFilter>(
     () => readOutliersSettings().postedWithin,
   );
-  const [posts, setPosts] = useState<OutlierPost[]>(() => {
-    const { accountLink: savedAccount } = readOutliersSettings();
-    return readCachedSubstackOutlierPosts(savedAccount) ?? [];
-  });
+  const [posts, setPosts] = useState<OutlierPost[]>(() =>
+    readCachedOutlierSourcesPosts(readOutliersSettings().sources),
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activePost, setActivePost] = useState<OutlierPost | null>(null);
-  const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(() => {
-    const { accountLink: savedAccount } = readOutliersSettings();
-    return readSubstackOutliersCache(savedAccount)?.fetchedAt ?? null;
-  });
+  const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(() =>
+    latestOutliersCacheFetchedAt(
+      readOutliersSettings().sources.map((source) =>
+        outliersCacheKey(source.id, source.platform, source.url),
+      ),
+    ),
+  );
   const { columnCount, isReflowing } = useOutlierColumnCount({
     workspaceSidebarOpen,
     toolsSidebarOpen,
   });
-  const accountLinkRef = useRef(accountLink);
-  accountLinkRef.current = accountLink;
+  const sourcesRef = useRef(sources);
+  sourcesRef.current = sources;
+
+  const cacheKeys = useMemo(
+    () => sources.map((source) => outliersCacheKey(source.id, source.platform, source.url)),
+    [sources],
+  );
 
   const persistSettings = useCallback((partial: Parameters<typeof writeOutliersSettings>[0]) => {
     writeOutliersSettings(partial);
   }, []);
 
-  const syncLastFetchedAt = useCallback((url: string) => {
-    setLastFetchedAt(readSubstackOutliersCache(url)?.fetchedAt ?? null);
+  const syncLastFetchedAt = useCallback((keys: string[]) => {
+    setLastFetchedAt(latestOutliersCacheFetchedAt(keys));
   }, []);
 
-  const syncPostsFromCache = useCallback((url: string) => {
-    const cached = readCachedSubstackOutlierPosts(url);
-    if (cached) setPosts(cached);
-    syncLastFetchedAt(url);
+  const syncPostsFromCache = useCallback((currentSources: OutlierSource[], keys: string[]) => {
+    setPosts(readCachedOutlierSourcesPosts(currentSources));
+    syncLastFetchedAt(keys);
   }, [syncLastFetchedAt]);
 
-  const handleAccountLinkChange = useCallback(
-    (value: string) => {
-      setAccountLink(value);
-      // Show that account’s cache only — never network until Fetch posts.
-      persistSettings({ accountLink: value, autoRefreshArmed: false });
-      setPosts(readCachedSubstackOutlierPosts(value) ?? []);
+  const handleSourcesChange = useCallback(
+    (nextSources: OutlierSource[]) => {
+      setSources(nextSources);
+      persistSettings({ sources: nextSources, autoRefreshArmed: false });
+      setPosts(readCachedOutlierSourcesPosts(nextSources));
       setError(null);
       setIsLoading(false);
       setIsRefreshing(false);
-      syncLastFetchedAt(value);
+      syncLastFetchedAt(
+        nextSources.map((source) => outliersCacheKey(source.id, source.platform, source.url)),
+      );
     },
     [persistSettings, syncLastFetchedAt],
   );
@@ -705,15 +884,14 @@ export function OutliersView({
   );
 
   const fetchPosts = useCallback(
-    async (url: string) => {
-      const trimmed = url.trim();
-      if (!trimmed) return;
+    async (currentSources: OutlierSource[], keys: string[]) => {
+      if (currentSources.length === 0) return;
 
-      const cachedPosts = readCachedSubstackOutlierPosts(trimmed);
-      const hadCache = Boolean(cachedPosts);
+      const cachedPosts = readCachedOutlierSourcesPosts(currentSources);
+      const hadCache = cachedPosts.length > 0;
 
       if (hadCache) {
-        setPosts(cachedPosts!);
+        setPosts(cachedPosts);
         setIsRefreshing(true);
         setIsLoading(false);
       } else {
@@ -723,17 +901,23 @@ export function OutliersView({
       setError(null);
 
       try {
-        const next = await fetchSubstackOutlierPosts(trimmed, { forceRefresh: true });
+        const next = await fetchAllOutlierPosts(currentSources, { forceRefresh: true });
         setPosts(next.posts);
-        setError(null);
-        if (next.refreshed) syncLastFetchedAt(trimmed);
+        if (next.errors.length > 0 && next.posts.length === 0) {
+          setError(next.errors[0] ?? "Could not load posts.");
+        } else if (next.errors.length > 0) {
+          setError(next.errors.join(" · "));
+        } else {
+          setError(null);
+        }
+        if (next.refreshedAny) syncLastFetchedAt(keys);
       } catch (err) {
-        if (cachedPosts) {
+        if (hadCache) {
           setPosts(cachedPosts);
           setError(null);
         } else {
           setPosts([]);
-          setError(err instanceof Error ? err.message : "Could not load Substack posts.");
+          setError(err instanceof Error ? err.message : "Could not load posts.");
         }
       } finally {
         setIsLoading(false);
@@ -744,30 +928,24 @@ export function OutliersView({
   );
 
   const handleFetchPosts = useCallback(() => {
-    const url = accountLink.trim();
-    if (!url) return;
-    persistSettings({ accountLink: url });
+    if (sources.length === 0) return;
+    persistSettings({ sources });
     void (async () => {
-      await fetchPosts(url);
-      // Arm app-level auto-refresh only when the master switch allows it.
+      await fetchPosts(sources, cacheKeys);
       if (readOutliersSettings().autoFetchEnabled) {
         writeOutliersSettings({ autoRefreshArmed: true });
         window.dispatchEvent(new CustomEvent(OUTLIERS_SETTINGS_CHANGED_EVENT));
       }
     })();
-  }, [accountLink, fetchPosts, persistSettings]);
+  }, [sources, cacheKeys, fetchPosts, persistSettings]);
 
   useEffect(() => {
-    const onCacheUpdated = (event: Event) => {
-      const detail = (event as CustomEvent<{ accountUrl?: string }>).detail;
-      const url = (detail?.accountUrl ?? accountLinkRef.current).trim();
-      if (!url) return;
-      if (url.toLowerCase() !== accountLinkRef.current.trim().toLowerCase()) return;
-      syncPostsFromCache(url);
+    const onCacheUpdated = () => {
+      syncPostsFromCache(sourcesRef.current, cacheKeys);
     };
     window.addEventListener(OUTLIERS_CACHE_UPDATED_EVENT, onCacheUpdated);
     return () => window.removeEventListener(OUTLIERS_CACHE_UPDATED_EVENT, onCacheUpdated);
-  }, [syncPostsFromCache]);
+  }, [cacheKeys, syncPostsFromCache]);
 
   const filteredPosts = useMemo(() => {
     const byFilters = filterOutlierPosts(posts, {
@@ -795,6 +973,10 @@ export function OutliersView({
       <OutliersSearchBar
         value={searchQuery}
         onChange={setSearchQuery}
+        sources={{
+          sources,
+          onSourcesChange: handleSourcesChange,
+        }}
         settings={{
           contentType,
           onContentTypeChange: handleContentTypeChange,
@@ -804,14 +986,8 @@ export function OutliersView({
           onPostedWithinChange: handlePostedWithinChange,
           onFetchPosts: handleFetchPosts,
           isFetching: isLoading || isRefreshing,
-          canFetch: Boolean(accountLink.trim()),
+          canFetch: sources.length > 0,
           lastFetchedAt,
-        }}
-        account={{
-          accountLink,
-          onAccountLinkChange: handleAccountLinkChange,
-          onApplyAccount: handleFetchPosts,
-          isLoading: isLoading || isRefreshing,
         }}
       />
 
@@ -820,13 +996,15 @@ export function OutliersView({
       ) : null}
 
       {isLoading && posts.length === 0 ? (
-        <p className="mt-5 text-[13px] text-muted/65">Loading Substack posts…</p>
+        <p className="mt-5 text-[13px] text-muted/65">Loading posts…</p>
       ) : null}
 
       {!isLoading && !error && filteredPosts.length === 0 ? (
         <p className="mt-5 text-[13px] text-muted/65">
           {posts.length === 0
-            ? "No cached posts yet. Use Fetch posts in Settings to load them."
+            ? sources.length === 0
+              ? "Add a source with +, then use Fetch posts to load your grid."
+              : "No cached posts yet. Use Fetch posts in Settings to load them."
             : "No posts match these filters. Try a wider date range or a lower outlier score."}
         </p>
       ) : null}

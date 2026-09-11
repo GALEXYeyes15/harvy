@@ -1,13 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight, Minus, Plus, SquareArrowOutUpRight, SquarePen } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, GripVertical, Minus, Plus, SquareArrowOutUpRight, SquarePen, Zap } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
 import type { DocumentHeaderPrefs } from "../../features/editor/documentHeaderSettings";
 import type { FocusVisibilityPrefs } from "../../features/editor/focusVisibilitySettings";
+import type { EncouragementPhrase, EncouragementPrefs } from "../../features/encouragement/encouragementSettings";
 import {
-  type EncouragementPhrase,
-  type EncouragementPrefs,
-} from "../../features/encouragement/encouragementSettings";
+  createEditorPrompt,
+  removeEditorPrompt,
+  updateEditorPrompt,
+  type EditorPromptPrefs,
+} from "../../features/editor/editorPromptSettings";
 import { formatHotkeyKeys, HOTKEY_GROUPS } from "../../features/settings/hotkeys";
 import {
   FK_COMPLEXITY_THRESHOLD_MAX,
@@ -16,8 +19,6 @@ import {
   READING_WPM_MIN,
   SUGGESTED_FK_COMPLEXITY_THRESHOLD_MAX,
   SUGGESTED_FK_COMPLEXITY_THRESHOLD_MIN,
-  SUGGESTED_READING_WPM_MAX,
-  SUGGESTED_READING_WPM_MIN,
   type ParametersPrefs,
 } from "../../features/settings/parametersSettings";
 import type { ThemeMode, ResolvedTheme } from "../../theme/themeMode";
@@ -35,7 +36,7 @@ import {
   applyAppearanceStyle,
   CYBER_STYLE_ID,
   CLASSIC_STYLE_ID,
-  createBlankCustomStyle,
+  duplicateAppearanceStyle,
   deleteCustomAppearanceStyle,
   hasCyberAppearanceOverrides,
   builtInClassicAppearanceStyle,
@@ -57,8 +58,13 @@ import {
   type StyleBasics,
 } from "../../theme/appearanceStyles";
 import {
+  applySystemTypography,
+  readSystemTypography,
+  SYSTEM_BODY_FONT_SIZE_LIMITS,
+  writeSystemTypography,
+} from "../../theme/systemTypography";
+import {
   clampOutliersFetchIntervalMinutes,
-  DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES,
   OUTLIERS_FETCH_INTERVAL_MAX_MINUTES,
   OUTLIERS_FETCH_INTERVAL_MIN_MINUTES,
   readOutliersSettings,
@@ -78,9 +84,15 @@ import {
 import { CenteredOverlayModal } from "../overlay/CenteredOverlayModal";
 import { CanvaColorPicker } from "./CanvaColorPicker";
 import { PhrasesCsvTable } from "./PhrasesCsvTable";
+import { PromptsCsvTable } from "./PromptsCsvTable";
 import { NotionIdeasSettingsSection } from "./NotionIdeasSettingsSection";
 import { AiCheckSettingsSection } from "./AiCheckSettingsSection";
 import { SETTINGS_NAV, type SettingsSectionId } from "./sectionIds";
+import {
+  readCriteriaSidebarSettings,
+  writeCriteriaSidebarSettings,
+} from "../../features/sidebar/criteriaSidebarSettings";
+import { matchPublishedEssayUrls } from "../../features/related-essays/matchPublishedUrls";
 import {
   getAiCheckConfig,
   setAiCheckEnabled,
@@ -88,7 +100,19 @@ import {
   type AiCheckConfigPublic,
 } from "../../features/aiCheck/aiCheck";
 import { syncAiCheckPopoverPrefs } from "../../features/aiCheck/aiCheckPopoverPrefs";
+import {
+  DEFAULT_HEADLINE_STYLE_PROMPT,
+  readHeadlineStylePrompt,
+  resetHeadlineStylePrompt,
+  writeHeadlineStylePrompt,
+} from "../../features/aiCheck/headlinePromptSettings";
 import { isTauriRuntime } from "../../features/save/saveRuntime";
+import {
+  COLLECT_SUB_VIEW_LABELS,
+  moveCollectView,
+  normalizeCollectViewOrder,
+  type CollectSubView,
+} from "../../features/workspace/collectViews";
 
 
 /** macOS System Settings–like window: ~1150×800, capped at 90vw / 90vh. */
@@ -125,22 +149,36 @@ type SettingsModalProps = {
   onShowCriteriaChange: (enabled: boolean) => void;
   showAiCheck: boolean;
   onShowAiCheckChange: (enabled: boolean) => void;
+  showPodcastNotes: boolean;
+  onShowPodcastNotesChange: (enabled: boolean) => void;
+  showTitleGeneration: boolean;
+  onShowTitleGenerationChange: (enabled: boolean) => void;
+  showRelatedEssays: boolean;
+  onShowRelatedEssaysChange: (enabled: boolean) => void;
   criteria: string;
   onCriteriaChange: (value: string) => void;
+  publishUrl: string;
+  onPublishUrlChange: (value: string) => void;
   spellcheckEnabled: boolean;
   onSpellcheckChange: (enabled: boolean) => void;
   focusVisibilityPrefs: FocusVisibilityPrefs;
   onFocusVisibilityPrefChange: (partial: Partial<FocusVisibilityPrefs>) => void;
   documentHeaderPrefs: DocumentHeaderPrefs;
   onDocumentHeaderPrefChange: (partial: Partial<DocumentHeaderPrefs>) => void;
+  editorPromptPrefs: EditorPromptPrefs;
+  onEditorPromptPrefsChange: (partial: Partial<EditorPromptPrefs>) => void;
   enableCollect: boolean;
   onEnableCollectChange: (enabled: boolean) => void;
   showOutliersView: boolean;
   showCollectView: boolean;
+  showHeadlinesView: boolean;
   showAvatarView: boolean;
   onShowOutliersViewChange: (enabled: boolean) => void;
   onShowCollectViewChange: (enabled: boolean) => void;
+  onShowHeadlinesViewChange: (enabled: boolean) => void;
   onShowAvatarViewChange: (enabled: boolean) => void;
+  collectViewOrder: CollectSubView[];
+  onCollectViewOrderChange: (order: CollectSubView[]) => void;
   encouragementPrefs: EncouragementPrefs;
   onEncouragementPrefsChange: (partial: Partial<EncouragementPrefs>) => void;
   onTestEncouragement?: () => void;
@@ -165,22 +203,36 @@ export function SettingsModal({
   onShowCriteriaChange,
   showAiCheck,
   onShowAiCheckChange,
+  showPodcastNotes,
+  onShowPodcastNotesChange,
+  showTitleGeneration,
+  onShowTitleGenerationChange,
+  showRelatedEssays,
+  onShowRelatedEssaysChange,
   criteria,
   onCriteriaChange,
+  publishUrl,
+  onPublishUrlChange,
   spellcheckEnabled,
   onSpellcheckChange,
   focusVisibilityPrefs,
   onFocusVisibilityPrefChange,
   documentHeaderPrefs,
   onDocumentHeaderPrefChange,
+  editorPromptPrefs,
+  onEditorPromptPrefsChange,
   enableCollect,
   onEnableCollectChange,
   showOutliersView,
   showCollectView,
+  showHeadlinesView,
   showAvatarView,
   onShowOutliersViewChange,
   onShowCollectViewChange,
+  onShowHeadlinesViewChange,
   onShowAvatarViewChange,
+  collectViewOrder,
+  onCollectViewOrderChange,
   encouragementPrefs,
   onEncouragementPrefsChange,
   onTestEncouragement,
@@ -236,6 +288,8 @@ export function SettingsModal({
                 onFocusVisibilityPrefChange={onFocusVisibilityPrefChange}
                 documentHeaderPrefs={documentHeaderPrefs}
                 onDocumentHeaderPrefChange={onDocumentHeaderPrefChange}
+                editorPromptPrefs={editorPromptPrefs}
+                onEditorPromptPrefsChange={onEditorPromptPrefsChange}
               />
             ) : null}
             {activeSection === "sidebars" ? (
@@ -246,13 +300,26 @@ export function SettingsModal({
                 onShowQuickLinksChange={onShowQuickLinksChange}
                 showCriteria={showCriteria}
                 onShowCriteriaChange={onShowCriteriaChange}
-                showAiCheck={showAiCheck}
-                onShowAiCheckChange={onShowAiCheckChange}
                 criteria={criteria}
                 onCriteriaChange={onCriteriaChange}
                 parametersPrefs={parametersPrefs}
                 onParametersPrefsChange={onParametersPrefsChange}
               />
+            ) : null}
+            {activeSection === "ai" ? (
+              <ArtificialIntelligencePanel
+                showAiCheck={showAiCheck}
+                onShowAiCheckChange={onShowAiCheckChange}
+                showPodcastNotes={showPodcastNotes}
+                onShowPodcastNotesChange={onShowPodcastNotesChange}
+                showTitleGeneration={showTitleGeneration}
+                onShowTitleGenerationChange={onShowTitleGenerationChange}
+                showRelatedEssays={showRelatedEssays}
+                onShowRelatedEssaysChange={onShowRelatedEssaysChange}
+              />
+            ) : null}
+            {activeSection === "export" ? (
+              <ExportPanel publishUrl={publishUrl} onPublishUrlChange={onPublishUrlChange} />
             ) : null}
             {activeSection === "collect" ? (
               <CollectSettingsPanel
@@ -260,10 +327,14 @@ export function SettingsModal({
                 onEnableCollectChange={onEnableCollectChange}
                 showOutliersView={showOutliersView}
                 showCollectView={showCollectView}
+                showHeadlinesView={showHeadlinesView}
                 showAvatarView={showAvatarView}
                 onShowOutliersViewChange={onShowOutliersViewChange}
                 onShowCollectViewChange={onShowCollectViewChange}
+                onShowHeadlinesViewChange={onShowHeadlinesViewChange}
                 onShowAvatarViewChange={onShowAvatarViewChange}
+                collectViewOrder={collectViewOrder}
+                onCollectViewOrderChange={onCollectViewOrderChange}
               />
             ) : null}
             {activeSection === "appearance" ? (
@@ -336,9 +407,25 @@ function SettingsGroup({
       <ul className={SETTINGS_BOX}>
         {children}
       </ul>
-      {hint ? <p className="mt-2 text-[11px] leading-snug text-muted/70">{hint}</p> : null}
+      {hint ? <p className="mt-2 text-[12px] leading-snug text-muted/70">{hint}</p> : null}
     </div>
   );
+}
+
+function researchRowShift(
+  index: number,
+  originIndex: number,
+  overIndex: number,
+  rowHeight: number,
+): number {
+  if (originIndex === overIndex) return 0;
+  if (originIndex < overIndex && index > originIndex && index <= overIndex) {
+    return -rowHeight;
+  }
+  if (originIndex > overIndex && index >= overIndex && index < originIndex) {
+    return rowHeight;
+  }
+  return 0;
 }
 
 function CollectSettingsPanel({
@@ -346,19 +433,27 @@ function CollectSettingsPanel({
   onEnableCollectChange,
   showOutliersView,
   showCollectView,
+  showHeadlinesView,
   showAvatarView,
   onShowOutliersViewChange,
   onShowCollectViewChange,
+  onShowHeadlinesViewChange,
   onShowAvatarViewChange,
+  collectViewOrder,
+  onCollectViewOrderChange,
 }: {
   enableCollect: boolean;
   onEnableCollectChange: (enabled: boolean) => void;
   showOutliersView: boolean;
   showCollectView: boolean;
+  showHeadlinesView: boolean;
   showAvatarView: boolean;
   onShowOutliersViewChange: (enabled: boolean) => void;
   onShowCollectViewChange: (enabled: boolean) => void;
+  onShowHeadlinesViewChange: (enabled: boolean) => void;
   onShowAvatarViewChange: (enabled: boolean) => void;
+  collectViewOrder: CollectSubView[];
+  onCollectViewOrderChange: (order: CollectSubView[]) => void;
 }) {
   const [fetchIntervalMinutes, setFetchIntervalMinutes] = useState(
     () => readOutliersSettings().fetchIntervalMinutes,
@@ -367,55 +462,211 @@ function CollectSettingsPanel({
     () => readOutliersSettings().autoFetchEnabled,
   );
 
+  const [viewsExpanded, setViewsExpanded] = useState(false);
+  const [drag, setDrag] = useState<{
+    view: CollectSubView;
+    originIndex: number;
+    overIndex: number;
+    startY: number;
+    deltaY: number;
+    rowHeight: number;
+  } | null>(null);
+  const [settle, setSettle] = useState<{ view: CollectSubView; offset: number } | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const dragRef = useRef<typeof drag>(null);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  dragRef.current = drag;
+
   const enabledViewCount =
-    Number(showOutliersView) + Number(showCollectView) + Number(showAvatarView);
+    Number(showOutliersView) +
+    Number(showCollectView) +
+    Number(showHeadlinesView) +
+    Number(showAvatarView);
+
+  const orderedViews = normalizeCollectViewOrder(collectViewOrder);
+  const viewChecked: Record<CollectSubView, boolean> = {
+    outliers: showOutliersView,
+    collect: showCollectView,
+    headlines: showHeadlinesView,
+    avatar: showAvatarView,
+  };
+  const viewOnChange: Record<CollectSubView, (enabled: boolean) => void> = {
+    outliers: onShowOutliersViewChange,
+    collect: onShowCollectViewChange,
+    headlines: onShowHeadlinesViewChange,
+    avatar: onShowAvatarViewChange,
+  };
+
+  const overIndexFromY = (clientY: number, rowHeight: number): number => {
+    const list = listRef.current;
+    if (!list || rowHeight <= 0) return 0;
+    const top = list.getBoundingClientRect().top;
+    return Math.max(0, Math.min(orderedViews.length - 1, Math.floor((clientY - top) / rowHeight)));
+  };
+
+  const onGripPointerDown = (event: React.PointerEvent<HTMLButtonElement>, view: CollectSubView) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const row = event.currentTarget.closest("li");
+    const rowHeight = row?.getBoundingClientRect().height ?? 44;
+    const originIndex = orderedViews.indexOf(view);
+    if (originIndex < 0) return;
+    if (settleTimerRef.current) {
+      clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = null;
+    }
+    setSettle(null);
+    const next = {
+      view,
+      originIndex,
+      overIndex: originIndex,
+      startY: event.clientY,
+      deltaY: 0,
+      rowHeight,
+    };
+    dragRef.current = next;
+    setDrag(next);
+  };
+
+  const onGripPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const session = dragRef.current;
+    if (!session) return;
+    const deltaY = event.clientY - session.startY;
+    const overIndex = overIndexFromY(event.clientY, session.rowHeight);
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const current = dragRef.current;
+      if (!current) return;
+      const next = { ...current, deltaY, overIndex };
+      dragRef.current = next;
+      setDrag(next);
+    });
+  };
+
+  const endGripDrag = () => {
+    const session = dragRef.current;
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (!session) return;
+    const settleOffset =
+      session.originIndex * session.rowHeight + session.deltaY - session.overIndex * session.rowHeight;
+    if (session.originIndex !== session.overIndex) {
+      onCollectViewOrderChange(moveCollectView(orderedViews, session.originIndex, session.overIndex));
+    }
+    dragRef.current = null;
+    setDrag(null);
+    setSettle({ view: session.view, offset: settleOffset });
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setSettle((current) => (current ? { ...current, offset: 0 } : null));
+      });
+    });
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = setTimeout(() => {
+      setSettle(null);
+      settleTimerRef.current = null;
+    }, 220);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    };
+  }, []);
 
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
         title="Research"
-        description="Outliers, Ideas, and Avatar in the workspace rail."
+        description="Outliers, Ideas, Headlines, and Avatar in the workspace rail."
       />
-      <SettingsGroup hint="Keep at least one Research view on (Outliers, Ideas, or Avatar).">
-        <ToggleRow
-          id="enable-collect"
-          label="Enable Research"
-          description="Add Research to the left workspace rail."
-          checked={enableCollect}
-          onChange={onEnableCollectChange}
-        />
-        <ToggleRow
-          id="show-outliers-view"
-          label="Show Outliers"
-          description="Creator posts and Notes scored against your average."
-          checked={showOutliersView}
-          onChange={onShowOutliersViewChange}
-          disabled={!enableCollect || (showOutliersView && enabledViewCount === 1)}
-        />
-        <ToggleRow
-          id="show-collect-view"
-          label="Show Ideas"
-          description="Your table of saved essay ideas."
-          checked={showCollectView}
-          onChange={onShowCollectViewChange}
-          disabled={!enableCollect || (showCollectView && enabledViewCount === 1)}
-        />
-        <ToggleRow
-          id="show-avatar-view"
-          label="Show Avatar"
-          description="Target audience description you can refer to while writing."
-          checked={showAvatarView}
-          onChange={onShowAvatarViewChange}
-          disabled={!enableCollect || (showAvatarView && enabledViewCount === 1)}
-        />
-      </SettingsGroup>
+      <div className={`rounded-xl bg-mist ${drag ? "overflow-visible" : "overflow-hidden"}`}>
+        <ul>
+          <ToggleRow
+            id="enable-collect"
+            label="Research"
+            checked={enableCollect}
+            onChange={onEnableCollectChange}
+            expanded={viewsExpanded}
+            onExpandToggle={() => setViewsExpanded((current) => !current)}
+            expandLabel="Research views"
+          />
+        </ul>
+        {viewsExpanded ? (
+          <div className="pb-3">
+            <ul
+              ref={listRef}
+              className={`relative rounded-lg bg-page/70 ${SETTINGS_DIVIDE_Y} ${
+                drag ? "select-none overflow-visible" : "overflow-hidden"
+              }`}
+            >
+              {orderedViews.map((view, index) => {
+                const isDragging = drag?.view === view;
+                const isSettling = settle?.view === view;
+                let offsetY = 0;
+                let scale = 1;
+                if (isDragging && drag) {
+                  offsetY = drag.deltaY;
+                  scale = 1.02;
+                } else if (isSettling && settle) {
+                  offsetY = settle.offset;
+                  scale = settle.offset === 0 ? 1 : 1.02;
+                } else if (drag) {
+                  offsetY = researchRowShift(index, drag.originIndex, drag.overIndex, drag.rowHeight);
+                }
+                return (
+                  <ToggleRow
+                    key={view}
+                    id={`show-${view}-view`}
+                    label={COLLECT_SUB_VIEW_LABELS[view]}
+                    checked={viewChecked[view]}
+                    onChange={viewOnChange[view]}
+                    disabled={!enableCollect || (viewChecked[view] && enabledViewCount === 1)}
+                    dataResearchView={view}
+                    rowClassName={`harvy-research-reorder-row${
+                      isDragging ? " harvy-research-reorder-row--dragging" : ""
+                    }${isSettling ? " harvy-research-reorder-row--settling" : ""}${
+                      drag && !isDragging ? " harvy-research-reorder-row--live" : ""
+                    }`}
+                    rowStyle={{
+                      transform: `translateY(${offsetY}px) scale(${scale})`,
+                    }}
+                    leading={
+                      <button
+                        type="button"
+                        aria-label={`Reorder ${COLLECT_SUB_VIEW_LABELS[view]}`}
+                        className={`flex h-6 w-3.5 shrink-0 touch-none items-center justify-center text-muted/45 ${
+                          isDragging ? "cursor-grabbing" : "cursor-grab"
+                        } hover:text-muted/70`}
+                        onPointerDown={(event) => onGripPointerDown(event, view)}
+                        onPointerMove={onGripPointerMove}
+                        onPointerUp={endGripDrag}
+                        onPointerCancel={endGripDrag}
+                      >
+                        <GripVertical size={14} strokeWidth={2} aria-hidden />
+                      </button>
+                    }
+                  />
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
+      </div>
       {enableCollect && showOutliersView ? (
         <div className="space-y-3">
           <SettingsGroup>
             <ToggleRow
               id="outliers-auto-fetch"
               label="Auto-fetch Outliers"
-              description="After Fetch posts, refresh on the interval below while Harvy is open."
               checked={autoFetchEnabled}
               onChange={(enabled) => {
                 setAutoFetchEnabled(enabled);
@@ -424,16 +675,12 @@ function CollectSettingsPanel({
             />
           </SettingsGroup>
           <label
-            className={`flex items-start justify-between gap-4 ${SETTINGS_BOX_PAD} ${
+            className={`flex items-center justify-between gap-4 ${SETTINGS_BOX_PAD} ${
               autoFetchEnabled ? "" : "opacity-55"
             }`}
           >
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-ink">Fetch interval</p>
-              <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-                Minutes between refreshes when auto-fetch is on. Default{" "}
-                {DEFAULT_OUTLIERS_FETCH_INTERVAL_MINUTES}.
-              </p>
             </div>
             <input
               type="number"
@@ -465,8 +712,6 @@ function SidebarsPanel({
   onShowQuickLinksChange,
   showCriteria,
   onShowCriteriaChange,
-  showAiCheck,
-  onShowAiCheckChange,
   criteria,
   onCriteriaChange,
   parametersPrefs,
@@ -478,8 +723,6 @@ function SidebarsPanel({
   onShowQuickLinksChange: (enabled: boolean) => void;
   showCriteria: boolean;
   onShowCriteriaChange: (enabled: boolean) => void;
-  showAiCheck: boolean;
-  onShowAiCheckChange: (enabled: boolean) => void;
   criteria: string;
   onCriteriaChange: (value: string) => void;
   parametersPrefs: ParametersPrefs;
@@ -489,8 +732,6 @@ function SidebarsPanel({
   const [draftTitle, setDraftTitle] = useState("");
   const [draftUrl, setDraftUrl] = useState("");
   const [draftError, setDraftError] = useState<string | null>(null);
-  const [aiConfig, setAiConfig] = useState<AiCheckConfigPublic | null>(null);
-  const [aiToggleError, setAiToggleError] = useState<string | null>(null);
 
   useEffect(() => {
     savePersistedQuickLinks(links);
@@ -505,16 +746,6 @@ function SidebarsPanel({
     return () => window.removeEventListener(QUICK_LINKS_CHANGED_EVENT, sync);
   }, []);
 
-  useEffect(() => {
-    if (!isTauriRuntime()) return;
-    void getAiCheckConfig()
-      .then((next) => {
-        setAiConfig(next);
-        syncAiCheckPopoverPrefs(next);
-      })
-      .catch(() => setAiConfig(null));
-  }, []);
-
   function handleAdd() {
     const url = normalizeQuickLinkUrl(draftUrl);
     if (!url) {
@@ -527,6 +758,105 @@ function SidebarsPanel({
     setDraftUrl("");
     setDraftError(null);
   }
+
+  return (
+    <div className="space-y-5">
+      <SettingsSectionHeader
+        title="Sidebars"
+        description="Workspace files, Parameters, Criteria, and Quick Links."
+      />
+
+      <div>
+        <p className="mb-2 text-[12px] italic leading-snug text-muted/75">Left</p>
+        <div className={SETTINGS_BOX_PAD}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+            Change files
+          </p>
+          {workspaceRootPath ? (
+            <p className="mt-1 break-all text-[13px] font-medium tracking-tight text-ink">
+              {workspaceRootPath}
+            </p>
+          ) : (
+            <p className="mt-1 text-[13px] font-medium tracking-tight text-muted/80">
+              No folder selected
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void onChooseWorkspaceFolder?.()}
+            className="mt-3 rounded-md bg-page px-3 py-2 text-[12px] font-medium text-ink ring-1 ring-line/15 transition-colors hover:bg-ink/[0.04]"
+          >
+            {workspaceRootPath ? "Change folder" : "Choose folder"}
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-5">
+        <p className="text-[12px] italic leading-snug text-muted/75">Right</p>
+
+        <div>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+            Parameters
+          </p>
+          <ParametersFields prefs={parametersPrefs} onChange={onParametersPrefsChange} />
+        </div>
+
+        <CriteriaExpandableSettings
+          showCriteria={showCriteria}
+          onShowCriteriaChange={onShowCriteriaChange}
+          criteria={criteria}
+          onCriteriaChange={onCriteriaChange}
+        />
+
+        <QuickLinksExpandableSettings
+          showQuickLinks={showQuickLinks}
+          onShowQuickLinksChange={onShowQuickLinksChange}
+          links={links}
+          setLinks={setLinks}
+          draftTitle={draftTitle}
+          setDraftTitle={setDraftTitle}
+          draftUrl={draftUrl}
+          setDraftUrl={setDraftUrl}
+          draftError={draftError}
+          setDraftError={setDraftError}
+          onAdd={handleAdd}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ArtificialIntelligencePanel({
+  showAiCheck,
+  onShowAiCheckChange,
+  showPodcastNotes,
+  onShowPodcastNotesChange,
+  showTitleGeneration,
+  onShowTitleGenerationChange,
+  showRelatedEssays,
+  onShowRelatedEssaysChange,
+}: {
+  showAiCheck: boolean;
+  onShowAiCheckChange: (enabled: boolean) => void;
+  showPodcastNotes: boolean;
+  onShowPodcastNotesChange: (enabled: boolean) => void;
+  showTitleGeneration: boolean;
+  onShowTitleGenerationChange: (enabled: boolean) => void;
+  showRelatedEssays: boolean;
+  onShowRelatedEssaysChange: (enabled: boolean) => void;
+}) {
+  const [aiConfig, setAiConfig] = useState<AiCheckConfigPublic | null>(null);
+  const [aiToggleError, setAiToggleError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void getAiCheckConfig()
+      .then((next) => {
+        setAiConfig(next);
+        syncAiCheckPopoverPrefs(next);
+      })
+      .catch(() => setAiConfig(null));
+  }, []);
 
   const handleAiEnabledChange = (nextEnabled: boolean) => {
     setAiToggleError(null);
@@ -575,80 +905,28 @@ function SidebarsPanel({
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
-        title="Sidebars"
-        description="Workspace files, Parameters, AI, and Quick Links."
+        title="Artificial Intelligence"
+        description="API key, models, and AI tools in the editor."
       />
-
-      <div>
-        <p className="mb-2 text-[12px] italic leading-snug text-muted/75">Left</p>
-        <div className={SETTINGS_BOX_PAD}>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-            Change files
-          </p>
-          {workspaceRootPath ? (
-            <p className="mt-1 break-all text-[13px] font-medium tracking-tight text-ink">
-              {workspaceRootPath}
-            </p>
-          ) : (
-            <p className="mt-1 text-[13px] font-medium tracking-tight text-muted/80">
-              No folder selected
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={() => void onChooseWorkspaceFolder?.()}
-            className="mt-3 rounded-md bg-page px-3 py-2 text-[12px] font-medium text-ink ring-1 ring-line/15 transition-colors hover:bg-ink/[0.04]"
-          >
-            {workspaceRootPath ? "Change folder" : "Choose folder"}
-          </button>
-        </div>
-      </div>
-
-      <div className="space-y-5">
-        <p className="text-[12px] italic leading-snug text-muted/75">Right</p>
-
-        <div>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-            Parameters
-          </p>
-          <ParametersFields prefs={parametersPrefs} onChange={onParametersPrefsChange} />
-        </div>
-
-        <CriteriaExpandableSettings
-          showCriteria={showCriteria}
-          onShowCriteriaChange={onShowCriteriaChange}
-          criteria={criteria}
-          onCriteriaChange={onCriteriaChange}
-        />
-
-        <AiCheckExpandableSettings
-          aiConfig={aiConfig}
-          aiToggleError={aiToggleError}
-          showAiCheck={showAiCheck}
-          onAiEnabledChange={handleAiEnabledChange}
-          onShowAiCheckChange={onShowAiCheckChange}
-          onAiShowReplaceChange={handleAiShowReplaceChange}
-          onAiConfigChange={(next) => {
-            setAiConfig(next);
-            syncAiCheckPopoverPrefs(next);
-            window.dispatchEvent(new CustomEvent("harvy:ai-check-config-changed"));
-          }}
-        />
-
-        <QuickLinksExpandableSettings
-          showQuickLinks={showQuickLinks}
-          onShowQuickLinksChange={onShowQuickLinksChange}
-          links={links}
-          setLinks={setLinks}
-          draftTitle={draftTitle}
-          setDraftTitle={setDraftTitle}
-          draftUrl={draftUrl}
-          setDraftUrl={setDraftUrl}
-          draftError={draftError}
-          setDraftError={setDraftError}
-          onAdd={handleAdd}
-        />
-      </div>
+      <AiCheckExpandableSettings
+        aiConfig={aiConfig}
+        aiToggleError={aiToggleError}
+        showAiCheck={showAiCheck}
+        onAiEnabledChange={handleAiEnabledChange}
+        onShowAiCheckChange={onShowAiCheckChange}
+        onAiShowReplaceChange={handleAiShowReplaceChange}
+        showPodcastNotes={showPodcastNotes}
+        onShowPodcastNotesChange={onShowPodcastNotesChange}
+        showTitleGeneration={showTitleGeneration}
+        onShowTitleGenerationChange={onShowTitleGenerationChange}
+        showRelatedEssays={showRelatedEssays}
+        onShowRelatedEssaysChange={onShowRelatedEssaysChange}
+        onAiConfigChange={(next) => {
+          setAiConfig(next);
+          syncAiCheckPopoverPrefs(next);
+          window.dispatchEvent(new CustomEvent("harvy:ai-check-config-changed"));
+        }}
+      />
     </div>
   );
 }
@@ -671,6 +949,7 @@ function AppearancePanel({
   const [customStyles, setCustomStyles] = useState(() => readCustomAppearanceStyles());
   const [cyberStyle, setCyberStyle] = useState(() => readCyberAppearanceStyle());
   const [editor, setEditor] = useState<CustomAppearanceStyle | null>(null);
+  const [systemTypography, setSystemTypography] = useState(readSystemTypography);
 
   const classicResolvedDark =
     themeMode === "dark" || (themeMode === "system" && systemPrefersDark);
@@ -710,8 +989,18 @@ function AppearancePanel({
     applyAppearanceStyle(appearanceStyleId, resolvedTheme);
   }
 
+  function currentAppearanceStyle(): CustomAppearanceStyle {
+    if (editor) return editor;
+    if (appearanceStyleId === CYBER_STYLE_ID) return cyberStyle;
+    if (appearanceStyleId === CLASSIC_STYLE_ID) return builtInClassicAppearanceStyle();
+    return (
+      customStyles.find((style) => style.id === appearanceStyleId) ??
+      builtInClassicAppearanceStyle()
+    );
+  }
+
   function openNewStyle() {
-    beginEditing(createBlankCustomStyle());
+    beginEditing(duplicateAppearanceStyle(currentAppearanceStyle(), resolvedTheme));
   }
 
   function openEditStyle(style: CustomAppearanceStyle) {
@@ -830,6 +1119,27 @@ function AppearancePanel({
 
       <div>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+          System
+        </p>
+        <div className={`flex items-center justify-between gap-4 ${SETTINGS_BOX_PAD}`}>
+          <p className="text-[13px] font-medium text-ink">Body text</p>
+          <TypographyStepper
+            value={systemTypography.bodyFontSizePx}
+            min={SYSTEM_BODY_FONT_SIZE_LIMITS.min}
+            max={SYSTEM_BODY_FONT_SIZE_LIMITS.max}
+            step={SYSTEM_BODY_FONT_SIZE_LIMITS.step}
+            ariaLabel="Body text size"
+            onChange={(bodyFontSizePx) => {
+              const next = writeSystemTypography({ bodyFontSizePx });
+              setSystemTypography(next);
+              applySystemTypography(next);
+            }}
+          />
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
           Themes
         </p>
         <div className="flex flex-wrap gap-3" role="list">
@@ -894,7 +1204,7 @@ function AppearancePanel({
             <span className="flex h-[4.75rem] w-[4.75rem] items-center justify-center rounded-xl bg-mist text-[1.75rem] font-light text-ink/70 transition-colors group-hover:text-ink">
               +
             </span>
-            <span className="text-center text-[11px] text-muted/80">Add New</span>
+            <span className="text-center text-[12px] text-muted/80">Add New</span>
           </button>
         </div>
       </div>
@@ -984,7 +1294,7 @@ function StylePreviewCard({
         ) : null}
       </div>
       <div className="flex w-full flex-col items-center gap-0.5">
-        <span className="w-full text-center text-[11px] leading-tight text-ink/85">{label}</span>
+        <span className="w-full text-center text-[12px] leading-tight text-ink/85">{label}</span>
         {subtitle ? (
           <span className="w-full text-center text-[10px] leading-tight text-muted/65">{subtitle}</span>
         ) : null}
@@ -1439,7 +1749,7 @@ function StyleEditorForm({
       {!typographyOnly ? (
         <>
           <label className="block">
-            <span className="text-[11px] text-muted/75">Name</span>
+            <span className="text-[12px] text-muted/75">Name</span>
             <input
               type="text"
               value={style.name}
@@ -1450,7 +1760,7 @@ function StyleEditorForm({
           </label>
 
           <div className="block">
-            <span className="text-[11px] text-muted/75">Body font</span>
+            <span className="text-[12px] text-muted/75">Body font</span>
             <BodyFontPicker
               value={resolveStyleBodyFont(style)}
               onChange={(bodyFont) =>
@@ -1740,7 +2050,6 @@ function EncouragementPanel({
         <ToggleRow
           id="encouragement-enabled"
           label="Enable"
-          description="Show a random phrase on a timer."
           checked={prefs.enabled}
           onChange={(enabled) => onChange({ enabled })}
         />
@@ -1753,7 +2062,7 @@ function EncouragementPanel({
         <div className={SETTINGS_BOX_PAD}>
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex min-w-[6.5rem] flex-col gap-1">
-              <span className="text-[11px] text-muted/75">From</span>
+              <span className="text-[12px] text-muted/75">From</span>
               <input
                 type="number"
                 min={1}
@@ -1765,7 +2074,7 @@ function EncouragementPanel({
             </label>
             <span className="pb-2 text-[12px] text-muted/55">to</span>
             <label className="flex min-w-[6.5rem] flex-col gap-1">
-              <span className="text-[11px] text-muted/75">Until</span>
+              <span className="text-[12px] text-muted/75">Until</span>
               <input
                 type="number"
                 min={1}
@@ -1776,7 +2085,7 @@ function EncouragementPanel({
               />
             </label>
           </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-muted/70">
+          <p className="mt-2 text-[12px] leading-relaxed text-muted/70">
             Picks a random time in this range (e.g. 15–45).
           </p>
         </div>
@@ -1791,7 +2100,7 @@ function EncouragementPanel({
             <button
               type="button"
               onClick={addRow}
-              className="rounded-md px-2 py-1 text-[11px] font-medium text-muted/80 transition-colors hover:bg-ink/[0.06] hover:text-ink"
+              className="rounded-md px-2 py-1 text-[12px] font-medium text-muted/80 transition-colors hover:bg-ink/[0.06] hover:text-ink"
             >
               Add row
             </button>
@@ -1813,7 +2122,7 @@ function EncouragementPanel({
           onRemove={removePhrase}
           maxHeightClass="max-h-[14rem]"
         />
-        <p className="mt-2 text-[11px] leading-relaxed text-muted/70">
+        <p className="mt-2 text-[12px] leading-relaxed text-muted/70">
           One phrase per row — quote and attribution.
         </p>
       </div>
@@ -1859,6 +2168,8 @@ function EditorPanel({
   onFocusVisibilityPrefChange,
   documentHeaderPrefs,
   onDocumentHeaderPrefChange,
+  editorPromptPrefs,
+  onEditorPromptPrefsChange,
 }: {
   spellcheckEnabled: boolean;
   onSpellcheckChange: (v: boolean) => void;
@@ -1866,7 +2177,17 @@ function EditorPanel({
   onFocusVisibilityPrefChange: (partial: Partial<FocusVisibilityPrefs>) => void;
   documentHeaderPrefs: DocumentHeaderPrefs;
   onDocumentHeaderPrefChange: (partial: Partial<DocumentHeaderPrefs>) => void;
+  editorPromptPrefs: EditorPromptPrefs;
+  onEditorPromptPrefsChange: (partial: Partial<EditorPromptPrefs>) => void;
 }) {
+  const [promptsExpanded, setPromptsExpanded] = useState(false);
+
+  function addPromptRow() {
+    onEditorPromptPrefsChange({
+      prompts: [...editorPromptPrefs.prompts, createEditorPrompt()],
+    });
+  }
+
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
@@ -1878,25 +2199,99 @@ function EditorPanel({
         <ToggleRow
           id="show-document-title"
           label="Title"
-          description="Headline field above the body."
           checked={documentHeaderPrefs.showTitle}
           onChange={(v) => onDocumentHeaderPrefChange({ showTitle: v })}
         />
         <ToggleRow
           id="show-document-subtitle"
           label="Subtitle"
-          description="Optional dek under the title."
           checked={documentHeaderPrefs.showSubtitle}
           onChange={(v) => onDocumentHeaderPrefChange({ showSubtitle: v })}
         />
         <ToggleRow
           id="spellcheck"
           label="Spellcheck"
-          description="Underline misspellings; apply fixes from the menu."
           checked={spellcheckEnabled}
           onChange={onSpellcheckChange}
         />
       </SettingsGroup>
+
+      <div>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-[12px] italic leading-snug text-muted/75">Prompt</p>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={addPromptRow}
+              className="rounded-md px-2 py-1 text-[12px] font-medium text-muted/80 transition-colors hover:bg-ink/[0.06] hover:text-ink"
+            >
+              Add row
+            </button>
+            <button
+              type="button"
+              onClick={() => setPromptsExpanded(true)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted/60 transition-colors hover:bg-ink/[0.06] hover:text-ink"
+              aria-label="Expand prompts table"
+              title="Expand prompts table"
+            >
+              <SquareArrowOutUpRight size={14} strokeWidth={1.5} aria-hidden />
+            </button>
+          </div>
+        </div>
+        <PromptsCsvTable
+          prompts={editorPromptPrefs.prompts}
+          onUpdate={(id, text) =>
+            onEditorPromptPrefsChange({
+              prompts: updateEditorPrompt(editorPromptPrefs.prompts, id, text),
+            })
+          }
+          onRemove={(id) =>
+            onEditorPromptPrefsChange({
+              prompts: removeEditorPrompt(editorPromptPrefs.prompts, id),
+            })
+          }
+          maxHeightClass="max-h-[14rem]"
+        />
+      </div>
+
+      <CenteredOverlayModal
+        open={promptsExpanded}
+        onClose={() => setPromptsExpanded(false)}
+        title="Prompts"
+        titleId="prompts-expand-dialog-title"
+        backdropLabel="Close prompts table"
+        closeLabel="Close prompts table"
+        panelSizeClassName={PHRASES_EXPAND_PANEL_SIZE}
+        bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-5"
+        zIndexClass="z-[220]"
+        escapeCapture
+        subtitle="One writing prompt per row."
+      >
+        <div className="mb-3 flex shrink-0 items-center justify-end">
+          <button
+            type="button"
+            onClick={addPromptRow}
+            className="rounded-md px-2.5 py-1.5 text-[12px] font-medium text-muted/80 transition-colors hover:bg-ink/[0.06] hover:text-ink"
+          >
+            Add row
+          </button>
+        </div>
+        <PromptsCsvTable
+          prompts={editorPromptPrefs.prompts}
+          onUpdate={(id, text) =>
+            onEditorPromptPrefsChange({
+              prompts: updateEditorPrompt(editorPromptPrefs.prompts, id, text),
+            })
+          }
+          onRemove={(id) =>
+            onEditorPromptPrefsChange({
+              prompts: removeEditorPrompt(editorPromptPrefs.prompts, id),
+            })
+          }
+          maxHeightClass="min-h-0 flex-1"
+          fillHeight
+        />
+      </CenteredOverlayModal>
 
       <SettingsGroup
         label="While Typing"
@@ -1906,14 +2301,12 @@ function EditorPanel({
         <ToggleRow
           id="keep-top-bar-visible-while-typing"
           label="Page Tab Bar"
-          description="Tabs and sidebar toggles stay visible."
           checked={focusVisibilityPrefs.keepTopBarVisibleWhileTyping}
           onChange={(v) => onFocusVisibilityPrefChange({ keepTopBarVisibleWhileTyping: v })}
         />
         <ToggleRow
           id="keep-document-title-visible-while-typing"
           label="Document Name"
-          description="Document title and unsaved indicator."
           checked={focusVisibilityPrefs.keepDocumentTitleVisibleWhileTyping}
           onChange={(v) =>
             onFocusVisibilityPrefChange({ keepDocumentTitleVisibleWhileTyping: v })
@@ -1922,7 +2315,6 @@ function EditorPanel({
         <ToggleRow
           id="keep-bottom-tools-visible-while-typing"
           label="Control Panel"
-          description="Sidebar, timer, and copy controls."
           checked={focusVisibilityPrefs.keepBottomToolsVisibleWhileTyping}
           onChange={(v) => onFocusVisibilityPrefChange({ keepBottomToolsVisibleWhileTyping: v })}
         />
@@ -1946,7 +2338,7 @@ function ParametersFields({
       <li className="space-y-2 px-3.5 py-3">
         <div>
           <p className="text-[13px] font-medium text-ink">Reading grade</p>
-          <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+          <p className="mt-0.5 text-[12px] leading-snug text-muted/75">
             Flesch–Kincaid U.S. grade level for the document.{" "}
             <button
               type="button"
@@ -1958,20 +2350,16 @@ function ParametersFields({
           </p>
         </div>
         {showReadingGradeFormula ? (
-          <div className="font-mono text-[11px] leading-relaxed text-muted/80">
+          <div className="font-mono text-[12px] leading-relaxed text-muted/80">
             <p>0.39 × (words ÷ sentences) + 11.8 × (syllables ÷ words) − 15.59</p>
           </div>
         ) : null}
       </li>
 
       <li>
-        <label className="flex items-start justify-between gap-4 px-3.5 py-3">
+        <label className="flex items-center justify-between gap-4 px-3.5 py-3">
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium text-ink">Words per minute</p>
-            <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
-              Reading-time estimate. Suggested {SUGGESTED_READING_WPM_MIN}–
-              {SUGGESTED_READING_WPM_MAX}.
-            </p>
           </div>
           <input
             type="number"
@@ -1989,7 +2377,7 @@ function ParametersFields({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium text-ink">Sentence complexity</p>
-            <p className="mt-0.5 text-[11px] leading-snug text-muted/75">
+            <p className="mt-0.5 text-[12px] leading-snug text-muted/75">
               Highlight sentences at or above this F–K density. Suggested{" "}
               {SUGGESTED_FK_COMPLEXITY_THRESHOLD_MIN}–{SUGGESTED_FK_COMPLEXITY_THRESHOLD_MAX}.{" "}
               <button
@@ -2013,7 +2401,7 @@ function ParametersFields({
           />
         </div>
         {showComplexityFormula ? (
-          <div className="font-mono text-[11px] leading-relaxed text-muted/80">
+          <div className="font-mono text-[12px] leading-relaxed text-muted/80">
             <p>
               0.39 × words + 11.8 × (syllables ÷ words) − 15.59 ≥ {prefs.fkComplexityThreshold}
             </p>
@@ -2046,7 +2434,7 @@ function HotkeysPanel() {
                 <div className="min-w-0">
                   <p className="text-[13px] font-medium text-ink">{item.action}</p>
                   {item.note ? (
-                    <p className="mt-0.5 text-[11px] leading-snug text-muted/75">{item.note}</p>
+                    <p className="mt-0.5 text-[12px] leading-snug text-muted/75">{item.note}</p>
                   ) : null}
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 pt-0.5">
@@ -2096,7 +2484,7 @@ function CriteriaExpandableSettings({
       </ul>
       {expanded ? (
         <div className="space-y-2 px-3.5 pb-3">
-          <p className="text-[11px] leading-snug text-muted/75">
+          <p className="text-[12px] leading-snug text-muted/75">
             Saved with the active document. One item per line. Start a line with{" "}
             <span className="font-mono text-[10px] text-ink/80">[]</span> for a checkbox in the
             sidebar.
@@ -2116,6 +2504,143 @@ function CriteriaExpandableSettings({
   );
 }
 
+function ExportPanel({
+  publishUrl,
+  onPublishUrlChange,
+}: {
+  publishUrl: string;
+  onPublishUrlChange: (value: string) => void;
+}) {
+  const [essaysArchiveUrl, setEssaysArchiveUrl] = useState(
+    () => readCriteriaSidebarSettings().essaysArchiveUrl,
+  );
+  const [matching, setMatching] = useState(false);
+  const [matchMessage, setMatchMessage] = useState<string | null>(null);
+  const [matchError, setMatchError] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-5">
+      <SettingsSectionHeader
+        title="Export"
+        description="Copies the current post, syncs it to Notion, and opens this link so you can paste."
+      />
+      <div>
+        <p className="mb-2 text-[12px] italic leading-snug text-muted/75">Copy, Sync, + Publish</p>
+        <div className={SETTINGS_BOX_PAD}>
+          <label htmlFor="export-publish-url" className="block text-[13px] font-medium text-ink">
+            Publish link
+          </label>
+          <p className="mt-1 mb-2 text-[12px] leading-snug text-muted/75">
+            Used by Copy, Sync, + Publish in the export menu.
+          </p>
+          <input
+            id="export-publish-url"
+            type="url"
+            inputMode="url"
+            autoComplete="url"
+            aria-label="Publish link"
+            value={publishUrl}
+            onChange={(event) => onPublishUrlChange(event.target.value)}
+            placeholder="https://…"
+            className={`w-full ${SETTINGS_FIELD_INPUT}`}
+          />
+        </div>
+      </div>
+      <div>
+        <p className="mb-2 text-[12px] italic leading-snug text-muted/75">Your essays</p>
+        <div className={SETTINGS_BOX_PAD}>
+          <label htmlFor="export-essays-archive-url" className="block text-[13px] font-medium text-ink">
+            Substack URL
+          </label>
+          <p className="mt-1 mb-2 text-[12px] leading-snug text-muted/75">
+            Matches published posts to essays in this workspace.
+          </p>
+          <input
+            id="export-essays-archive-url"
+            type="url"
+            inputMode="url"
+            autoComplete="url"
+            aria-label="Your essays Substack URL"
+            value={essaysArchiveUrl}
+            onChange={(event) => {
+              const next = event.target.value;
+              setEssaysArchiveUrl(next);
+              writeCriteriaSidebarSettings({ essaysArchiveUrl: next });
+            }}
+            placeholder="https://yourname.substack.com"
+            className={`w-full ${SETTINGS_FIELD_INPUT}`}
+          />
+          <button
+            type="button"
+            disabled={matching || !essaysArchiveUrl.trim()}
+            onClick={() => {
+              setMatching(true);
+              setMatchError(null);
+              setMatchMessage(null);
+              void matchPublishedEssayUrls({ archiveUrl: essaysArchiveUrl, tree: null })
+                .then((result) => {
+                  setMatchMessage(
+                    result.matched === 0
+                      ? "No matching titles."
+                      : `Matched ${result.matched} essay${result.matched === 1 ? "" : "s"}.`,
+                  );
+                })
+                .catch((e) => {
+                  setMatchError(e instanceof Error ? e.message : String(e));
+                })
+                .finally(() => setMatching(false));
+            }}
+            className="mt-3 rounded-md bg-page px-2.5 py-1.5 text-[12px] font-medium text-ink ring-1 ring-line/15 transition-colors hover:bg-ink/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {matching ? "Matching…" : "Match published URLs"}
+          </button>
+          {matchError ? (
+            <p className="mt-2 text-[12px] leading-snug text-muted/75">{matchError}</p>
+          ) : null}
+          {matchMessage ? (
+            <p className="mt-2 text-[12px] leading-snug text-muted/75">{matchMessage}</p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HeadlinePromptSettings() {
+  const [prompt, setPrompt] = useState(() => readHeadlineStylePrompt());
+  const isDefault = prompt === DEFAULT_HEADLINE_STYLE_PROMPT;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted/55">
+          Headline prompt
+        </span>
+        <button
+          type="button"
+          disabled={isDefault}
+          onClick={() => setPrompt(resetHeadlineStylePrompt())}
+          className="text-[12px] font-medium text-ink/80 transition-colors hover:text-ink disabled:cursor-default disabled:text-muted/40"
+        >
+          Reset
+        </button>
+      </div>
+      <textarea
+        value={prompt}
+        onChange={(event) => {
+          const next = event.target.value;
+          setPrompt(next);
+          writeHeadlineStylePrompt(next);
+        }}
+        rows={8}
+        spellCheck={false}
+        aria-label="Headline prompt"
+        className={`min-h-[9rem] w-full resize-y ${SETTINGS_FIELD_INPUT}`}
+      />
+    </div>
+  );
+}
+
 function AiCheckExpandableSettings({
   aiConfig,
   aiToggleError,
@@ -2123,6 +2648,12 @@ function AiCheckExpandableSettings({
   onAiEnabledChange,
   onShowAiCheckChange,
   onAiShowReplaceChange,
+  showPodcastNotes,
+  onShowPodcastNotesChange,
+  showTitleGeneration,
+  onShowTitleGenerationChange,
+  showRelatedEssays,
+  onShowRelatedEssaysChange,
   onAiConfigChange,
 }: {
   aiConfig: AiCheckConfigPublic | null;
@@ -2131,16 +2662,29 @@ function AiCheckExpandableSettings({
   onAiEnabledChange: (enabled: boolean) => void;
   onShowAiCheckChange: (enabled: boolean) => void;
   onAiShowReplaceChange: (enabled: boolean) => void;
+  showPodcastNotes: boolean;
+  onShowPodcastNotesChange: (enabled: boolean) => void;
+  showTitleGeneration: boolean;
+  onShowTitleGenerationChange: (enabled: boolean) => void;
+  showRelatedEssays: boolean;
+  onShowRelatedEssaysChange: (enabled: boolean) => void;
   onAiConfigChange: (config: AiCheckConfigPublic) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
+  const [titlePromptExpanded, setTitlePromptExpanded] = useState(false);
+  const aiReady = isTauriRuntime() && Boolean(aiConfig?.hasApiKey && aiConfig?.enabled);
 
   return (
     <div className={SETTINGS_BOX_EXPANDABLE}>
       <ul>
         <ToggleRow
           id="enable-artificial-intelligence"
-          label="Artificial Intelligence"
+          label={
+            <span className="inline-flex items-center gap-1.5">
+              <Zap size={14} strokeWidth={2} aria-hidden className="shrink-0" />
+              Artificial Intelligence
+            </span>
+          }
           checked={Boolean(aiConfig?.enabled)}
           onChange={onAiEnabledChange}
           disabled={!isTauriRuntime()}
@@ -2164,15 +2708,43 @@ function AiCheckExpandableSettings({
             label="Show AI Check"
             checked={showAiCheck}
             onChange={onShowAiCheckChange}
-            disabled={!isTauriRuntime() || !aiConfig?.hasApiKey || !aiConfig?.enabled}
+            disabled={!aiReady}
           />
           <ToggleRow
             id="ai-check-show-replace"
             label="Show In-Line Replacements"
             checked={aiConfig?.showReplaceSuggestions !== false}
             onChange={onAiShowReplaceChange}
-            disabled={!isTauriRuntime() || !aiConfig?.hasApiKey || !aiConfig?.enabled}
+            disabled={!aiReady}
           />
+          <ToggleRow
+            id="enable-podcast-notes"
+            label="Podcast Notes"
+            checked={showPodcastNotes}
+            onChange={onShowPodcastNotesChange}
+            disabled={!aiReady}
+          />
+          <ToggleRow
+            id="enable-related-essays"
+            label="Find Related Essays"
+            checked={showRelatedEssays}
+            onChange={onShowRelatedEssaysChange}
+          />
+          <ToggleRow
+            id="enable-title-generation"
+            label="Title Generation"
+            checked={showTitleGeneration}
+            onChange={onShowTitleGenerationChange}
+            disabled={!aiReady}
+            expanded={titlePromptExpanded}
+            onExpandToggle={() => setTitlePromptExpanded((current) => !current)}
+            expandLabel="Headline prompt"
+          />
+          {titlePromptExpanded ? (
+            <li className="px-3.5 pb-3 pt-1">
+              <HeadlinePromptSettings />
+            </li>
+          ) : null}
         </ul>
         {aiToggleError ? (
           <p className="text-[12px] text-red-600/90 dark:text-red-400/90">{aiToggleError}</p>
@@ -2224,7 +2796,7 @@ function QuickLinksExpandableSettings({
       </ul>
       {expanded ? (
         <div className="space-y-2 px-3.5 pb-3">
-          <p className="text-[11px] leading-snug text-muted/75">
+          <p className="text-[12px] leading-snug text-muted/75">
             Add a title and URL. Links open in your browser.
           </p>
           <form
@@ -2261,7 +2833,7 @@ function QuickLinksExpandableSettings({
               </button>
             </div>
             {draftError ? (
-              <p className="text-[11px] leading-snug text-[#ff5a5a]">{draftError}</p>
+              <p className="text-[12px] leading-snug text-[#ff5a5a]">{draftError}</p>
             ) : null}
           </form>
 
@@ -2273,12 +2845,12 @@ function QuickLinksExpandableSettings({
                 <li key={link.id} className="flex items-center gap-2 px-2.5 py-2">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] text-ink">{link.title}</p>
-                    <p className="truncate text-[11px] text-muted/65">{link.url}</p>
+                    <p className="truncate text-[12px] text-muted/65">{link.url}</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setLinks((prev) => prev.filter((row) => row.id !== link.id))}
-                    className="shrink-0 rounded-md px-2 py-1 text-[11px] text-muted/75 hover:text-ink"
+                    className="shrink-0 rounded-md px-2 py-1 text-[12px] text-muted/75 hover:text-ink"
                   >
                     Remove
                   </button>
@@ -2302,9 +2874,13 @@ function ToggleRow({
   expanded,
   onExpandToggle,
   expandLabel,
+  leading,
+  dataResearchView,
+  rowClassName,
+  rowStyle,
 }: {
   id: string;
-  label: string;
+  label: ReactNode;
   description?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
@@ -2312,21 +2888,28 @@ function ToggleRow({
   expanded?: boolean;
   onExpandToggle?: () => void;
   expandLabel?: string;
+  leading?: ReactNode;
+  dataResearchView?: CollectSubView;
+  rowClassName?: string;
+  rowStyle?: CSSProperties;
 }) {
   const isExpandable = Boolean(onExpandToggle && expandLabel);
 
   return (
     <li
-      className={`flex justify-between gap-4 px-3.5 py-3 ${
+      data-research-view={dataResearchView}
+      className={`flex justify-between gap-3 px-3.5 py-3 ${
         description ? "items-start" : "items-center"
-      }`}
+      } ${rowClassName ?? ""}`}
+      style={rowStyle}
     >
-      <div className="min-w-0">
+      {leading ? <div className={description ? "mt-0.5" : ""}>{leading}</div> : null}
+      <div className="min-w-0 flex-1">
         <label htmlFor={id} className="text-[13px] font-medium text-ink">
           {label}
         </label>
         {description ? (
-          <p className="mt-0.5 text-[11px] leading-snug text-muted/85">{description}</p>
+          <p className="mt-0.5 text-[12px] leading-snug text-muted/85">{description}</p>
         ) : null}
       </div>
       <div className={`flex shrink-0 items-center gap-1.5 ${description ? "mt-0.5" : ""}`}>

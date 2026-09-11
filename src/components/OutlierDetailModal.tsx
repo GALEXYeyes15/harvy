@@ -98,7 +98,7 @@ function CommentThread({
         <Avatar
           name={comment.authorName}
           photoUrl={comment.photoUrl}
-          sizeClass="h-8 w-8 text-[11px]"
+          sizeClass="h-8 w-8 text-[12px]"
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -113,11 +113,11 @@ function CommentThread({
             <div className="mt-1">
               <SubstackNoteBody
                 doc={comment.bodyJson}
-                className="space-y-2 text-[14px] leading-relaxed text-ink/90 dark:text-white/86"
+                className="min-w-0 break-words space-y-2 text-[14px] leading-relaxed text-ink/90 dark:text-white/86 [overflow-wrap:anywhere]"
               />
             </div>
           ) : (
-            <p className="mt-1 whitespace-pre-wrap text-[14px] leading-relaxed text-ink/90 dark:text-white/86">
+            <p className="mt-1 break-words whitespace-pre-wrap text-[14px] leading-relaxed text-ink/90 dark:text-white/86 [overflow-wrap:anywhere]">
               {comment.body}
             </p>
           )}
@@ -170,7 +170,8 @@ export function OutlierDetailModal({ open, post, onClose }: OutlierDetailModalPr
     const ref = parseSubstackSourceRef(post);
     if (!ref) {
       setComments([]);
-      setError("Could not load comments for this item.");
+      setError(null);
+      setIsLoading(false);
       return;
     }
 
@@ -243,10 +244,10 @@ export function OutlierDetailModal({ open, post, onClose }: OutlierDetailModalPr
           {isSubstackNoteDoc(post.noteBodyJson) ? (
             <SubstackNoteBody
               doc={post.noteBodyJson}
-              className="space-y-3 text-[15px] leading-[1.55] text-ink dark:text-white/92"
+              className="min-w-0 break-words space-y-3 text-[15px] leading-[1.55] text-ink dark:text-white/92 [overflow-wrap:anywhere]"
             />
           ) : (
-            <p className="whitespace-pre-wrap text-[15px] leading-[1.55] text-ink dark:text-white/92">
+            <p className="break-words whitespace-pre-wrap text-[15px] leading-[1.55] text-ink dark:text-white/92 [overflow-wrap:anywhere]">
               {post.preview}
             </p>
           )}
@@ -290,7 +291,7 @@ export function OutlierDetailModal({ open, post, onClose }: OutlierDetailModalPr
               rel="noopener noreferrer"
               className="ml-auto inline-flex items-center gap-1 text-[13px] text-muted/60 transition-colors hover:text-ink dark:text-white/45 dark:hover:text-white/80"
             >
-              Open on Substack
+              Open on {post.platform}
               <ArrowUpRight size={14} strokeWidth={1.75} aria-hidden />
             </a>
           ) : (

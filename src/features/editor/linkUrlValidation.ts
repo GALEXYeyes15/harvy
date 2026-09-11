@@ -39,3 +39,11 @@ export function parseLinkUrl(input: string): LinkUrlValidationResult {
     return { ok: false, reason: "invalid" };
   }
 }
+
+/** Accept a toolbar-validated URL, or any already-absolute http(s) href. */
+export function hrefForEditorLink(raw: string): string {
+  const parsed = parseLinkUrl(raw);
+  if (parsed.ok) return parsed.href;
+  const trimmed = raw.trim();
+  return /^https?:\/\/\S+$/i.test(trimmed) ? trimmed : "";
+}

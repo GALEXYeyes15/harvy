@@ -22,7 +22,7 @@ const TOOL_GROUPS: Tool[][] = [
 ];
 
 const TOOL_BTN_BASE =
-  "select-none rounded-md px-2 py-1 text-[11px] font-medium tracking-tight transition-colors";
+  "select-none rounded-md px-2 py-1 text-[12px] font-medium tracking-tight transition-colors";
 
 const TOOL_BTN_ENABLED = `${TOOL_BTN_BASE} text-muted/80 hover:bg-ink/[0.06] hover:text-ink active:bg-ink/[0.09]`;
 const TOOL_BTN_DISABLED = `${TOOL_BTN_BASE} cursor-not-allowed text-muted/40`;

@@ -4,6 +4,7 @@ import {
   migrateLegacyCyberTheme,
   readStoredAppearanceStyleId,
 } from "./appearanceStyles";
+import { applySystemTypography } from "./systemTypography";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -47,4 +48,5 @@ export function bootStoredTheme() {
   applyResolvedTheme(resolved);
   ensureAllUserAppearanceFontsLoaded();
   applyAppearanceStyle(readStoredAppearanceStyleId(), resolved);
+  applySystemTypography();
 }

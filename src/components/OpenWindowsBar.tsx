@@ -73,8 +73,8 @@ export function OpenWindowsBar({
       data-harvy-window-drag
     >
       <header
-        className={`harvy-title-bar-drag relative flex h-8 w-full min-w-0 shrink-0 flex-row items-stretch ${RAIL_AND_CHROME_BG} ${
-          chromeHidden ? "bg-stage" : "bg-mist"
+        className={`harvy-title-bar-drag harvy-tab-strip relative flex h-[var(--harvy-tab-bar-height)] w-full min-w-0 shrink-0 flex-row items-stretch ${RAIL_AND_CHROME_BG} ${
+          chromeHidden ? "harvy-tab-strip--stage bg-stage" : "bg-mist"
         } ${overlayWorkspaceRail && workspaceSidebarOpen ? "ml-[260px]" : "ml-0"}`}
         data-harvy-window-drag
       >
@@ -91,7 +91,7 @@ export function OpenWindowsBar({
             disabled={tabNavDisabled}
             onClick={goPrevTab}
           >
-            <ChevronLeft size={15} strokeWidth={1.5} aria-hidden />
+            <ChevronLeft size={16} strokeWidth={1.75} aria-hidden />
           </button>
           <button
             type="button"
@@ -100,7 +100,7 @@ export function OpenWindowsBar({
             disabled={tabNavDisabled}
             onClick={goNextTab}
           >
-            <ChevronRight size={15} strokeWidth={1.5} aria-hidden />
+            <ChevronRight size={16} strokeWidth={1.75} aria-hidden />
           </button>
         </div>
 
@@ -119,8 +119,8 @@ export function OpenWindowsBar({
                     key={item.id}
                     className={
                       active
-                        ? "group relative z-10 box-border flex w-[160px] shrink-0 items-stretch rounded-t-none rounded-b-none bg-stage px-0"
-                        : "group relative z-0 flex w-[160px] shrink-0 items-stretch rounded-none bg-transparent text-muted/40 transition-colors hover:bg-ink/[0.03] hover:text-muted/65"
+                        ? "harvy-page-tab harvy-page-tab--active relative z-10 box-border flex w-[160px] shrink-0 items-stretch rounded-t-none rounded-b-none bg-stage pl-0 pr-2"
+                        : "harvy-page-tab harvy-page-tab--idle relative z-0 flex w-[160px] shrink-0 items-stretch rounded-none bg-transparent pr-2 text-muted/40 transition-colors hover:bg-ink/[0.03] hover:text-muted/65"
                     }
                   >
                     <button
@@ -131,19 +131,18 @@ export function OpenWindowsBar({
                       onClick={() => onSelectTab(item.id)}
                       className={
                         active
-                          ? "min-w-0 flex-1 overflow-hidden px-2 py-0.5 text-left text-[11px] font-medium leading-tight text-ink/92"
-                          : "min-w-0 flex-1 overflow-hidden px-2 py-0.5 text-left text-[11px] font-normal leading-tight"
+                          ? "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[13px] font-semibold leading-tight text-ink/92"
+                          : "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[13px] font-semibold leading-tight"
                       }
                     >
-                      <span className="inline-flex min-w-0 items-center gap-1">
-                        <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                        {item.isDirty ? (
-                          <span className="shrink-0 text-muted/70" aria-label="Unsaved changes">
-                            •
-                          </span>
-                        ) : null}
-                      </span>
+                      <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                      {item.isDirty ? (
+                        <span className="ml-1 shrink-0 text-muted/70" aria-label="Unsaved changes">
+                          •
+                        </span>
+                      ) : null}
                     </button>
+                    <span className="harvy-page-tab-fade" aria-hidden />
                     <button
                       type="button"
                       aria-label={`Close ${item.title}`}
@@ -151,10 +150,10 @@ export function OpenWindowsBar({
                         e.stopPropagation();
                         onCloseTab(item.id);
                       }}
-                      className={`-ml-0.5 shrink-0 rounded px-1 py-0.5 text-[12px] leading-none transition hover:bg-ink/[0.06] ${
+                      className={`harvy-page-tab-close absolute top-0 right-2 bottom-0 z-10 flex items-center rounded px-1 text-[12px] leading-none hover:bg-ink/[0.06] focus-visible:opacity-100 focus-visible:pointer-events-auto ${
                         active
-                          ? "text-accent/70 opacity-90 hover:text-accent group-hover:opacity-100"
-                          : "text-accent/40 opacity-0 hover:text-accent/70 group-hover:opacity-100"
+                          ? "text-accent/70 hover:text-accent"
+                          : "text-accent/40 hover:text-accent/70"
                       }`}
                     >
                       ×

@@ -1,6 +1,7 @@
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
+import { isCyanUnderlineType } from "./types";
 import type { MechanicsUnderlineRange } from "./mechanicsUnderlineRanges";
 
 export type MechanicsUnderlineLayerState = {
@@ -17,6 +18,8 @@ export const proofreadDecorationsKey = mechanicsUnderlineLayerKey;
 /** When false, overlay underlines are hidden (analysis/ranges stay in plugin state). */
 export const proofreadDecorationsViewRef = {
   visible: false,
+  /** Notes tab: paint / hit-test related-essay underlines only. */
+  relatedOnly: false,
 };
 
 /** Set when overlay mounting/painting fails — keeps the editor usable without underlines. */
@@ -320,6 +323,7 @@ class MechanicsUnderlineLayerView implements PluginViewLike {
     }
 
     for (const range of state.ranges) {
+      if (proofreadDecorationsViewRef.relatedOnly && range.type !== "related") continue;
       if (!isValidPmRange(view, range.from, range.to)) continue;
 
       let viewportRects: ViewportRect[] = [];
@@ -343,7 +347,7 @@ class MechanicsUnderlineLayerView implements PluginViewLike {
         el.style.left = `${local.left}px`;
         el.style.top = `${local.top}px`;
         el.style.width = `${Math.max(0, local.width)}px`;
-        el.style.height = `${range.type === "ai" ? 2 : UNDERLINE_HEIGHT_PX}px`;
+        el.style.height = `${isCyanUnderlineType(range.type) ? 2 : UNDERLINE_HEIGHT_PX}px`;
         this.layerEl.appendChild(el);
       }
     }

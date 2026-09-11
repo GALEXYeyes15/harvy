@@ -1,4 +1,5 @@
 import type { FileNode } from "./types";
+import { posixSegmentToFinderName } from "./finderFileNames";
 
 /** Shared with editor uploads — keep list aligned with `imageAssets.ts`. */
 export const IMAGE_EXTENSIONS = [
@@ -36,8 +37,18 @@ function isAllowedFile(name: string): boolean {
   return extension ? ALLOWED_EXTENSIONS.includes(extension as (typeof ALLOWED_EXTENSIONS)[number]) : false;
 }
 
+/** Numeric-aware name compare so `6/7` sorts before `6/14`. */
+export function compareNaturalNames(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+export function compareWorkspaceNodes(a: FileNode, b: FileNode): number {
+  if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
+  return compareNaturalNames(a.name, b.name);
+}
+
 export function filterFileTree(nodes: FileNode[]): FileNode[] {
-  return nodes.reduce<FileNode[]>((acc, node) => {
+  const next = nodes.reduce<FileNode[]>((acc, node) => {
     if (node.kind === "file") {
       if (isAllowedFile(node.name)) {
         acc.push({ ...node });
@@ -50,6 +61,8 @@ export function filterFileTree(nodes: FileNode[]): FileNode[] {
     acc.push({ ...node, children: filteredChildren });
     return acc;
   }, []);
+  next.sort(compareWorkspaceNodes);
+  return next;
 }
 
 export function isTextPreviewable(path: string): boolean {
@@ -68,6 +81,10 @@ export function isImagePreviewable(path: string): boolean {
   return Boolean(
     extension && IMAGE_EXTENSIONS.includes(extension as (typeof IMAGE_EXTENSIONS)[number]),
   );
+}
+
+export function isPdfDocument(path: string): boolean {
+  return getExtension(path.split(/[\\/]/).pop() ?? path) === "pdf";
 }
 
 export function defaultExpandedPaths(root: FileNode): Set<string> {
@@ -108,7 +125,9 @@ export function filterTree(root: FileNode, query: string): FileNode | null {
   const q = query.trim().toLowerCase();
   if (!q) return root;
 
-  const selfMatch = root.name.toLowerCase().includes(q);
+  const selfMatch =
+    root.name.toLowerCase().includes(q) ||
+    posixSegmentToFinderName(root.name).toLowerCase().includes(q);
   if (root.kind === "file") return selfMatch ? root : null;
 
   const filteredChildren = (root.children ?? [])
@@ -116,6 +135,7 @@ export function filterTree(root: FileNode, query: string): FileNode | null {
     .filter((child): child is FileNode => child !== null);
 
   if (selfMatch || filteredChildren.length > 0) {
+    filteredChildren.sort(compareWorkspaceNodes);
     return { ...root, children: filteredChildren };
   }
   return null;

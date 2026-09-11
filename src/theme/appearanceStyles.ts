@@ -191,12 +191,6 @@ export const CYBER_DARK_PALETTE: StylePalette = {
   focusRing: "#7dfdfe",
 };
 
-/** Seed palette for new custom styles (light). */
-export const NEW_STYLE_LIGHT_PALETTE: StylePalette = { ...DEFAULT_LIGHT_PALETTE };
-
-/** Seed palette for new custom styles (dark). */
-export const NEW_STYLE_DARK_PALETTE: StylePalette = { ...DEFAULT_DARK_PALETTE };
-
 export function builtInCyberAppearanceStyle(): CustomAppearanceStyle {
   const seeds: StyleBasics = {
     canvas: CYBER_DARK_PALETTE.canvas,
@@ -525,13 +519,39 @@ export function deleteCustomAppearanceStyle(id: string): CustomAppearanceStyle[]
   return next;
 }
 
-export function createBlankCustomStyle(name = "New theme"): CustomAppearanceStyle {
-  const seeds: StyleBasics = {
-    canvas: NEW_STYLE_LIGHT_PALETTE.canvas,
-    ink: NEW_STYLE_LIGHT_PALETTE.ink,
-    muted: NEW_STYLE_LIGHT_PALETTE.mist,
-    accent: NEW_STYLE_LIGHT_PALETTE.accent,
+function seedsFromPalette(palette: StylePalette): StyleBasics {
+  return {
+    canvas: palette.canvas,
+    ink: palette.ink,
+    muted: palette.mist,
+    accent: palette.focusRing || palette.accent,
   };
+}
+
+function palettesMatchForDuplicate(a: StylePalette, b: StylePalette): boolean {
+  return (
+    a.canvas === b.canvas &&
+    a.ink === b.ink &&
+    a.mist === b.mist &&
+    (a.focusRing || a.accent) === (b.focusRing || b.accent)
+  );
+}
+
+/**
+ * New custom theme cloned from the style currently on screen.
+ * Classic / Cyber keep the visible light or dark look; custom themes copy their seeds.
+ */
+export function duplicateAppearanceStyle(
+  source: CustomAppearanceStyle,
+  resolvedTheme: ResolvedTheme = "light",
+  name = "New theme",
+): CustomAppearanceStyle {
+  const typography = resolveStyleTypography(source);
+  const samePalettes = palettesMatchForDuplicate(source.light, source.dark);
+  const seeds =
+    source.seeds && isStyleBasics(source.seeds) && samePalettes
+      ? { ...source.seeds }
+      : seedsFromPalette(resolvedTheme === "dark" ? source.dark : source.light);
   const { light, dark } = palettesFromSeeds(seeds);
   return {
     id: `style-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -539,8 +559,13 @@ export function createBlankCustomStyle(name = "New theme"): CustomAppearanceStyl
     seeds,
     light,
     dark,
-    bodyFont: DEFAULT_BODY_FONT_ID,
+    bodyFont: resolveStyleBodyFont(source),
+    ...typography,
   };
+}
+
+export function createBlankCustomStyle(name = "New theme"): CustomAppearanceStyle {
+  return duplicateAppearanceStyle(builtInClassicAppearanceStyle(), "light", name);
 }
 
 function clearInlineStyleTokens(root: HTMLElement) {

@@ -32,6 +32,7 @@ import {
   applyAppearanceStyle,
   readStoredAppearanceStyleId,
 } from "../theme/appearanceStyles";
+import { applySystemTypography, SYSTEM_TYPOGRAPHY_KEY } from "../theme/systemTypography";
 import {
   addUserAppearanceFont,
   ensureGoogleFontStylesheet,
@@ -52,6 +53,7 @@ function applyTheme(mode: ThemeMode, systemPrefersDark: boolean) {
   const resolved = resolveTheme(mode, systemPrefersDark);
   applyResolvedTheme(resolved);
   applyAppearanceStyle(readStoredAppearanceStyleId(), resolved);
+  applySystemTypography();
 }
 
 const PAGE_SIZE = 36;
@@ -171,7 +173,7 @@ function FontRow({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="truncate text-[13px] font-medium text-[#e8eaed]">{font.family}</p>
-            <p className="mt-0.5 truncate text-[11px] text-[#9aa0a6]">
+            <p className="mt-0.5 truncate text-[12px] text-[#9aa0a6]">
               {stylesLabel}
               {designer ? ` · ${designer}` : ""}
             </p>
@@ -235,7 +237,7 @@ function FontAction({
 }) {
   if (builtin) {
     return (
-      <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] text-[#9aa0a6]">
+      <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] text-[#9aa0a6]">
         Built-in
       </span>
     );
@@ -243,7 +245,7 @@ function FontAction({
   if (added) {
     return (
       <div className="flex shrink-0 items-center gap-1">
-        <span className="inline-flex items-center gap-1 rounded-full bg-[#8ab4f8]/15 px-2.5 py-1 text-[11px] text-[#8ab4f8]">
+        <span className="inline-flex items-center gap-1 rounded-full bg-[#8ab4f8]/15 px-2.5 py-1 text-[12px] text-[#8ab4f8]">
           <Check size={12} strokeWidth={2.5} aria-hidden />
           Added
         </span>
@@ -265,7 +267,7 @@ function FontAction({
       type="button"
       onClick={onAdd}
       className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-[#8ab4f8] font-medium text-[#202124] hover:bg-[#aecbfa] ${
-        compact ? "px-2.5 py-1 text-[11px]" : "px-3 py-1.5 text-[12px]"
+        compact ? "px-2.5 py-1 text-[12px]" : "px-3 py-1.5 text-[12px]"
       }`}
     >
       <Plus size={13} strokeWidth={2.25} aria-hidden />
@@ -303,7 +305,8 @@ export function AddFontsApp() {
       if (
         event.key === "harvy-theme" ||
         event.key === "harvy-style" ||
-        event.key === "harvy:appearance-styles:v1"
+        event.key === "harvy:appearance-styles:v1" ||
+        event.key === SYSTEM_TYPOGRAPHY_KEY
       ) {
         syncTheme();
       }
@@ -400,7 +403,7 @@ export function AddFontsApp() {
             <p className="text-[15px] font-medium tracking-tight text-[#e8eaed]">
               Google Fonts
             </p>
-            <p className="mt-0.5 text-[11px] text-[#9aa0a6]">Add to Harvy</p>
+            <p className="mt-0.5 text-[12px] text-[#9aa0a6]">Add to Harvy</p>
           </div>
 
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pb-6">
@@ -514,7 +517,7 @@ export function AddFontsApp() {
 
             {hasFilters ? (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-[#8ab4f8]/15 px-2.5 py-1 text-[11px] font-medium text-[#8ab4f8]">
+                <span className="rounded-full bg-[#8ab4f8]/15 px-2.5 py-1 text-[12px] font-medium text-[#8ab4f8]">
                   Filters
                 </span>
                 {feelings.map((feeling) => (

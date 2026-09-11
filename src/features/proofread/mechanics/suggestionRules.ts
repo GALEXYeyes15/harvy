@@ -3,15 +3,6 @@ import type { MechanicsRuleHit } from "./types";
 
 const LONG_SENTENCE_WORD_THRESHOLD = 38;
 
-const FILLER_PHRASES: ReadonlyArray<{ pattern: RegExp; message: string }> = [
-  { pattern: /\bkind of\b/gi, message: "Consider a more direct phrase than “kind of”" },
-  { pattern: /\bsort of\b/gi, message: "Consider a more direct phrase than “sort of”" },
-  { pattern: /\bbasically\b/gi, message: "“Basically” is often filler" },
-  { pattern: /\breally\b/gi, message: "“Really” may weaken your point" },
-  { pattern: /\bvery\b/gi, message: "“Very” is often unnecessary" },
-  { pattern: /\bjust\b/gi, message: "“Just” can be filler" },
-];
-
 const WORDY_PHRASES: ReadonlyArray<{ pattern: RegExp; replacement: string; message: string }> = [
   { pattern: /\bin order to\b/gi, replacement: "to", message: "“In order to” can be shortened to “to”" },
   {
@@ -94,23 +85,6 @@ function scanRepeatedSentenceOpenings(text: string, hits: MechanicsRuleHit[]): v
   }
 }
 
-/** Filler and hedge words. */
-function scanFillerPhrases(text: string, hits: MechanicsRuleHit[]): void {
-  for (const { pattern, message } of FILLER_PHRASES) {
-    let match: RegExpExecArray | null;
-    const re = new RegExp(pattern.source, pattern.flags);
-    while ((match = re.exec(text)) !== null) {
-      pushUnique(hits, {
-        category: "suggestion",
-        message,
-        start: match.index,
-        end: match.index + match[0].length,
-        severity: "low",
-      });
-    }
-  }
-}
-
 /** Wordy multi-word phrases with shorter replacements. */
 function scanWordyPhrases(text: string, hits: MechanicsRuleHit[]): void {
   for (const { pattern, replacement, message } of WORDY_PHRASES) {
@@ -182,14 +156,16 @@ function scanIntraSentenceRepeatedWords(text: string, hits: MechanicsRuleHit[]):
   }
 }
 
-/** Readability and style heuristics (not AI rewrites). */
+/** Readability and style heuristics (not AI rewrites).
+ * Filler/hedge words (just, really, very, kind of, …) are Adverbs / Hedging
+ * highlights, not green suggestion underlines.
+ */
 export function scanSuggestionIssues(text: string): MechanicsRuleHit[] {
   if (text.length < 2) return [];
 
   const hits: MechanicsRuleHit[] = [];
   scanLongSentences(text, hits);
   scanRepeatedSentenceOpenings(text, hits);
-  scanFillerPhrases(text, hits);
   scanWordyPhrases(text, hits);
   scanPassiveIsh(text, hits);
   scanIntraSentenceRepeatedWords(text, hits);

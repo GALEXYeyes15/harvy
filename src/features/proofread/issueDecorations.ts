@@ -7,6 +7,7 @@ const CLASS: Record<ProofreadIssue["type"], string> = {
   grammar: "grammar-underline",
   suggestion: "suggestion-underline",
   ai: "ai-underline",
+  related: "ai-underline",
 };
 
 function pmRangeForPlainRange(

@@ -34,7 +34,12 @@ export type SubstackPostResult = {
 
 export const DEFAULT_SUBSTACK_ACCOUNT_URL = "https://substack.com/@alexlacy";
 
-export function scoreSubstackPosts(raw: SubstackPostResult[]): OutlierPost[] {
+const LEGACY_SUBSTACK_SOURCE_ID = "legacy-substack";
+
+export function scoreSubstackPosts(
+  raw: SubstackPostResult[],
+  sourceId: string,
+): OutlierPost[] {
   const likeCounts = raw.map((post) => Math.max(0, post.likes));
   const total = likeCounts.reduce((sum, n) => sum + n, 0);
   const average = likeCounts.length > 0 ? total / likeCounts.length : 0;
@@ -45,12 +50,16 @@ export function scoreSubstackPosts(raw: SubstackPostResult[]): OutlierPost[] {
     const hasThumbnail = Boolean(post.coverImage);
 
     const isNote = post.kind === "note";
-    const preview = post.preview.trim() || post.title;
+    const title = (post.title ?? "").trim();
+    const preview = isNote
+      ? post.preview.trim() || title
+      : title || post.preview.trim() || "Untitled";
     const commentsCount = Math.max(0, post.comments ?? 0);
     const restacksCount = Math.max(0, post.restacks ?? 0);
 
     return {
-      id: post.id,
+      id: `${sourceId}:${post.id}`,
+      sourceId,
       creatorName: post.creatorName,
       creatorPhotoUrl: post.creatorPhotoUrl ?? null,
       handle: post.handle,
@@ -73,7 +82,9 @@ export function scoreSubstackPosts(raw: SubstackPostResult[]): OutlierPost[] {
       thumbnailTone: hasThumbnail ? "slate" : undefined,
       thumbnailHeight: hasThumbnail ? "short" : undefined,
       captionBelowThumbnail:
-        !isNote && post.title !== preview ? post.title : undefined,
+        !isNote && post.preview.trim() && post.preview.trim() !== title
+          ? post.preview.trim()
+          : undefined,
       canonicalUrl: post.canonicalUrl,
       subdomain: post.subdomain,
       noteBodyJson: isNote ? post.bodyJson : undefined,
@@ -136,7 +147,7 @@ export async function fetchSubstackOutlierPosts(
 
   if (!options.forceRefresh && cached && cacheFresh) {
     return {
-      posts: scoreSubstackPosts(cached.results),
+      posts: scoreSubstackPosts(cached.results, LEGACY_SUBSTACK_SOURCE_ID),
       fromCache: true,
       refreshed: false,
     };
@@ -148,14 +159,14 @@ export async function fetchSubstackOutlierPosts(
     const results = await fetchSubstackPostsFromNetwork(trimmed);
     writeSubstackOutliersCache(trimmed, results);
     return {
-      posts: scoreSubstackPosts(results),
+      posts: scoreSubstackPosts(results, LEGACY_SUBSTACK_SOURCE_ID),
       fromCache: false,
       refreshed: true,
     };
   } catch (error) {
     if (canServeCache && cached) {
       return {
-        posts: scoreSubstackPosts(cached.results),
+        posts: scoreSubstackPosts(cached.results, LEGACY_SUBSTACK_SOURCE_ID),
         fromCache: true,
         refreshed: false,
       };
@@ -170,7 +181,7 @@ export function readCachedSubstackOutlierPosts(
 ): OutlierPost[] | null {
   const cached = readSubstackOutliersCache(accountUrl);
   if (!cached) return null;
-  return scoreSubstackPosts(cached.results);
+  return scoreSubstackPosts(cached.results, LEGACY_SUBSTACK_SOURCE_ID);
 }
 
 export function isCachedSubstackOutliersFresh(accountUrl: string): boolean {

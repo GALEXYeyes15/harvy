@@ -36,6 +36,8 @@ import {
 } from "../features/focus/focusModeWindowLock";
 import { EditorCanvas } from "./EditorCanvas";
 import { ImagePreviewModal, type ImagePreviewTarget } from "./ImagePreviewModal";
+import { PdfConvertPreviewModal } from "./PdfConvertPreviewModal";
+import { PodcastNotesPreviewModal } from "./PodcastNotesPreviewModal";
 import { FloatingTextMenu } from "./FloatingTextMenu";
 import { setSpellingDocumentKey } from "../features/proofread/mechanics/spellingDictionary";
 import { syncSpellingContextMenuRef } from "../features/proofread/spellingContextMenuRef";
@@ -47,7 +49,22 @@ import {
   loadPersistedCollectItems,
   savePersistedCollectItems,
 } from "../features/collect/collectItemsPersistence";
-import { markNotionIdeaStarted } from "../features/notion/notionIdeas";
+import {
+  getNotionIdeasConfig,
+  markNotionEssayPublished,
+  markNotionIdeaStarted,
+  todayLocalIsoDate,
+} from "../features/notion/notionIdeas";
+import {
+  loadNotionEssayLink,
+  mergeNotionEssayLink,
+  notionFieldsFromLink,
+  notionLinkFromFields,
+  renameNotionEssaySidecar,
+  saveNotionEssayLink,
+  syncEssayWithNotion,
+  type NotionEssayLink,
+} from "../features/notion/notionEssaySync";
 import { WorkspaceSectionSwitcher } from "./WorkspaceSectionSwitcher";
 import { useWindowFullscreen } from "../features/window/useWindowFullscreen";
 import {
@@ -61,11 +78,13 @@ import {
   readWorkspaceSettings,
   writeWorkspaceSettings,
 } from "../features/workspace/workspaceSettings";
+import type { CollectSubView } from "../features/workspace/collectViews";
 import { useOutliersAutoRefresh } from "../features/outliers/useOutliersAutoRefresh";
 import {
   readQuickLinksSettings,
   writeQuickLinksSettings,
 } from "../features/quick-links/quickLinksSettings";
+import { normalizeQuickLinkUrl } from "../features/quick-links/quickLinks";
 import {
   readAiCheckSidebarSettings,
   writeAiCheckSidebarSettings,
@@ -78,21 +97,26 @@ import { SaveAsModal, type SaveAsOrganizeMode } from "./SaveAsModal";
 import type { EditorCommand } from "../features/editor/commands";
 import { documentTextForStats, ingestTextFileContent } from "../features/editor/documentMarkdown";
 import { setFileMenuHandlers } from "../features/menu/fileMenuBridge";
+import { setViewMenuHandlers } from "../features/menu/viewMenuBridge";
 import { setupNativeAppMenu } from "../features/menu/setupNativeAppMenu";
 import { setupWindowDragRegions } from "../features/window/setupWindowDragRegions";
-import { isEditableKeyboardTarget } from "../lib/isEditableKeyboardTarget";
+import { isDocumentNameKeyboardTarget, isEditableKeyboardTarget } from "../lib/isEditableKeyboardTarget";
+import { formatHotkeyChord, matchSidebarToggleHotkey, matchViewHotkey } from "../features/settings/hotkeys";
 import {
   emitNotesPopoutState,
   listenNotesPopoutRequest,
   listenNotesPopoutUpdate,
+  openNotesPopoutWindow,
   toggleNotesPopoutWindow,
 } from "../features/notes/notesPopout";
 import { visuallyDeactivateEditor } from "../features/editor/editorCanvasFocus";
-import { runEditorFormat, type LinkFormatOptions } from "../features/editor/editorFormatActions";
+import { runEditorFormat, setLinkOnRange, type LinkFormatOptions } from "../features/editor/editorFormatActions";
 import { calculateEditorStats } from "../features/editor/stats";
 import { pickAndImportWorkspaceImage } from "../features/editor/imageAssets";
 import { copyDocumentToClipboard } from "../features/editor/documentClipboard";
-import { printDocumentFromEditor } from "../features/editor/documentPrint";
+import { openSafeExternalUrl } from "../features/editor/openExternalUrl";
+import { printDocumentFromEditor, printMarkdownDocument } from "../features/editor/documentPrint";
+import { shareAnchorFromElement, shareMarkdownPdf } from "../features/editor/documentShare";
 import type { HarvyImageLoadAttrs } from "../features/editor/harvyImageAttribution";
 import {
   insertHarvyImagePlaceholderAtCursor,
@@ -110,16 +134,29 @@ import {
   splitFileBaseAndExtension,
   validateFolderName,
 } from "../features/workspace/folderNaming";
+import { finderNameToPosixSegment, posixSegmentToFinderName } from "../features/workspace/finderFileNames";
 import {
   browsePathFromFolderSegments,
   filterFileTree,
   filterTree,
   findNodeByPath,
   isImagePreviewable,
+  isPdfDocument,
   isTextPreviewable,
 } from "../features/workspace/tree";
+import {
+  pdfExtractedRunsToMarkdown,
+  siblingMarkdownPathForImport,
+  type PdfTextRun,
+} from "../features/workspace/pdfImport";
 import { isPathUnderWorkspaceRoot, normalizeFsPath } from "../features/workspace/workspacePaths";
 import {
+  isExactOpenDocument,
+  resolveOpenDocumentPath,
+  visibleOpenDocumentTrailPath,
+} from "../features/workspace/openDocumentTrail";
+import {
+  documentNotesSidecarPath,
   loadDocumentNotes,
   renameDocumentNotesSidecar,
   resolveProjectDirectory,
@@ -136,7 +173,31 @@ import {
   parseDocumentFrontmatter,
   serializeDocumentWithFrontmatter,
 } from "../features/editor/documentFrontmatter";
-import type { FileNode, WorkspaceDocument } from "../features/workspace/types";
+import { EMPTY_NOTION_ESSAY_FIELDS, type FileNode, type WorkspaceDocument } from "../features/workspace/types";
+import {
+  excerptFromMarkdown,
+  loadRelatedEssaySidecar,
+  RELATED_DRAFT_CHARS,
+  renameRelatedEssaySidecar,
+  saveRelatedEssaySidecar,
+  preferredRelatedUrl,
+  type RelatedEssayItem,
+} from "../features/related-essays/relatedEssays";
+import { syncRelatedEssayLinkingRef } from "../features/related-essays/relatedEssayLinkingRef";
+import {
+  collectDocLinkHrefs,
+  locateRelatedPhrasesInText,
+  MAX_RELATED_LINKS,
+  relatedIssuesAfterLinking,
+  uniqueLinkedRelatedPaths,
+  uniqueStrings,
+} from "../features/related-essays/relatedPhrases";
+import {
+  hydrateRelatedEssayUrls,
+  PUBLIC_URLS_MATCHED_EVENT,
+  resolveRelatedEssayHref,
+  type PublishedUrlUpdate,
+} from "../features/related-essays/matchPublishedUrls";
 import { nextActiveTabIdAfterClose, toPageTabs } from "../features/tabs/pageTabs";
 import {
   defaultPdfFileName,
@@ -150,6 +211,8 @@ import {
   normalizeMarkdownSavePath,
   normalizePdfSavePath,
   resolveSaveAsOutputPath,
+  resolveRenamedDocumentPath,
+  suggestedSaveAsFileName,
   validateSaveAsOutputPath,
 } from "../features/save/saveRuntime";
 import {
@@ -170,6 +233,11 @@ import {
   writeDocumentHeaderPrefs,
 } from "../features/editor/documentHeaderSettings";
 import {
+  pickRandomEditorPrompt,
+  readEditorPromptPrefs,
+  writeEditorPromptPrefs,
+} from "../features/editor/editorPromptSettings";
+import {
   readEncouragementPrefs,
   writeEncouragementPrefs,
 } from "../features/encouragement/encouragementSettings";
@@ -186,7 +254,7 @@ import {
   isSidebarModeForSection,
   type SidebarToolsMode,
 } from "../features/sidebar/sidebarToolsMode";
-import { setMechanicsUnderlinesVisible } from "../features/proofread/mechanicsUnderlineLayer";
+import { setMechanicsUnderlinesVisible, proofreadDecorationsViewRef } from "../features/proofread/mechanicsUnderlineLayer";
 import {
   grammarDecorationsKey,
   writingAssistanceViewRef,
@@ -200,13 +268,19 @@ import {
   estimateCostUsd,
   formatAiCheckCostUsd,
   formatAiModelDisplayName,
+  generateHeadlinePairs,
+  generateHeadlinePairsFromShots,
   generatePodcastNotes,
   getAiCheckConfig,
   locateAiIssuesInText,
   runAiCheck,
   type AiCheckConfigPublic,
+  type HeadlinePair,
 } from "../features/aiCheck/aiCheck";
+import { ensurePodcastNotesBullets } from "../features/aiCheck/podcastNotesMarkdown";
 import { syncAiCheckPopoverPrefs } from "../features/aiCheck/aiCheckPopoverPrefs";
+import { readHeadlineStylePrompt } from "../features/aiCheck/headlinePromptSettings";
+import { loadHeadlineShotsForVision } from "../features/headlines/headlineScreenshotAssets";
 import { ensureUserRulesFile, loadEditorRules } from "../features/writing-assistance/editorRules";
 
 /** Formatting toolbar (Bold, H1, etc.): hidden for distraction-free writing; set true to restore for Edit chrome. */
@@ -257,6 +331,7 @@ function createInitialUntitledWorkspaceDocument(): WorkspaceDocument {
     lastSavedNotes: "",
     criteria: "",
     lastSavedCriteria: "",
+    ...EMPTY_NOTION_ESSAY_FIELDS,
   };
 }
 
@@ -276,25 +351,62 @@ function createUntitledWorkspaceDocument(id: string): WorkspaceDocument {
     lastSavedNotes: "",
     criteria: "",
     lastSavedCriteria: "",
+    ...EMPTY_NOTION_ESSAY_FIELDS,
   };
 }
 
 function isDocumentDirty(doc: WorkspaceDocument): boolean {
+  const titleBase = splitFileBaseAndExtension(doc.title.trim() || "Untitled").base || "Untitled";
+  const diskBase = doc.sourcePath.trim()
+    ? splitFileBaseAndExtension(fileNameFromPath(doc.sourcePath)).base || ""
+    : null;
+  const fileNameChanged = diskBase != null && diskBase !== titleBase;
+
   return (
     doc.content !== doc.lastSavedContent ||
     doc.notes !== doc.lastSavedNotes ||
     doc.criteria !== doc.lastSavedCriteria ||
     doc.postTitle !== doc.lastSavedPostTitle ||
-    doc.subtitle !== doc.lastSavedSubtitle
+    doc.subtitle !== doc.lastSavedSubtitle ||
+    fileNameChanged
   );
 }
 
-function markdownForDisk(body: string, doc: WorkspaceDocument | null | undefined): string {
+function markdownForDisk(
+  body: string,
+  doc: Partial<
+    Pick<
+      WorkspaceDocument,
+      | "postTitle"
+      | "subtitle"
+      | "notionParentPageId"
+      | "notionEssayPageId"
+      | "notionRenameParent"
+      | "notionParentUrl"
+      | "notionEssayUrl"
+      | "publicUrl"
+    >
+  > | null | undefined,
+): string {
   return serializeDocumentWithFrontmatter(body, {
     postTitle: doc?.postTitle ?? "",
     subtitle: doc?.subtitle ?? "",
+    notionParentPageId: doc?.notionParentPageId ?? "",
+    notionEssayPageId: doc?.notionEssayPageId ?? "",
+    notionRenameParent: Boolean(doc?.notionRenameParent),
+    notionParentUrl: doc?.notionParentUrl ?? "",
+    notionEssayUrl: doc?.notionEssayUrl ?? "",
+    publicUrl: doc?.publicUrl ?? "",
   });
 }
+
+type TitleRenameResult = {
+  ok: boolean;
+  id?: string;
+  title?: string;
+  sourcePath?: string;
+  postTitle?: string;
+};
 
 function getFolderSegmentsRelativeToRoot(rootPath: string, targetPath: string): string[] | null {
   const normalize = (value: string) => value.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -343,6 +455,12 @@ export function AppShell() {
   const [showAvatarView, setShowAvatarView] = useState(
     () => readWorkspaceSettings().showAvatarView,
   );
+  const [showHeadlinesView, setShowHeadlinesView] = useState(
+    () => readWorkspaceSettings().showHeadlinesView,
+  );
+  const [collectViewOrder, setCollectViewOrder] = useState<CollectSubView[]>(
+    () => readWorkspaceSettings().collectViewOrder,
+  );
   const [collectItems, setCollectItems] = useState<CollectItem[]>(() => loadPersistedCollectItems());
   const [isWorkspaceSidebarOpen, setIsWorkspaceSidebarOpen] = useState(true);
   /** `null` = browse at the selected workspace root. */
@@ -352,11 +470,24 @@ export function AppShell() {
   /** Resolved system volume name (desktop), or generic label on web. */
   const [workspaceVolumeLabel, setWorkspaceVolumeLabel] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [notionConnected, setNotionConnected] = useState(false);
+  const [notionSyncRunning, setNotionSyncRunning] = useState(false);
+  const [notionEssayLink, setNotionEssayLink] = useState<NotionEssayLink | null>(null);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isFocusModeOpen, setIsFocusModeOpen] = useState(false);
   const [focusSessionEndsAt, setFocusSessionEndsAt] = useState<number | null>(null);
   const [focusRemainingMs, setFocusRemainingMs] = useState(0);
   const [imagePreview, setImagePreview] = useState<ImagePreviewTarget | null>(null);
+  const [pdfConvertPreview, setPdfConvertPreview] = useState<{
+    sourcePath: string;
+    sourceName: string;
+    outPath: string;
+    markdown: string | null;
+    loading: boolean;
+    error: string | null;
+  } | null>(null);
+  const [pdfConvertSubmitting, setPdfConvertSubmitting] = useState(false);
+  const pdfConvertGenerationRef = useRef(0);
   const [saveAsModalOpen, setSaveAsModalOpen] = useState(false);
   const [saveAsLiveFileName, setSaveAsLiveFileName] = useState("");
   const [saveAsInitialFileName, setSaveAsInitialFileName] = useState("Untitled.md");
@@ -364,6 +495,10 @@ export function AppShell() {
   const [saveAsSubmitting, setSaveAsSubmitting] = useState(false);
   /** Regular document Save As vs podcast-notes export (forces Folder + writes PDF to Exports). */
   const [saveAsPurpose, setSaveAsPurpose] = useState<"document" | "podcast-notes">("document");
+  const [podcastNotesPreviewOpen, setPodcastNotesPreviewOpen] = useState(false);
+  const [podcastNotesMarkdown, setPodcastNotesMarkdown] = useState<string | null>(null);
+  const [podcastNotesPreviewError, setPodcastNotesPreviewError] = useState<string | null>(null);
+  const podcastNotesGenerationRef = useRef(0);
   const [isTopChromeHidden, setIsTopChromeHidden] = useState(false);
   const [readabilityPanelOpen, setReadabilityPanelOpen] = useState(true);
   const [showQuickLinks, setShowQuickLinks] = useState(
@@ -372,8 +507,20 @@ export function AppShell() {
   const [showCriteria, setShowCriteria] = useState(
     () => readCriteriaSidebarSettings().showCriteria,
   );
+  const [publishUrl, setPublishUrl] = useState(
+    () => readCriteriaSidebarSettings().publishUrl,
+  );
   const [showAiCheck, setShowAiCheck] = useState(
     () => readAiCheckSidebarSettings().showAiCheck,
+  );
+  const [showPodcastNotes, setShowPodcastNotes] = useState(
+    () => readAiCheckSidebarSettings().showPodcastNotes,
+  );
+  const [showTitleGeneration, setShowTitleGeneration] = useState(
+    () => readAiCheckSidebarSettings().showTitleGeneration,
+  );
+  const [showRelatedEssays, setShowRelatedEssays] = useState(
+    () => readAiCheckSidebarSettings().showRelatedEssays,
   );
   /** In-memory buffer when no tabs open — not a saved file until persistence exists. */
   const [scratchDraftContent, setScratchDraftContent] = useState("");
@@ -383,6 +530,13 @@ export function AppShell() {
   const [scratchLastSavedContent, setScratchLastSavedContent] = useState("");
   /** Display name for the scratch buffer (no tab row); shown in the document header. */
   const [scratchDocumentTitle, setScratchDocumentTitle] = useState("Untitled");
+  /** Inline rename draft so Notes pop-out can follow typing before commit. */
+  const [titleRenameDraft, setTitleRenameDraft] = useState<string | null>(null);
+  const applyTitleRenameRef = useRef<
+    (rawBase: string) => Promise<TitleRenameResult>
+  >(async () => ({ ok: false }));
+  const titleRenameDraftRef = useRef<string | null>(null);
+  titleRenameDraftRef.current = titleRenameDraft;
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredThemeMode());
   const [appearanceStyleId, setAppearanceStyleId] = useState<AppearanceStyleId>(
     () => readStoredAppearanceStyleId(),
@@ -394,6 +548,10 @@ export function AppShell() {
   const [writingAssistancePrefs, setWritingAssistancePrefs] = useState(readWritingAssistancePrefs);
   const [focusVisibilityPrefs, setFocusVisibilityPrefs] = useState(readFocusVisibilityPrefs);
   const [documentHeaderPrefs, setDocumentHeaderPrefs] = useState(readDocumentHeaderPrefs);
+  const [editorPromptPrefs, setEditorPromptPrefs] = useState(readEditorPromptPrefs);
+  const [sessionEditorPrompt] = useState(() =>
+    pickRandomEditorPrompt(editorPromptPrefs.prompts),
+  );
   const [encouragementPrefs, setEncouragementPrefs] = useState(readEncouragementPrefs);
   const [parametersPrefs, setParametersPrefs] = useState(readParametersPrefs);
   const { activePhrase: encouragementPhrase, dismiss: dismissEncouragement, showTest: testEncouragement } =
@@ -404,11 +562,21 @@ export function AppShell() {
   const [proofreadIssues, setProofreadIssues] = useState<ProofreadIssue[]>([]);
   const [aiCheckConfig, setAiCheckConfig] = useState<AiCheckConfigPublic | null>(null);
   const [aiProofreadIssues, setAiProofreadIssues] = useState<ProofreadIssue[]>([]);
+  const [relatedProofreadIssues, setRelatedProofreadIssues] = useState<ProofreadIssue[]>([]);
   const [aiCheckRunning, setAiCheckRunning] = useState(false);
   const [podcastNotesRunning, setPodcastNotesRunning] = useState(false);
+  const exportOverlayOpen = saveAsModalOpen || podcastNotesPreviewOpen;
   const [aiCheckCostLabel, setAiCheckCostLabel] = useState<string | null>(null);
   const [aiCheckError, setAiCheckError] = useState<string | null>(null);
+  const [headlinePairs, setHeadlinePairs] = useState<HeadlinePair[]>([]);
+  const [headlinePairsRunning, setHeadlinePairsRunning] = useState(false);
+  const [headlinePairsFromShots, setHeadlinePairsFromShots] = useState(false);
+  const [headlinePairsError, setHeadlinePairsError] = useState<string | null>(null);
+  const [selectedHeadlineIndex, setSelectedHeadlineIndex] = useState<number | null>(null);
   const aiProofreadIssuesRef = useRef<ProofreadIssue[]>([]);
+  const relatedProofreadIssuesRef = useRef<ProofreadIssue[]>([]);
+  const relatedLinkedPathsRef = useRef<string[]>([]);
+  const relatedItemsRef = useRef<RelatedEssayItem[]>([]);
   /** Sidebar inline rename for a newly created (or future: any) folder. */
   const [folderRename, setFolderRename] = useState<{
     path: string;
@@ -437,6 +605,7 @@ export function AppShell() {
   const [editorVisuallyInactive, setEditorVisuallyInactive] = useState(false);
   const editorFocusSuppressedRef = useRef(false);
   const editorFocusBeforeSaveAsRef = useRef<boolean | null>(null);
+  const printDocumentRef = useRef<() => void>(() => {});
 
   const setEditorInactive = useCallback((inactive: boolean) => {
     editorFocusSuppressedRef.current = inactive;
@@ -488,10 +657,12 @@ export function AppShell() {
   const applyCollectViewVisibility = useCallback((next: {
     showOutliersView: boolean;
     showCollectView: boolean;
+    showHeadlinesView: boolean;
     showAvatarView: boolean;
   }) => {
     setShowOutliersView(next.showOutliersView);
     setShowCollectView(next.showCollectView);
+    setShowHeadlinesView(next.showHeadlinesView);
     setShowAvatarView(next.showAvatarView);
   }, []);
 
@@ -516,6 +687,18 @@ export function AppShell() {
     [applyCollectViewVisibility],
   );
 
+  const handleShowHeadlinesViewChange = useCallback(
+    (enabled: boolean) => {
+      applyCollectViewVisibility(writeWorkspaceSettings({ showHeadlinesView: enabled }));
+    },
+    [applyCollectViewVisibility],
+  );
+
+  const handleCollectViewOrderChange = useCallback((order: CollectSubView[]) => {
+    const next = writeWorkspaceSettings({ collectViewOrder: order });
+    setCollectViewOrder(next.collectViewOrder);
+  }, []);
+
   const handleShowQuickLinksChange = useCallback((enabled: boolean) => {
     const next = writeQuickLinksSettings({ showQuickLinks: enabled });
     setShowQuickLinks(next.showQuickLinks);
@@ -529,9 +712,29 @@ export function AppShell() {
     }
   }, []);
 
+  const handlePublishUrlChange = useCallback((value: string) => {
+    const next = writeCriteriaSidebarSettings({ publishUrl: value });
+    setPublishUrl(next.publishUrl);
+  }, []);
+
   const handleShowAiCheckChange = useCallback((enabled: boolean) => {
     const next = writeAiCheckSidebarSettings({ showAiCheck: enabled });
     setShowAiCheck(next.showAiCheck);
+  }, []);
+
+  const handleShowPodcastNotesChange = useCallback((enabled: boolean) => {
+    const next = writeAiCheckSidebarSettings({ showPodcastNotes: enabled });
+    setShowPodcastNotes(next.showPodcastNotes);
+  }, []);
+
+  const handleShowTitleGenerationChange = useCallback((enabled: boolean) => {
+    const next = writeAiCheckSidebarSettings({ showTitleGeneration: enabled });
+    setShowTitleGeneration(next.showTitleGeneration);
+  }, []);
+
+  const handleShowRelatedEssaysChange = useCallback((enabled: boolean) => {
+    const next = writeAiCheckSidebarSettings({ showRelatedEssays: enabled });
+    setShowRelatedEssays(next.showRelatedEssays);
   }, []);
 
   const showWorkspaceNavigation = enableCollect;
@@ -562,7 +765,7 @@ export function AppShell() {
   useEffect(() => {
     if (activeWorkspaceSection !== "write") return;
     if (!editorFocusSuppressedRef.current) return;
-    if (saveAsModalOpen) return;
+    if (exportOverlayOpen) return;
 
     const ed = tiptapEditor;
     if (!ed) return;
@@ -575,7 +778,7 @@ export function AppShell() {
       cancelAnimationFrame(raf);
       clearTimeout(timer);
     };
-  }, [activeWorkspaceSection, tiptapEditor, saveAsModalOpen]);
+  }, [activeWorkspaceSection, tiptapEditor, exportOverlayOpen]);
 
   const handleSpellcheckPref = useCallback((spellcheck: boolean) => {
     setWritingAssistancePrefs(writeWritingAssistancePrefs({ spellcheck }));
@@ -591,6 +794,13 @@ export function AppShell() {
   const handleDocumentHeaderPrefChange = useCallback(
     (partial: Parameters<typeof writeDocumentHeaderPrefs>[0]) => {
       setDocumentHeaderPrefs(writeDocumentHeaderPrefs(partial));
+    },
+    [],
+  );
+
+  const handleEditorPromptPrefsChange = useCallback(
+    (partial: Parameters<typeof writeEditorPromptPrefs>[0]) => {
+      setEditorPromptPrefs(writeEditorPromptPrefs(partial));
     },
     [],
   );
@@ -625,9 +835,54 @@ export function AppShell() {
   const hideWorkspaceSectionRail = focusModeActive || isTopChromeHidden;
   const openTabIdsRef = useRef(openTabIds);
   const activeTabIdRef = useRef(activeTabId);
+  const openDocumentsRef = useRef(openDocuments);
+  const scratchDocumentTitleRef = useRef(scratchDocumentTitle);
+  const scratchDiskPathRef = useRef(scratchDiskPath);
   const handleCreateMarkdownFileRef = useRef<() => Promise<void>>(async () => {});
+  const notionEssayLinkRef = useRef<NotionEssayLink | null>(null);
+  const lastNotionSyncedRef = useRef("");
+  const notionSyncedPathRef = useRef<string | null>(null);
+  const notionSyncRunningRef = useRef(false);
   openTabIdsRef.current = openTabIds;
   activeTabIdRef.current = activeTabId;
+  openDocumentsRef.current = openDocuments;
+  scratchDocumentTitleRef.current = scratchDocumentTitle;
+  scratchDiskPathRef.current = scratchDiskPath;
+
+  const currentTitleRenameSnapshot = useCallback((): TitleRenameResult => {
+    const id = activeTabIdRef.current;
+    if (id) {
+      const doc = openDocumentsRef.current[id];
+      if (doc) {
+        return {
+          ok: true,
+          id: doc.id,
+          title: doc.title,
+          sourcePath: doc.sourcePath,
+          postTitle: doc.postTitle,
+        };
+      }
+    }
+    const title = scratchDocumentTitleRef.current;
+    return {
+      ok: true,
+      id: "",
+      title,
+      sourcePath: scratchDiskPathRef.current ?? "",
+      postTitle: splitFileBaseAndExtension(title).base || "Untitled",
+    };
+  }, []);
+
+  const flushPendingTitleRename = useCallback(async (): Promise<TitleRenameResult> => {
+    const draft = titleRenameDraftRef.current;
+    if (draft === null) return currentTitleRenameSnapshot();
+    const result = await applyTitleRenameRef.current(draft);
+    if (result.ok) {
+      setTitleRenameDraft(null);
+      titleRenameDraftRef.current = null;
+    }
+    return result;
+  }, [currentTitleRenameSnapshot]);
 
   const editorTypingActivityHandlerRef = useRef<(() => void) | null>(null);
   const bothSidebarsClosed = !isWorkspaceSidebarOpen && !readabilityPanelOpen;
@@ -639,8 +894,17 @@ export function AppShell() {
     editorTypingActivityHandlerRef.current?.();
   }, [bothSidebarsClosed]);
 
-  /** Bottom bar: snap both rails to the same state — both on unless both already on, then both off. */
+  const toggleLeftSidebar = useCallback(() => {
+    if (focusModeActive) return;
+    setIsWorkspaceSidebarOpen((open) => !open);
+  }, [focusModeActive]);
 
+  const toggleRightSidebar = useCallback(() => {
+    if (focusModeActive) return;
+    setReadabilityPanelOpen((open) => !open);
+  }, [focusModeActive]);
+
+  /** Bottom bar: snap both rails to the same state — both on unless both already on, then both off. */
   const toggleBothSidebars = useCallback(() => {
     if (focusModeActive) return;
     if (isWorkspaceSidebarOpen && readabilityPanelOpen) {
@@ -651,6 +915,49 @@ export function AppShell() {
       setReadabilityPanelOpen(true);
     }
   }, [focusModeActive, isWorkspaceSidebarOpen, readabilityPanelOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const action = matchSidebarToggleHotkey(event);
+      if (!action) return;
+      const el = event.target as HTMLElement | null;
+      if (el?.closest('[role="dialog"]')) return;
+      if (el?.closest("[data-floating-text-menu]")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (action === "left") toggleLeftSidebar();
+      else if (action === "right") toggleRightSidebar();
+      else toggleBothSidebars();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [toggleLeftSidebar, toggleRightSidebar, toggleBothSidebars]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const action = matchViewHotkey(event);
+      if (!action) return;
+      const el = event.target as HTMLElement | null;
+      if (el?.closest('[role="dialog"]')) return;
+      if (el?.closest("[data-floating-text-menu]")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (action === "notes") {
+        void openNotesPopoutWindow().catch((err) => {
+          console.error("Notes pop-out failed:", err);
+          window.alert(err instanceof Error ? err.message : String(err));
+        });
+        return;
+      }
+      if (action === "write") {
+        handleWorkspaceSectionChange("write");
+        return;
+      }
+      if (enableCollect) handleWorkspaceSectionChange("collect");
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [enableCollect, handleWorkspaceSectionChange]);
 
   const startFocusMode = useCallback(() => {
     setIsWorkspaceSidebarOpen(false);
@@ -700,7 +1007,7 @@ export function AppShell() {
     if (!focusModeActive) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        if (isFocusModeOpen || isSettingsOpen || isAboutOpen || saveAsModalOpen) return;
+        if (isFocusModeOpen || isSettingsOpen || isAboutOpen || exportOverlayOpen) return;
         event.preventDefault();
         endFocusMode();
         return;
@@ -709,8 +1016,8 @@ export function AppShell() {
       const mod = event.metaKey || event.ctrlKey;
       if (!mod) return;
       const key = event.key.toLowerCase();
-      // Soft-block in-app quit/hide/close shortcuts (OS Cmd+Tab still works).
-      if (key === "w" || key === "q" || key === "h" || key === "m") {
+      // Soft-block in-app quit/hide/minimize shortcuts (OS Cmd+Tab still works).
+      if (key === "q" || key === "h" || key === "m") {
         event.preventDefault();
         event.stopPropagation();
       }
@@ -722,7 +1029,7 @@ export function AppShell() {
     isFocusModeOpen,
     isSettingsOpen,
     isAboutOpen,
-    saveAsModalOpen,
+    exportOverlayOpen,
     endFocusMode,
   ]);
 
@@ -963,20 +1270,59 @@ export function AppShell() {
   const scratchEditorBody =
     activeDocument?.content ?? (openTabIds.length === 0 ? scratchDraftContent : "");
 
+  const openDocumentPath = useMemo(
+    () =>
+      resolveOpenDocumentPath({
+        sourcePath: activeDocument?.sourcePath,
+        tabId: activeTabId,
+        scratchDiskPath,
+        isVirtualTabId: isVirtualDocumentTabId,
+      }),
+    [activeDocument?.sourcePath, activeTabId, scratchDiskPath],
+  );
+
+  const openDocumentTrailPath = useMemo(
+    () =>
+      visibleOpenDocumentTrailPath(
+        workspaceListRoots,
+        expandedPaths,
+        openDocumentPath,
+        workspaceRootPath,
+      ),
+    [workspaceListRoots, expandedPaths, openDocumentPath, workspaceRootPath],
+  );
+
   const isDirty = useMemo(() => {
+    const editorTitleBase = splitFileBaseAndExtension(
+      activeDocument?.title ?? (openTabIds.length === 0 ? scratchDocumentTitle : "Untitled"),
+    ).base || "Untitled";
+    const pendingRename =
+      titleRenameDraft !== null && titleRenameDraft.trim() !== editorTitleBase;
+
     if (activeTabId && activeDocument) {
-      return isDocumentDirty(activeDocument);
+      return pendingRename || isDocumentDirty(activeDocument);
     }
     if (openTabIds.length === 0) {
-      return scratchDraftContent !== scratchLastSavedContent;
+      const scratchSavedBase = scratchDiskPath
+        ? splitFileBaseAndExtension(fileNameFromPath(scratchDiskPath)).base || "Untitled"
+        : "Untitled";
+      const scratchRenamed = editorTitleBase !== scratchSavedBase;
+      return (
+        pendingRename ||
+        scratchRenamed ||
+        scratchDraftContent !== scratchLastSavedContent
+      );
     }
-    return false;
+    return pendingRename;
   }, [
     activeTabId,
     activeDocument,
     openTabIds.length,
     scratchDraftContent,
     scratchLastSavedContent,
+    scratchDocumentTitle,
+    scratchDiskPath,
+    titleRenameDraft,
   ]);
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
@@ -1194,6 +1540,8 @@ export function AppShell() {
         lastSavedNotes: savedNotes,
         criteria: savedCriteria,
         lastSavedCriteria: savedCriteria,
+        ...EMPTY_NOTION_ESSAY_FIELDS,
+        ...notionFieldsFromLink(notionLinkFromFields(activeDocument ?? {})),
       };
       setOpenDocuments((prev) => ({ ...prev, [outPath]: doc }));
       setOpenTabIds([outPath]);
@@ -1208,31 +1556,38 @@ export function AppShell() {
   );
 
   const openSaveAsModal = useCallback(
-    (opts?: { purpose?: "document" | "podcast-notes" }) => {
+    async (opts?: { purpose?: "document" | "podcast-notes"; fileName?: string }) => {
       if (!isTauriRuntime()) {
         window.alert("Save As is only available in the Harvy desktop app.");
-        return;
+        return false;
       }
       if (!hasWorkspaceFolder) {
         window.alert("Choose a workspace folder before saving files.");
-        return;
+        return false;
       }
-      if (!editorEditable) return;
+      if (!editorEditable) return false;
       const purpose = opts?.purpose ?? "document";
       if (purpose === "podcast-notes") {
         if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
-          window.alert("Enable AI check and add an API key in Settings → Sidebars first.");
-          return;
+          window.alert("Enable AI check and add an API key in Settings → Artificial Intelligence first.");
+          return false;
+        }
+        if (!showPodcastNotes) {
+          window.alert("Turn on Podcast Notes in Settings → Artificial Intelligence.");
+          return false;
         }
       }
-      const titleFromFile =
-        activeDocument?.title ?? (openTabIds.length === 0 ? scratchDocumentTitle : "Untitled");
-      const titleBase =
-        activeDocument?.postTitle.trim() ||
-        splitFileBaseAndExtension(titleFromFile).base ||
-        "Untitled";
-      const suggestedFileName = defaultSaveFileName(titleBase);
-      editorFocusBeforeSaveAsRef.current = editorFocusSuppressedRef.current;
+      const flushed = await flushPendingTitleRename();
+      if (!flushed.ok) return false;
+      const suggestedFileName =
+        opts?.fileName ??
+        suggestedSaveAsFileName({
+          fileTitle: flushed.title,
+          postTitle: flushed.postTitle,
+        });
+      if (editorFocusBeforeSaveAsRef.current === null) {
+        editorFocusBeforeSaveAsRef.current = editorFocusSuppressedRef.current;
+      }
       visuallyDeactivateEditor(tiptapEditor);
       setEditorInactive(true);
       setSaveAsPurpose(purpose);
@@ -1240,12 +1595,10 @@ export function AppShell() {
       setSaveAsLiveFileName(suggestedFileName);
       setSaveAsDestinationPath(workspaceBrowsePath ?? supportedTree?.path ?? null);
       setSaveAsModalOpen(true);
+      return true;
     },
     [
       editorEditable,
-      activeDocument,
-      openTabIds.length,
-      scratchDocumentTitle,
       workspaceBrowsePath,
       supportedTree?.path,
       hasWorkspaceFolder,
@@ -1253,20 +1606,26 @@ export function AppShell() {
       setEditorInactive,
       aiCheckConfig?.enabled,
       aiCheckConfig?.hasApiKey,
+      showPodcastNotes,
+      flushPendingTitleRename,
     ],
   );
 
-  const finishSaveAsModal = useCallback(() => {
-    setSaveAsModalOpen(false);
-    setSaveAsLiveFileName("");
-    setSaveAsPurpose("document");
-    setPodcastNotesRunning(false);
-    const wasSuppressedBeforeOpen = editorFocusBeforeSaveAsRef.current;
-    editorFocusBeforeSaveAsRef.current = null;
-    if (wasSuppressedBeforeOpen === false) {
-      setEditorInactive(false);
-    }
-  }, [setEditorInactive]);
+  const finishSaveAsModal = useCallback(
+    (opts?: { restoreEditor?: boolean }) => {
+      setSaveAsModalOpen(false);
+      setSaveAsLiveFileName("");
+      setSaveAsPurpose("document");
+      setPodcastNotesRunning(false);
+      if (opts?.restoreEditor === false) return;
+      const wasSuppressedBeforeOpen = editorFocusBeforeSaveAsRef.current;
+      editorFocusBeforeSaveAsRef.current = null;
+      if (wasSuppressedBeforeOpen === false) {
+        setEditorInactive(false);
+      }
+    },
+    [setEditorInactive],
+  );
 
   const handleSaveAsFileNameChange = useCallback((fileName: string) => {
     setSaveAsLiveFileName(fileName);
@@ -1274,8 +1633,13 @@ export function AppShell() {
 
   const closeSaveAsModal = useCallback(() => {
     if (saveAsSubmitting) return;
-    finishSaveAsModal();
-  }, [saveAsSubmitting, finishSaveAsModal]);
+    const returnToPodcastPreview =
+      saveAsPurpose === "podcast-notes" && Boolean(podcastNotesMarkdown?.trim());
+    finishSaveAsModal({ restoreEditor: !returnToPodcastPreview });
+    if (returnToPodcastPreview) {
+      setPodcastNotesPreviewOpen(true);
+    }
+  }, [saveAsSubmitting, finishSaveAsModal, saveAsPurpose, podcastNotesMarkdown]);
 
   const pickSaveAsDestination = useCallback(async () => {
     if (!workspaceRootPath) {
@@ -1368,10 +1732,24 @@ export function AppShell() {
           if (!ok) return;
         }
 
+        const titleForDisk = documentTitleBaseFromSaveAsFileName(fileName);
+        const notionFields = {
+          ...EMPTY_NOTION_ESSAY_FIELDS,
+          ...notionFieldsFromLink(
+            notionLinkFromFields(activeDocument ?? {}) ?? notionEssayLinkRef.current,
+          ),
+        };
         await invoke("write_text_file", {
           path: outPath,
-          contents: markdownForDisk(markdown, activeDocument),
+          contents: markdownForDisk(markdown, {
+            postTitle: titleForDisk,
+            subtitle: activeDocument?.subtitle ?? "",
+            ...notionFields,
+          }),
         });
+        if (notionLinkFromFields(notionFields)) {
+          await saveNotionEssayLink(outPath, notionLinkFromFields(notionFields)!);
+        }
         if (folderContext.hasNotes) {
           await saveDocumentNotes(outPath, activeDocument?.notes ?? "");
         }
@@ -1383,14 +1761,17 @@ export function AppShell() {
           if (!projectDir) {
             throw new Error("Podcast notes require a project folder.");
           }
-          const { text } = tiptapEditor
-            ? proofreadPlainTextAndPositions(tiptapEditor.state.doc)
-            : { text: activeDocument?.content ?? scratchDraftContent };
-          const essay = text.trim();
-          if (!essay) {
-            throw new Error("Nothing to export — the document is empty.");
+          let notesMarkdown = ensurePodcastNotesBullets(podcastNotesMarkdown?.trim() ?? "");
+          if (!notesMarkdown) {
+            const { text } = tiptapEditor
+              ? proofreadPlainTextAndPositions(tiptapEditor.state.doc)
+              : { text: activeDocument?.content ?? scratchDraftContent };
+            const essay = text.trim();
+            if (!essay) {
+              throw new Error("Nothing to export — the document is empty.");
+            }
+            notesMarkdown = (await generatePodcastNotes(essay)).markdown;
           }
-          const notes = await generatePodcastNotes(essay);
           const exportsDir = await invoke<string>("ensure_directory", {
             parentPath: projectDir,
             folderName: "Exports",
@@ -1398,7 +1779,10 @@ export function AppShell() {
           const pdfPath = normalizePdfSavePath(
             joinPath(exportsDir, defaultPodcastNotesPdfFileName(folderBase)),
           );
-          await invoke("export_markdown_pdf", { path: pdfPath, markdown: notes.markdown });
+          await invoke("export_markdown_pdf", { path: pdfPath, markdown: notesMarkdown });
+          setPodcastNotesPreviewOpen(false);
+          setPodcastNotesMarkdown(null);
+          setPodcastNotesPreviewError(null);
         }
 
         finalizeSavedPath(outPath, markdown);
@@ -1421,6 +1805,7 @@ export function AppShell() {
       finalizeSavedPath,
       reloadWorkspaceTree,
       finishSaveAsModal,
+      podcastNotesMarkdown,
     ],
   );
 
@@ -1515,10 +1900,117 @@ export function AppShell() {
     workspaceRootPath,
   ]);
 
-  const performExportPodcastNotesPdf = useCallback(() => {
+  const closePodcastNotesPreview = useCallback(() => {
+    podcastNotesGenerationRef.current += 1;
+    setPodcastNotesPreviewOpen(false);
+    setPodcastNotesMarkdown(null);
+    setPodcastNotesPreviewError(null);
+    setPodcastNotesRunning(false);
+    const wasSuppressedBeforeOpen = editorFocusBeforeSaveAsRef.current;
+    editorFocusBeforeSaveAsRef.current = null;
+    if (wasSuppressedBeforeOpen === false) {
+      setEditorInactive(false);
+    }
+  }, [setEditorInactive]);
+
+  const runPodcastNotesGeneration = useCallback(async (essay: string) => {
+    const generationId = ++podcastNotesGenerationRef.current;
+    setPodcastNotesMarkdown(null);
+    setPodcastNotesPreviewError(null);
+    setPodcastNotesRunning(true);
+    try {
+      const notes = await generatePodcastNotes(essay);
+      if (podcastNotesGenerationRef.current !== generationId) return;
+      setPodcastNotesMarkdown(notes.markdown);
+    } catch (e) {
+      if (podcastNotesGenerationRef.current !== generationId) return;
+      setPodcastNotesPreviewError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (podcastNotesGenerationRef.current === generationId) {
+        setPodcastNotesRunning(false);
+      }
+    }
+  }, []);
+
+  const performExportPodcastNotesPdf = useCallback(async () => {
+    if (podcastNotesRunning || saveAsSubmitting || podcastNotesPreviewOpen) return;
+    if (!isTauriRuntime()) {
+      window.alert("Export Podcast Notes is only available in the Harvy desktop app.");
+      return;
+    }
+    if (!hasWorkspaceFolder) {
+      window.alert("Choose a workspace folder before saving files.");
+      return;
+    }
+    if (!editorEditable) return;
+    if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
+      window.alert("Enable AI check and add an API key in Settings → Artificial Intelligence first.");
+      return;
+    }
+    if (!showPodcastNotes) {
+      window.alert("Turn on Podcast Notes in Settings → Artificial Intelligence.");
+      return;
+    }
+    const { text } = tiptapEditor
+      ? proofreadPlainTextAndPositions(tiptapEditor.state.doc)
+      : { text: activeDocument?.content ?? scratchDraftContent };
+    const essay = text.trim();
+    if (!essay) {
+      window.alert("Nothing to export — the document is empty.");
+      return;
+    }
+
+    if (editorFocusBeforeSaveAsRef.current === null) {
+      editorFocusBeforeSaveAsRef.current = editorFocusSuppressedRef.current;
+    }
+    visuallyDeactivateEditor(tiptapEditor);
+    setEditorInactive(true);
+    setPodcastNotesPreviewOpen(true);
+    await runPodcastNotesGeneration(essay);
+  }, [
+    podcastNotesRunning,
+    saveAsSubmitting,
+    podcastNotesPreviewOpen,
+    hasWorkspaceFolder,
+    editorEditable,
+    aiCheckConfig?.enabled,
+    aiCheckConfig?.hasApiKey,
+    showPodcastNotes,
+    tiptapEditor,
+    activeDocument,
+    scratchDraftContent,
+    setEditorInactive,
+    runPodcastNotesGeneration,
+  ]);
+
+  const retryPodcastNotesPreview = useCallback(() => {
     if (podcastNotesRunning || saveAsSubmitting) return;
-    openSaveAsModal({ purpose: "podcast-notes" });
-  }, [openSaveAsModal, podcastNotesRunning, saveAsSubmitting]);
+    const { text } = tiptapEditor
+      ? proofreadPlainTextAndPositions(tiptapEditor.state.doc)
+      : { text: activeDocument?.content ?? scratchDraftContent };
+    const essay = text.trim();
+    if (!essay) {
+      setPodcastNotesPreviewError("Nothing to export — the document is empty.");
+      return;
+    }
+    void runPodcastNotesGeneration(essay);
+  }, [
+    podcastNotesRunning,
+    saveAsSubmitting,
+    tiptapEditor,
+    activeDocument,
+    scratchDraftContent,
+    runPodcastNotesGeneration,
+  ]);
+
+  const confirmPodcastNotesExport = useCallback(async () => {
+    if (!podcastNotesMarkdown?.trim() || podcastNotesRunning || saveAsSubmitting) return;
+    setPodcastNotesPreviewOpen(false);
+    const opened = await openSaveAsModal({ purpose: "podcast-notes" });
+    if (!opened) {
+      setPodcastNotesPreviewOpen(true);
+    }
+  }, [podcastNotesMarkdown, podcastNotesRunning, saveAsSubmitting, openSaveAsModal]);
 
   const performSave = useCallback(async () => {
     if (!isTauriRuntime()) {
@@ -1530,19 +2022,65 @@ export function AppShell() {
       return;
     }
     if (!editorEditable) return;
-    if (!isDirty) return;
+
+    const draft = titleRenameDraftRef.current;
+    const before = currentTitleRenameSnapshot();
+    const currentTitleBase =
+      splitFileBaseAndExtension(before.title ?? "Untitled").base || "Untitled";
+    const hasPendingRename = draft !== null && draft.trim() !== currentTitleBase;
+    if (!isDirty && !hasPendingRename) return;
+
+    const flushed = await flushPendingTitleRename();
+    if (!flushed.ok) return;
+
+    const liveDoc =
+      activeTabId && activeDocument
+        ? {
+            ...activeDocument,
+            id: flushed.id || activeDocument.id,
+            title: flushed.title ?? activeDocument.title,
+            sourcePath: flushed.sourcePath ?? activeDocument.sourcePath,
+            postTitle: flushed.postTitle ?? activeDocument.postTitle,
+          }
+        : null;
+    const docId = liveDoc?.id || activeTabId;
 
     try {
-      if (activeTabId && activeDocument) {
-        const path = activeDocument.sourcePath;
-        if (!path) {
-          openSaveAsModal();
+      if (docId && liveDoc) {
+        const originalPath = liveDoc.sourcePath;
+        if (!originalPath) {
+          await openSaveAsModal({
+            fileName: suggestedSaveAsFileName({
+              fileTitle: flushed.title,
+              postTitle: flushed.postTitle,
+            }),
+          });
           return;
         }
-        let markdown = getDocumentMarkdown(tiptapEditor, activeDocument.content);
+        let path = originalPath;
+        const renamedPath = resolveRenamedDocumentPath(
+          path,
+          liveDoc.title || liveDoc.postTitle,
+        );
+        if (renamedPath) {
+          const exists = await invoke<boolean>("path_exists", { path: renamedPath });
+          if (exists) {
+            window.alert(
+              `"${fileNameFromPath(renamedPath)}" already exists at this location.`,
+            );
+            return;
+          }
+          await invoke("rename_fs_path", { fromPath: path, toPath: renamedPath });
+          await renameDocumentNotesSidecar(path, renamedPath);
+          await renameDocumentCriteriaSidecar(path, renamedPath);
+          await renameNotionEssaySidecar(path, renamedPath);
+          await renameRelatedEssaySidecar(path, renamedPath);
+          path = renamedPath;
+        }
+        let markdown = getDocumentMarkdown(tiptapEditor, liveDoc.content);
         const folderContext = getProjectStructure({
-          notes: activeDocument.notes,
-          criteria: activeDocument.criteria,
+          notes: liveDoc.notes,
+          criteria: liveDoc.criteria,
           editor: tiptapEditor,
           documentMarkdown: markdown,
         });
@@ -1582,6 +2120,8 @@ export function AppShell() {
                 if (!ok) return;
               } else {
                 await invoke("rename_fs_path", { fromPath: path, toPath: packagedPath });
+                await renameNotionEssaySidecar(path, packagedPath);
+                await renameRelatedEssaySidecar(path, packagedPath);
               }
             }
             outPath = packagedPath;
@@ -1597,31 +2137,56 @@ export function AppShell() {
 
         await invoke("write_text_file", {
           path: outPath,
-          contents: markdownForDisk(markdown, activeDocument),
+          contents: markdownForDisk(markdown, liveDoc),
         });
-        await saveDocumentNotes(outPath, activeDocument.notes);
-        await saveDocumentCriteria(outPath, activeDocument.criteria);
-        if (outPath !== path) {
+        await saveDocumentNotes(outPath, liveDoc.notes);
+        await saveDocumentCriteria(outPath, liveDoc.criteria);
+        if (outPath !== originalPath) {
           finalizeSavedPath(outPath, markdown);
           await reloadWorkspaceTree();
         } else {
-          setOpenDocuments((prev) => ({
-            ...prev,
-            [activeTabId]: {
-              ...prev[activeTabId]!,
-              content: markdown,
-              lastSavedContent: markdown,
-              lastSavedPostTitle: activeDocument.postTitle,
-              lastSavedSubtitle: activeDocument.subtitle,
-              lastSavedNotes: activeDocument.notes,
-              lastSavedCriteria: activeDocument.criteria,
-            },
-          }));
+          setOpenDocuments((prev) => {
+            const current = prev[docId] ?? prev[activeTabId!];
+            if (!current) return prev;
+            return {
+              ...prev,
+              [current.id]: {
+                ...current,
+                content: markdown,
+                lastSavedContent: markdown,
+                lastSavedPostTitle: liveDoc.postTitle,
+                lastSavedSubtitle: liveDoc.subtitle,
+                lastSavedNotes: liveDoc.notes,
+                lastSavedCriteria: liveDoc.criteria,
+              },
+            };
+          });
         }
         return;
       }
       if (openTabIds.length === 0) {
-        if (scratchDiskPath) {
+        const originalDiskPath = flushed.sourcePath || scratchDiskPath;
+        if (originalDiskPath) {
+          let diskPath = originalDiskPath;
+          const renamedScratchPath = resolveRenamedDocumentPath(
+            diskPath,
+            flushed.title ?? scratchDocumentTitleRef.current,
+          );
+          if (renamedScratchPath) {
+            const exists = await invoke<boolean>("path_exists", { path: renamedScratchPath });
+            if (exists) {
+              window.alert(
+                `"${fileNameFromPath(renamedScratchPath)}" already exists at this location.`,
+              );
+              return;
+            }
+            await invoke("rename_fs_path", { fromPath: diskPath, toPath: renamedScratchPath });
+            await renameNotionEssaySidecar(diskPath, renamedScratchPath);
+            await renameRelatedEssaySidecar(diskPath, renamedScratchPath);
+            diskPath = renamedScratchPath;
+            scratchDiskPathRef.current = renamedScratchPath;
+            setScratchDiskPath(renamedScratchPath);
+          }
           let markdown = getDocumentMarkdown(tiptapEditor, scratchDraftContent);
           const folderContext = getProjectStructure({
             notes: "",
@@ -1629,11 +2194,11 @@ export function AppShell() {
             editor: tiptapEditor,
             documentMarkdown: markdown,
           });
-          let outPath = scratchDiskPath;
+          let outPath = diskPath;
           if (folderContext.hasImages && workspaceRootPath) {
-            let projectDir = resolveProjectDirectory(scratchDiskPath);
+            let projectDir = resolveProjectDirectory(diskPath);
             if (!projectDir) {
-              openSaveAsModal();
+              await openSaveAsModal();
               return;
             }
             const { replacements } = await packageDocumentImages({
@@ -1642,16 +2207,27 @@ export function AppShell() {
               sources: collectEmbeddedImageSrcs(tiptapEditor, markdown),
             });
             markdown = applyImageSrcRewrites(tiptapEditor, markdown, replacements);
-            outPath = scratchDiskPath;
+            outPath = diskPath;
           }
           await invoke("write_text_file", {
             path: outPath,
-            contents: markdownForDisk(markdown, null),
+            contents: markdownForDisk(markdown, {
+              postTitle: flushed.postTitle ?? currentTitleBase,
+              subtitle: "",
+            }),
           });
           setScratchLastSavedContent(markdown);
           setScratchDraftContent(markdown);
+          if (outPath !== originalDiskPath) {
+            await reloadWorkspaceTree();
+          }
         } else {
-          openSaveAsModal();
+          await openSaveAsModal({
+            fileName: suggestedSaveAsFileName({
+              fileTitle: flushed.title,
+              postTitle: flushed.postTitle,
+            }),
+          });
         }
       }
     } catch (e) {
@@ -1671,6 +2247,8 @@ export function AppShell() {
     workspaceRootPath,
     finalizeSavedPath,
     reloadWorkspaceTree,
+    flushPendingTitleRename,
+    currentTitleRenameSnapshot,
   ]);
 
   /** Keep sidebar selection aligned with the open tab’s file; virtual tabs use browse/root, not the synthetic id. */
@@ -1691,9 +2269,24 @@ export function AppShell() {
       save: () => void performSave(),
       saveAs: () => void openSaveAsModal(),
       exportPdf: () => void performExportPdf(),
+      print: () => printDocumentRef.current(),
       newMarkdownFile: () => void handleCreateMarkdownFileRef.current(),
     });
   }, [performSave, openSaveAsModal, performExportPdf]);
+
+  useEffect(() => {
+    setViewMenuHandlers({
+      openNotes: () =>
+        openNotesPopoutWindow().catch((err) => {
+          console.error("Notes pop-out failed:", err);
+          window.alert(err instanceof Error ? err.message : String(err));
+        }),
+      openWrite: () => handleWorkspaceSectionChange("write"),
+      openResearch: () => {
+        if (enableCollect) handleWorkspaceSectionChange("collect");
+      },
+    });
+  }, [enableCollect, handleWorkspaceSectionChange]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -1741,7 +2334,7 @@ export function AppShell() {
     const onKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
-      if (isEditableKeyboardTarget(e.target)) return;
+      if (isEditableKeyboardTarget(e.target) && !isDocumentNameKeyboardTarget(e.target)) return;
       const el = e.target as HTMLElement | null;
       if (el?.closest('[role="dialog"]')) return;
       if (el?.closest("[data-floating-text-menu]")) return;
@@ -1799,7 +2392,92 @@ export function AppShell() {
     });
   }
 
-  async function selectNode(node: FileNode) {
+  function closePdfConvertPreview() {
+    pdfConvertGenerationRef.current += 1;
+    setPdfConvertPreview(null);
+    setPdfConvertSubmitting(false);
+  }
+
+  async function convertPdfToMarkdown(node: FileNode) {
+    if (!isTauriRuntime()) {
+      window.alert("Converting PDFs requires the Harvy desktop app.");
+      return;
+    }
+
+    const generationId = ++pdfConvertGenerationRef.current;
+    const outPath = siblingMarkdownPathForImport(node.path);
+    setPdfConvertSubmitting(false);
+    setPdfConvertPreview({
+      sourcePath: node.path,
+      sourceName: node.name,
+      outPath,
+      markdown: null,
+      loading: true,
+      error: null,
+    });
+
+    try {
+      const extracted = await invoke<PdfTextRun[]>("extract_pdf_text", { path: node.path });
+      if (pdfConvertGenerationRef.current !== generationId) return;
+      setPdfConvertPreview({
+        sourcePath: node.path,
+        sourceName: node.name,
+        outPath,
+        markdown: pdfExtractedRunsToMarkdown(extracted),
+        loading: false,
+        error: null,
+      });
+    } catch (error) {
+      if (pdfConvertGenerationRef.current !== generationId) return;
+      setPdfConvertPreview({
+        sourcePath: node.path,
+        sourceName: node.name,
+        outPath,
+        markdown: null,
+        loading: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async function confirmPdfConvert() {
+    if (!pdfConvertPreview || pdfConvertPreview.loading || pdfConvertPreview.error) return;
+    if (pdfConvertSubmitting) return;
+    const markdown = pdfConvertPreview.markdown ?? "";
+    const outPath = pdfConvertPreview.outPath;
+    try {
+      setPdfConvertSubmitting(true);
+      const exists = await invoke<boolean>("path_exists", { path: outPath });
+      if (exists) {
+        const replace = await confirm(
+          `"${fileNameFromPath(outPath)}" already exists at this location. Replace it?`,
+          { title: "Convert", kind: "warning" },
+        );
+        if (!replace) {
+          setPdfConvertSubmitting(false);
+          return;
+        }
+      }
+      await invoke("write_text_file", { path: outPath, contents: markdown });
+    } catch (error) {
+      setPdfConvertSubmitting(false);
+      window.alert(error instanceof Error ? error.message : String(error));
+      return;
+    }
+
+    closePdfConvertPreview();
+    await reloadWorkspaceTree();
+    await selectNode(
+      {
+        name: fileNameFromPath(outPath),
+        path: outPath,
+        kind: "file",
+      },
+      { reload: true },
+    );
+  }
+
+  async function selectNode(node: FileNode, options?: { reload?: boolean }) {
     if (node.kind === "directory") {
       setSelectedPath(node.path);
       return;
@@ -1817,6 +2495,11 @@ export function AppShell() {
       return;
     }
 
+    if (isPdfDocument(node.path)) {
+      await convertPdfToMarkdown(node);
+      return;
+    }
+
     if (isDirty && node.path !== activeTabId) {
       const ok = window.confirm("Discard unsaved changes and open this file?");
       if (!ok) return;
@@ -1829,7 +2512,7 @@ export function AppShell() {
     setScratchLastSavedContent("");
 
     const id = node.path;
-    if (openDocuments[id]) {
+    if (openDocuments[id] && !options?.reload) {
       setActiveTabId(id);
       setOpenTabIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
       return;
@@ -1845,10 +2528,15 @@ export function AppShell() {
         const { meta, body: rawBody } = parseDocumentFrontmatter(raw);
         content = ingestTextFileContent(rawBody, node.path);
         kind = "text";
-        const [notes, criteria] = await Promise.all([
+        const [notes, criteria, sidecarLink] = await Promise.all([
           loadDocumentNotes(node.path),
           loadDocumentCriteria(node.path),
+          loadNotionEssayLink(node.path),
         ]);
+        const notionFields = {
+          ...EMPTY_NOTION_ESSAY_FIELDS,
+          ...notionFieldsFromLink(mergeNotionEssayLink(notionLinkFromFields(meta), sidecarLink)),
+        };
         const nextDoc: WorkspaceDocument = {
           id,
           title: node.name,
@@ -1864,6 +2552,7 @@ export function AppShell() {
           lastSavedNotes: notes,
           criteria,
           lastSavedCriteria: criteria,
+          ...notionFields,
         };
         setOpenDocuments((prev) => ({ ...prev, [id]: nextDoc }));
         setActiveTabId(id);
@@ -1895,6 +2584,7 @@ export function AppShell() {
       lastSavedNotes: notes,
       criteria,
       lastSavedCriteria: criteria,
+      ...EMPTY_NOTION_ESSAY_FIELDS,
     };
 
     setOpenDocuments((prev) => ({ ...prev, [id]: nextDoc }));
@@ -1961,24 +2651,30 @@ export function AppShell() {
     const folder = workspaceBrowsePath ?? supportedTree.path;
     const title = item.preview.trim() || "Untitled";
     const notes = (item.body ?? "").trim();
-    const seed = notes ? `# ${title}\n\n${notes}\n` : `# ${title}\n\n`;
-    const base =
-      title
-        .normalize("NFKD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") || "untitled";
+    const base = sanitizeFileBasename(title) || "Untitled";
+    const seed = markdownForDisk("", {
+      postTitle: title,
+      subtitle: "",
+      notionParentPageId: item.notionPageId ?? "",
+      notionEssayPageId: "",
+      notionRenameParent: false,
+    });
 
     let outPath = normalizeMarkdownSavePath(joinPath(folder, `${base}.md`));
     let suffix = 2;
     while (await invoke<boolean>("path_exists", { path: outPath })) {
-      outPath = normalizeMarkdownSavePath(joinPath(folder, `${base}-${suffix}.md`));
+      outPath = normalizeMarkdownSavePath(joinPath(folder, `${base} ${suffix}.md`));
       suffix += 1;
     }
 
     try {
       await invoke("write_text_file", { path: outPath, contents: seed });
+      if (notes) {
+        await invoke("write_text_file", {
+          path: documentNotesSidecarPath(outPath),
+          contents: notes,
+        });
+      }
       if (item.notionPageId) {
         try {
           await markNotionIdeaStarted(item.notionPageId);
@@ -1988,6 +2684,18 @@ export function AppShell() {
               e instanceof Error ? e.message : String(e)
             }`,
           );
+        }
+        try {
+          await saveNotionEssayLink(outPath, {
+            parentPageId: item.notionPageId,
+            essayPageId: "",
+            renameParent: false,
+            parentUrl: "",
+            essayUrl: "",
+            publicUrl: "",
+          });
+        } catch {
+          // Sync can still create a new database page if this write fails.
         }
       }
       setCollectItems((prev) => prev.filter((row) => row.id !== item.id));
@@ -2025,7 +2733,7 @@ export function AppShell() {
     }
     const fr = folderRenameRef.current;
     if (!fr) return;
-    const next = fr.draft.trim();
+    const next = finderNameToPosixSegment(fr.draft.trim());
     const err = validateFolderName(next);
     if (err) {
       window.alert(err);
@@ -2071,7 +2779,11 @@ export function AppShell() {
       const bn = fileNameFromPath(newPath);
       setExpandedPaths((prev) => new Set([...prev, parent]));
       setSelectedPath(newPath);
-      const st = { path: newPath, draft: bn, originalBasename: bn };
+      const st = {
+        path: newPath,
+        draft: posixSegmentToFinderName(bn),
+        originalBasename: bn,
+      };
       folderRenameRef.current = st;
       setFolderRename(st);
     } catch (e) {
@@ -2087,15 +2799,128 @@ export function AppShell() {
     ? documentTitleBaseFromSaveAsFileName(saveAsLiveFileName)
     : splitFileBaseAndExtension(editorTitle).base || "Untitled";
 
-  /** Inline rename draft so Notes pop-out can follow typing before commit. */
-  const [titleRenameDraft, setTitleRenameDraft] = useState<string | null>(null);
   const notesDocumentTitle =
     titleRenameDraft !== null
       ? titleRenameDraft.trim() || "Untitled"
       : editorTitleBase.trim() || "Untitled";
+  const activeSourcePath = (activeDocument?.sourcePath || scratchDiskPath || "").trim();
+  const notionEssayTitle =
+    (activeDocument?.postTitle ?? "").trim() || editorTitleBase.trim() || "Untitled";
+
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      setNotionConnected(false);
+      return;
+    }
+    if (isSettingsOpen) return;
+    let cancelled = false;
+    void getNotionIdeasConfig()
+      .then((config) => {
+        if (!cancelled) setNotionConnected(Boolean(config.connected));
+      })
+      .catch(() => {
+        if (!cancelled) setNotionConnected(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSettingsOpen]);
+
+  useEffect(() => {
+    if (!isTauriRuntime() || !activeSourcePath) {
+      notionEssayLinkRef.current = null;
+      setNotionEssayLink(null);
+      return;
+    }
+    const fromDoc = notionLinkFromFields({
+      notionParentPageId: activeDocument?.notionParentPageId,
+      notionEssayPageId: activeDocument?.notionEssayPageId,
+      notionRenameParent: activeDocument?.notionRenameParent,
+      notionParentUrl: activeDocument?.notionParentUrl,
+      notionEssayUrl: activeDocument?.notionEssayUrl,
+      publicUrl: activeDocument?.publicUrl,
+    });
+    let cancelled = false;
+    const tabId = activeTabId;
+    void loadNotionEssayLink(activeSourcePath).then((sidecar) => {
+      if (cancelled) return;
+      const merged = mergeNotionEssayLink(fromDoc, sidecar);
+      notionEssayLinkRef.current = merged;
+      setNotionEssayLink(merged);
+      if (merged && tabId) {
+        setOpenDocuments((prev) => {
+          const current = prev[tabId];
+          if (!current) return prev;
+          const fields = notionFieldsFromLink(merged);
+          if (
+            current.notionParentPageId === fields.notionParentPageId &&
+            current.notionEssayPageId === fields.notionEssayPageId &&
+            current.notionParentUrl === fields.notionParentUrl &&
+            current.notionEssayUrl === fields.notionEssayUrl &&
+            current.publicUrl === fields.publicUrl
+          ) {
+            return prev;
+          }
+          return { ...prev, [tabId]: { ...current, ...fields } };
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSourcePath,
+    activeTabId,
+    activeDocument?.notionParentPageId,
+    activeDocument?.notionEssayPageId,
+    activeDocument?.notionRenameParent,
+    activeDocument?.notionParentUrl,
+    activeDocument?.notionEssayUrl,
+    activeDocument?.publicUrl,
+  ]);
+
+  useEffect(() => {
+    const onMatched = (event: Event) => {
+      const updates = (event as CustomEvent<PublishedUrlUpdate[]>).detail;
+      if (!Array.isArray(updates) || updates.length === 0) return;
+      setOpenDocuments((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const [id, doc] of Object.entries(prev)) {
+          const update = updates.find((item) =>
+            isExactOpenDocument(item.path, doc.sourcePath || id),
+          );
+          if (!update || doc.publicUrl === update.publicUrl) continue;
+          next[id] = { ...doc, publicUrl: update.publicUrl };
+          changed = true;
+        }
+        return changed ? next : prev;
+      });
+      const activePath = (activeDocument?.sourcePath || scratchDiskPath || "").trim();
+      const activeUpdate = updates.find((item) => isExactOpenDocument(item.path, activePath));
+      if (activeUpdate) {
+        const current = notionEssayLinkRef.current;
+        const nextLink = {
+          parentPageId: current?.parentPageId ?? "",
+          essayPageId: current?.essayPageId ?? "",
+          renameParent: Boolean(current?.renameParent),
+          parentUrl: current?.parentUrl ?? "",
+          essayUrl: current?.essayUrl ?? "",
+          publicUrl: activeUpdate.publicUrl,
+        };
+        notionEssayLinkRef.current = nextLink;
+        setNotionEssayLink(nextLink);
+      }
+    };
+    window.addEventListener(PUBLIC_URLS_MATCHED_EVENT, onMatched);
+    return () => window.removeEventListener(PUBLIC_URLS_MATCHED_EVENT, onMatched);
+  }, [activeDocument?.sourcePath, scratchDiskPath]);
 
   useEffect(() => {
     setTitleRenameDraft(null);
+    setHeadlinePairs([]);
+    setHeadlinePairsError(null);
+    setSelectedHeadlineIndex(null);
   }, [activeTabId]);
 
   const activeNotes = activeDocument?.notes ?? "";
@@ -2151,7 +2976,9 @@ export function AppShell() {
 
   /** Inline rename for an open file tab, or for the scratch buffer when no tabs are open. */
   const titleRenameEnabled =
-    (Boolean(activeTabId && activeDocument) || openTabIds.length === 0) && !saveAsModalOpen;
+    (Boolean(activeTabId && activeDocument) || openTabIds.length === 0) &&
+    !saveAsModalOpen &&
+    !podcastNotesPreviewOpen;
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -2170,8 +2997,15 @@ export function AppShell() {
       : hasWorkspaceFolder
         ? "Select a tab above or pick a file from your workspace."
         : "Choose a workspace folder to open and save files.");
+  const relatedExcerpt = useMemo(() => {
+    if (tiptapEditor) {
+      return proofreadPlainTextAndPositions(tiptapEditor.state.doc).text.slice(0, RELATED_DRAFT_CHARS);
+    }
+    return excerptFromMarkdown(editorText, RELATED_DRAFT_CHARS);
+  }, [tiptapEditor, editorText]);
   const showReadabilityHighlights = readabilityPanelOpen && mode === "edit";
-  const showMechanicsUnderlines = readabilityPanelOpen && mode === "edit";
+  const showMechanicsUnderlines =
+    readabilityPanelOpen && (mode === "edit" || (mode === "notes" && relatedProofreadIssues.length > 0));
   /** Native misspelling underlines: same gate as grammar highlights (Edit tab + readability rail open + user pref). */
   const showEditModeSpellcheck =
     writingAssistancePrefs.spellcheck && readabilityPanelOpen && mode === "edit";
@@ -2184,17 +3018,16 @@ export function AppShell() {
   }, [showReadabilityHighlights, tiptapEditor, parametersPrefs.fkComplexityThreshold]);
 
   useEffect(() => {
-    if (!tiptapEditor) return;
-    setMechanicsUnderlinesVisible(tiptapEditor.view, showMechanicsUnderlines);
-  }, [showMechanicsUnderlines, tiptapEditor]);
-
-  useEffect(() => {
     void ensureHunspellLoaded();
   }, []);
 
   useEffect(() => {
     aiProofreadIssuesRef.current = aiProofreadIssues;
   }, [aiProofreadIssues]);
+
+  useEffect(() => {
+    relatedProofreadIssuesRef.current = relatedProofreadIssues;
+  }, [relatedProofreadIssues]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -2215,12 +3048,16 @@ export function AppShell() {
   }, []);
 
   /** TipTap Placeholder extension only renders when the doc is empty; no real document text. */
-  const editorPlaceholder = editorEditable ? "Start writing..." : undefined;
+  const editorPlaceholder = editorEditable ? sessionEditorPrompt : undefined;
   const editorInstanceKey = activeTabId ?? (openTabIds.length === 0 ? "scratch" : "browse");
 
   useEffect(() => {
     aiProofreadIssuesRef.current = [];
     setAiProofreadIssues([]);
+    relatedProofreadIssuesRef.current = [];
+    setRelatedProofreadIssues([]);
+    relatedLinkedPathsRef.current = [];
+    relatedItemsRef.current = [];
     setAiCheckCostLabel(null);
     setAiCheckError(null);
   }, [editorInstanceKey]);
@@ -2241,9 +3078,39 @@ export function AppShell() {
     setAiProofreadIssues(issues);
   }, []);
 
-  /** Live rule-based mechanics (Spelling / Grammar / Suggestions) — runs in Edit mode regardless of sidebar. */
+  const persistRelatedIssues = useCallback((issues: ProofreadIssue[]) => {
+    const prev = relatedProofreadIssuesRef.current;
+    const unchanged =
+      prev.length === issues.length &&
+      prev.every(
+        (issue, index) =>
+          issue.start === issues[index]!.start &&
+          issue.end === issues[index]!.end &&
+          issue.text === issues[index]!.text &&
+          issue.message === issues[index]!.message &&
+          issue.relatedPath === issues[index]!.relatedPath,
+      );
+    if (unchanged) return;
+    relatedProofreadIssuesRef.current = issues;
+    setRelatedProofreadIssues(issues);
+  }, []);
+
+  const extraProofreadIssues = useCallback(
+    () => [...aiProofreadIssuesRef.current, ...relatedProofreadIssuesRef.current],
+    [],
+  );
+
+  const persistExtraIssues = useCallback(
+    (issues: ProofreadIssue[]) => {
+      persistAiIssues(issues.filter((issue) => issue.type === "ai"));
+      persistRelatedIssues(issues.filter((issue) => issue.type === "related"));
+    },
+    [persistAiIssues, persistRelatedIssues],
+  );
+
+  /** Live rule-based mechanics (Spelling / Grammar / Suggestions) while the document is editable. */
   useEffect(() => {
-    if (!tiptapEditor || mode !== "edit" || !editorEditable) {
+    if (!tiptapEditor || !editorEditable) {
       return;
     }
 
@@ -2251,8 +3118,8 @@ export function AppShell() {
       void syncMechanicsProofread(
         tiptapEditor,
         setProofreadIssues,
-        () => aiProofreadIssuesRef.current,
-        persistAiIssues,
+        extraProofreadIssues,
+        persistExtraIssues,
       );
     };
 
@@ -2269,17 +3136,17 @@ export function AppShell() {
       tiptapEditor.off("update", onUpdate);
       if (debounceId) clearTimeout(debounceId);
     };
-  }, [tiptapEditor, mode, editorEditable, persistAiIssues]);
+  }, [tiptapEditor, editorEditable, extraProofreadIssues, persistExtraIssues]);
 
   const refreshMechanicsProofread = useCallback(() => {
     if (!tiptapEditor) return;
     void syncMechanicsProofread(
       tiptapEditor,
       setProofreadIssues,
-      () => aiProofreadIssuesRef.current,
-      persistAiIssues,
+      extraProofreadIssues,
+      persistExtraIssues,
     );
-  }, [tiptapEditor, persistAiIssues]);
+  }, [tiptapEditor, extraProofreadIssues, persistExtraIssues]);
 
   const handleRunAiCheck = useCallback(async () => {
     if (!tiptapEditor || !isTauriRuntime()) return;
@@ -2305,24 +3172,207 @@ export function AppShell() {
       await syncMechanicsProofread(
         tiptapEditor,
         setProofreadIssues,
-        () => located,
-        persistAiIssues,
+        () => [...located, ...relatedProofreadIssuesRef.current],
+        persistExtraIssues,
       );
     } catch (e) {
       setAiCheckError(e instanceof Error ? e.message : String(e));
     } finally {
       setAiCheckRunning(false);
     }
-  }, [tiptapEditor, persistAiIssues]);
+  }, [tiptapEditor, persistAiIssues, persistExtraIssues]);
+
+  const applyRelatedEssayItems = useCallback(
+    async (items: RelatedEssayItem[]): Promise<string | null> => {
+      if (!tiptapEditor || !activeSourcePath) return "Save this essay first.";
+      const hydrated = await hydrateRelatedEssayUrls(items);
+      relatedItemsRef.current = hydrated;
+      const text = proofreadPlainTextAndPositions(tiptapEditor.state.doc).text;
+      const hrefs = collectDocLinkHrefs(tiptapEditor.state.doc);
+      const linked = uniqueLinkedRelatedPaths({
+        linkedPaths: relatedLinkedPathsRef.current,
+        items: hydrated,
+        hrefs,
+      });
+      relatedLinkedPathsRef.current = linked;
+      await saveRelatedEssaySidecar(activeSourcePath, { items: hydrated, linkedPaths: linked });
+      if (linked.length >= MAX_RELATED_LINKS) {
+        persistRelatedIssues([]);
+        refreshMechanicsProofread();
+        return "This essay already links 2 related essays.";
+      }
+      const issues = locateRelatedPhrasesInText(text, hydrated).filter(
+        (issue) => !issue.relatedPath || !linked.includes(issue.relatedPath),
+      );
+      persistRelatedIssues(issues);
+      refreshMechanicsProofread();
+      if (hydrated.length > 0 && issues.length === 0) {
+        return "Found related essays, but no matching phrases in this draft.";
+      }
+      return null;
+    },
+    [tiptapEditor, activeSourcePath, persistRelatedIssues, refreshMechanicsProofread],
+  );
+
+  useEffect(() => {
+    if (!activeSourcePath || !tiptapEditor) return;
+    let cancelled = false;
+    void loadRelatedEssaySidecar(activeSourcePath).then((sidecar) => {
+      if (cancelled) return;
+      relatedItemsRef.current = sidecar.items;
+      const hrefs = collectDocLinkHrefs(tiptapEditor.state.doc);
+      relatedLinkedPathsRef.current = uniqueLinkedRelatedPaths({
+        linkedPaths: sidecar.linkedPaths,
+        items: sidecar.items,
+        hrefs,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSourcePath, tiptapEditor, editorInstanceKey]);
+
+  useEffect(() => {
+    syncRelatedEssayLinkingRef({
+      urlForPath: (path) => {
+        const item = relatedItemsRef.current.find((entry) => entry.path === path);
+        return item ? preferredRelatedUrl(item) : "";
+      },
+      resolveUrl: async (path, title) => {
+        const linkedPath = path.trim();
+        const existing = relatedItemsRef.current.find((entry) => entry.path === linkedPath);
+        const fromItem = existing ? preferredRelatedUrl(existing) : "";
+        if (fromItem) return fromItem;
+        const href = await resolveRelatedEssayHref({
+          path: linkedPath,
+          title: title?.trim() || existing?.title,
+        });
+        if (href && existing) {
+          relatedItemsRef.current = relatedItemsRef.current.map((entry) =>
+            entry.path === linkedPath ? { ...entry, publicUrl: href } : entry,
+          );
+        }
+        return href;
+      },
+      applyLink: (from, to, href) => {
+        if (!tiptapEditor) return false;
+        return setLinkOnRange(tiptapEditor, from, to, href);
+      },
+      onLinkEssay: ({ path, start, end }) => {
+        const linkedPath = path.trim();
+        const nextLinked = uniqueStrings([...relatedLinkedPathsRef.current, linkedPath]);
+        relatedLinkedPathsRef.current = nextLinked;
+        persistRelatedIssues(
+          relatedIssuesAfterLinking(relatedProofreadIssuesRef.current, nextLinked, {
+            path: linkedPath,
+            start,
+            end,
+          }),
+        );
+        if (activeSourcePath) {
+          void saveRelatedEssaySidecar(activeSourcePath, {
+            items: relatedItemsRef.current,
+            linkedPaths: nextLinked,
+          });
+        }
+      },
+    });
+  }, [activeSourcePath, persistRelatedIssues, tiptapEditor]);
+
+  const handleGenerateHeadlines = useCallback(async () => {
+    if (!isTauriRuntime()) {
+      setHeadlinePairsError("Headline suggestions are only available in the Harvy desktop app.");
+      return;
+    }
+    if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
+      setHeadlinePairsError("Enable AI and add an API key in Settings → Artificial Intelligence first.");
+      return;
+    }
+    const essay = tiptapEditor
+      ? proofreadPlainTextAndPositions(tiptapEditor.state.doc).text
+      : editorText;
+    if (!essay.trim()) {
+      setHeadlinePairsError("Nothing to title — the document is empty.");
+      return;
+    }
+    setHeadlinePairsRunning(true);
+    setHeadlinePairsFromShots(false);
+    setHeadlinePairsError(null);
+    try {
+      const result = await generateHeadlinePairs(essay, readHeadlineStylePrompt());
+      setHeadlinePairs(result.pairs);
+      setSelectedHeadlineIndex(null);
+    } catch (e) {
+      setHeadlinePairsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setHeadlinePairsRunning(false);
+    }
+  }, [aiCheckConfig?.enabled, aiCheckConfig?.hasApiKey, editorText, tiptapEditor]);
+
+  const handleGenerateHeadlinesFromShots = useCallback(async () => {
+    if (!isTauriRuntime()) {
+      setHeadlinePairsError("Headline suggestions are only available in the Harvy desktop app.");
+      return;
+    }
+    if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
+      setHeadlinePairsError("Enable AI and add an API key in Settings → Artificial Intelligence first.");
+      return;
+    }
+    const essay = tiptapEditor
+      ? proofreadPlainTextAndPositions(tiptapEditor.state.doc).text
+      : editorText;
+    if (!essay.trim()) {
+      setHeadlinePairsError("Nothing to title — the document is empty.");
+      return;
+    }
+    setHeadlinePairsRunning(true);
+    setHeadlinePairsFromShots(true);
+    setHeadlinePairsError(null);
+    try {
+      const images = await loadHeadlineShotsForVision();
+      if (images.length === 0) {
+        setHeadlinePairsError("Add screenshots in Research → Headlines first.");
+        return;
+      }
+      const result = await generateHeadlinePairsFromShots(
+        essay,
+        images,
+        readHeadlineStylePrompt(),
+      );
+      setHeadlinePairs(result.pairs);
+      setSelectedHeadlineIndex(null);
+    } catch (e) {
+      setHeadlinePairsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setHeadlinePairsRunning(false);
+      setHeadlinePairsFromShots(false);
+    }
+  }, [aiCheckConfig?.enabled, aiCheckConfig?.hasApiKey, editorText, tiptapEditor]);
+
+  function handleSelectHeadlinePair(pair: HeadlinePair, index: number) {
+    updateActiveDocumentPostTitle(pair.title);
+    updateActiveDocumentSubtitle(pair.subtitle);
+    setSelectedHeadlineIndex(index);
+  }
 
   useEffect(() => {
     setSpellingDocumentKey(editorInstanceKey);
   }, [editorInstanceKey]);
 
   useEffect(() => {
+    proofreadDecorationsViewRef.relatedOnly = mode === "notes";
+    if (!tiptapEditor) return;
+    setMechanicsUnderlinesVisible(tiptapEditor.view, showMechanicsUnderlines);
+    refreshMechanicsProofread();
+  }, [showMechanicsUnderlines, mode, tiptapEditor, refreshMechanicsProofread]);
+
+  useEffect(() => {
     syncSpellingContextMenuRef({
       enabled: showMechanicsUnderlines && editorEditable,
-      issues: proofreadIssues,
+      issues:
+        mode === "notes"
+          ? proofreadIssues.filter((issue) => issue.type === "related")
+          : proofreadIssues,
       documentKey: editorInstanceKey,
       onRefresh: refreshMechanicsProofread,
     });
@@ -2332,6 +3382,7 @@ export function AppShell() {
     proofreadIssues,
     editorInstanceKey,
     refreshMechanicsProofread,
+    mode,
   ]);
 
   const copyDocumentFallbackMarkdown = useMemo(
@@ -2344,8 +3395,189 @@ export function AppShell() {
   }, [tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath]);
 
   const handlePrintDocument = useCallback(() => {
-    printDocumentFromEditor(tiptapEditor, copyDocumentFallbackMarkdown, editorTitleBase);
+    void printDocumentFromEditor(
+      tiptapEditor,
+      copyDocumentFallbackMarkdown,
+      editorTitleBase,
+    ).catch((e) => {
+      window.alert(`Print failed: ${e instanceof Error ? e.message : String(e)}`);
+    });
   }, [tiptapEditor, copyDocumentFallbackMarkdown, editorTitleBase]);
+  printDocumentRef.current = handlePrintDocument;
+
+  const performNotionEssaySync = useCallback(
+    async (opts?: { silent?: boolean }): Promise<NotionEssayLink | null> => {
+      if (notionSyncRunningRef.current) return null;
+      if (!isTauriRuntime()) {
+        if (!opts?.silent) {
+          window.alert("Sync with Notion is only available in the Harvy desktop app.");
+        }
+        return null;
+      }
+      if (!notionConnected) {
+        if (!opts?.silent) {
+          window.alert("Connect Notion in Settings → Research before syncing.");
+        }
+        return null;
+      }
+      const sourcePath =
+        (activeDocument?.sourcePath || scratchDiskPath || "").trim();
+      if (!sourcePath) {
+        if (!opts?.silent) {
+          window.alert("Save this essay before syncing with Notion.");
+        }
+        return null;
+      }
+
+      const markdown = getDocumentMarkdown(
+        tiptapEditor,
+        activeDocument?.content ?? scratchDraftContent,
+      );
+      const title =
+        (activeDocument?.postTitle ?? "").trim() || editorTitleBase.trim() || "Untitled";
+      const payload = `${title}\0${markdown}`;
+      const link = notionEssayLinkRef.current;
+      if (opts?.silent && (!link?.essayPageId || lastNotionSyncedRef.current === payload)) {
+        return link ?? null;
+      }
+
+      notionSyncRunningRef.current = true;
+      setNotionSyncRunning(true);
+      try {
+        const result = await syncEssayWithNotion({
+          title,
+          markdown,
+          parentPageId: link?.parentPageId,
+          essayPageId: link?.essayPageId,
+          renameParent: link?.renameParent,
+        });
+        const nextLink: NotionEssayLink = {
+          parentPageId: result.parentPageId,
+          essayPageId: result.essayPageId,
+          renameParent: result.renameParent,
+          parentUrl: result.parentUrl || link?.parentUrl || "",
+          essayUrl: result.essayUrl || link?.essayUrl || "",
+          publicUrl: link?.publicUrl || activeDocument?.publicUrl || "",
+        };
+        const notionFields = notionFieldsFromLink(nextLink);
+        const idsChanged =
+          (link?.parentPageId ?? "") !== nextLink.parentPageId ||
+          (link?.essayPageId ?? "") !== nextLink.essayPageId ||
+          Boolean(link?.renameParent) !== nextLink.renameParent ||
+          (link?.parentUrl ?? "") !== nextLink.parentUrl ||
+          (link?.essayUrl ?? "") !== nextLink.essayUrl;
+        await saveNotionEssayLink(sourcePath, nextLink);
+        if (idsChanged) {
+          await invoke("write_text_file", {
+            path: sourcePath,
+            contents: markdownForDisk(markdown, {
+              postTitle: title,
+              subtitle: activeDocument?.subtitle ?? "",
+              ...notionFields,
+            }),
+          });
+        }
+        notionEssayLinkRef.current = nextLink;
+        setNotionEssayLink(nextLink);
+        lastNotionSyncedRef.current = payload;
+        notionSyncedPathRef.current = sourcePath;
+        if (activeTabId) {
+          setOpenDocuments((prev) => {
+            const current = prev[activeTabId];
+            if (!current) return prev;
+            return {
+              ...prev,
+              [activeTabId]: {
+                ...current,
+                ...notionFields,
+                ...(idsChanged
+                  ? {
+                      lastSavedContent: markdown,
+                      lastSavedPostTitle: current.postTitle,
+                    }
+                  : {}),
+              },
+            };
+          });
+        }
+        return nextLink;
+      } catch (e) {
+        if (!opts?.silent) {
+          window.alert(e instanceof Error ? e.message : String(e));
+        } else {
+          console.error(e);
+        }
+        return null;
+      } finally {
+        notionSyncRunningRef.current = false;
+        setNotionSyncRunning(false);
+      }
+    },
+    [
+      activeDocument?.content,
+      activeDocument?.postTitle,
+      activeDocument?.sourcePath,
+      activeDocument?.subtitle,
+      activeTabId,
+      editorTitleBase,
+      notionConnected,
+      scratchDiskPath,
+      scratchDraftContent,
+      tiptapEditor,
+    ],
+  );
+
+  const handlePublishDocument = useCallback(async () => {
+    const destination = normalizeQuickLinkUrl(publishUrl);
+    if (!destination) return;
+    // Open on the click itself so the system browser is not blocked by clipboard work.
+    openSafeExternalUrl(destination);
+    try {
+      await copyDocumentToClipboard(tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath);
+    } catch {
+      // The destination is already opening; paste if the copy succeeds in the background.
+    }
+    const link = await performNotionEssaySync();
+    if (!link?.parentPageId) return;
+    try {
+      await markNotionEssayPublished(link.parentPageId, todayLocalIsoDate());
+    } catch (e) {
+      window.alert(
+        e instanceof Error
+          ? e.message
+          : "Copied and synced, but Notion Status / publish date could not be updated.",
+      );
+    }
+  }, [
+    publishUrl,
+    tiptapEditor,
+    copyDocumentFallbackMarkdown,
+    workspaceRootPath,
+    performNotionEssaySync,
+  ]);
+
+  useEffect(() => {
+    const payload = `${notionEssayTitle}\0${activeDocument?.content ?? scratchDraftContent}`;
+    if (notionSyncedPathRef.current !== activeSourcePath) {
+      notionSyncedPathRef.current = activeSourcePath || null;
+      lastNotionSyncedRef.current = payload;
+      return;
+    }
+    if (!notionConnected || !notionEssayLink?.essayPageId || !activeSourcePath) return;
+    if (payload === lastNotionSyncedRef.current) return;
+    const timer = window.setTimeout(() => {
+      void performNotionEssaySync({ silent: true });
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeDocument?.content,
+    activeSourcePath,
+    notionConnected,
+    notionEssayLink?.essayPageId,
+    notionEssayTitle,
+    performNotionEssaySync,
+    scratchDraftContent,
+  ]);
 
   const handleInsertImage = useCallback(() => {
     if (!tiptapEditor || !editorEditable) return;
@@ -2368,27 +3600,55 @@ export function AppShell() {
     [tiptapEditor, editorEditable],
   );
 
-  const commitActiveDocumentTitleRename = useCallback(
-    async (rawBase: string): Promise<boolean> => {
-      if (openTabIds.length === 0) {
-        const displayLabel = scratchDocumentTitle.trim() || "Untitled";
+  const applyActiveDocumentTitleRename = useCallback(
+    async (rawBase: string): Promise<TitleRenameResult> => {
+      if (openTabIdsRef.current.length === 0) {
+        const displayLabel = scratchDocumentTitleRef.current.trim() || "Untitled";
         const { base: displayBase, extWithDot } = splitFileBaseAndExtension(displayLabel);
         let nextBase = sanitizeFileBasename(rawBase);
         if (!nextBase) nextBase = "Untitled";
-        if (nextBase === displayBase) return true;
+        const diskPath = scratchDiskPathRef.current;
+        if (nextBase === displayBase) {
+          return {
+            ok: true,
+            id: "",
+            title: displayLabel,
+            sourcePath: diskPath ?? "",
+            postTitle: nextBase,
+          };
+        }
         const nameErr = validateFolderName(nextBase);
         if (nameErr) {
           window.alert(nameErr);
-          return false;
+          return { ok: false };
         }
         const newTitle = extWithDot ? `${nextBase}${extWithDot}` : nextBase;
+        let nextPath = diskPath ?? "";
+        if (isTauriRuntime() && diskPath) {
+          const pathBasename = fileNameFromPath(diskPath);
+          const { extWithDot: diskExt } = splitFileBaseAndExtension(pathBasename);
+          const newFileName = diskExt ? `${nextBase}${diskExt}` : nextBase;
+          const targetPath = joinPath(parentDirectory(diskPath), newFileName);
+          if (targetPath !== diskPath) {
+            try {
+              await invoke("rename_fs_path", { fromPath: diskPath, toPath: targetPath });
+            } catch (e) {
+              window.alert(e instanceof Error ? e.message : String(e));
+              return { ok: false };
+            }
+            nextPath = targetPath;
+            scratchDiskPathRef.current = targetPath;
+            setScratchDiskPath(targetPath);
+          }
+        }
+        scratchDocumentTitleRef.current = newTitle;
         setScratchDocumentTitle(newTitle);
-        return true;
+        return { ok: true, id: "", title: newTitle, sourcePath: nextPath, postTitle: nextBase };
       }
 
-      const id = activeTabId;
-      const doc = id ? openDocuments[id] : null;
-      if (!id || !doc) return false;
+      const id = activeTabIdRef.current;
+      const doc = id ? openDocumentsRef.current[id] : null;
+      if (!id || !doc) return { ok: false };
 
       const pathBasename = doc.sourcePath.trim()
         ? fileNameFromPath(doc.sourcePath)
@@ -2399,21 +3659,30 @@ export function AppShell() {
       let nextBase = sanitizeFileBasename(rawBase);
       if (!nextBase) nextBase = "Untitled";
       if (nextBase === displayBase) {
-        // File/tab name already matches; still keep in-document Title aligned.
         if (doc.postTitle !== nextBase) {
+          const aligned = { ...doc, postTitle: nextBase };
+          openDocumentsRef.current = { ...openDocumentsRef.current, [id]: aligned };
           setOpenDocuments((prev) => {
             const d = prev[id];
             if (!d) return prev;
-            return { ...prev, [id]: { ...d, postTitle: nextBase } };
+            const next = { ...prev, [id]: { ...d, postTitle: nextBase } };
+            openDocumentsRef.current = next;
+            return next;
           });
         }
-        return true;
+        return {
+          ok: true,
+          id,
+          title: displayLabel,
+          sourcePath: doc.sourcePath,
+          postTitle: nextBase,
+        };
       }
 
       const nameErr = validateFolderName(nextBase);
       if (nameErr) {
         window.alert(nameErr);
-        return false;
+        return { ok: false };
       }
 
       const canRenameOnDisk = isTauriRuntime() && Boolean(doc.sourcePath.trim());
@@ -2421,12 +3690,18 @@ export function AppShell() {
       if (!canRenameOnDisk) {
         const { extWithDot: displayExt } = splitFileBaseAndExtension(displayLabel);
         const newTitle = displayExt ? `${nextBase}${displayExt}` : nextBase;
+        openDocumentsRef.current = {
+          ...openDocumentsRef.current,
+          [id]: { ...doc, title: newTitle, postTitle: nextBase },
+        };
         setOpenDocuments((prev) => {
           const d = prev[id];
-          if (!d || (d.title === newTitle && d.postTitle === nextBase)) return prev;
-          return { ...prev, [id]: { ...d, title: newTitle, postTitle: nextBase } };
+          if (!d) return prev;
+          const next = { ...prev, [id]: { ...d, title: newTitle, postTitle: nextBase } };
+          openDocumentsRef.current = next;
+          return next;
         });
-        return true;
+        return { ok: true, id, title: newTitle, sourcePath: doc.sourcePath, postTitle: nextBase };
       }
 
       const { extWithDot } = splitFileBaseAndExtension(pathBasename || displayLabel);
@@ -2434,17 +3709,34 @@ export function AppShell() {
       const sourcePath = doc.sourcePath;
       const parent = parentDirectory(sourcePath);
       const targetPath = joinPath(parent, newFileName);
-      if (targetPath === sourcePath) return true;
+      if (targetPath === sourcePath) {
+        return { ok: true, id, title: doc.title, sourcePath, postTitle: nextBase };
+      }
 
       try {
         await invoke("rename_fs_path", { fromPath: sourcePath, toPath: targetPath });
         await renameDocumentNotesSidecar(sourcePath, targetPath);
         await renameDocumentCriteriaSidecar(sourcePath, targetPath);
+        await renameNotionEssaySidecar(sourcePath, targetPath);
+        await renameRelatedEssaySidecar(sourcePath, targetPath);
       } catch (e) {
         window.alert(e instanceof Error ? e.message : String(e));
-        return false;
+        return { ok: false };
       }
 
+      const savedTitle = fileNameFromPath(targetPath);
+      const { [id]: _removed, ...rest } = openDocumentsRef.current;
+      openDocumentsRef.current = {
+        ...rest,
+        [targetPath]: {
+          ...doc,
+          id: targetPath,
+          sourcePath: targetPath,
+          title: savedTitle,
+          postTitle: nextBase,
+        },
+      };
+      activeTabIdRef.current = targetPath;
       setOpenDocuments((prev) => {
         const d = prev[id];
         if (!d) return prev;
@@ -2452,27 +3744,36 @@ export function AppShell() {
           ...d,
           id: targetPath,
           sourcePath: targetPath,
-          title: fileNameFromPath(targetPath),
+          title: savedTitle,
           postTitle: nextBase,
         };
-        const { [id]: _removed, ...rest } = prev;
-        return { ...rest, [targetPath]: nextDoc };
+        const { [id]: _drop, ...nextRest } = prev;
+        const next = { ...nextRest, [targetPath]: nextDoc };
+        openDocumentsRef.current = next;
+        return next;
       });
-      setOpenTabIds((prev) => prev.map((tabId) => (tabId === id ? targetPath : tabId)));
+      setOpenTabIds((prev) => {
+        const next = prev.map((tabId) => (tabId === id ? targetPath : tabId));
+        openTabIdsRef.current = next;
+        return next;
+      });
+      activeTabIdRef.current = targetPath;
       setActiveTabId((cur) => (cur === id ? targetPath : cur));
       setSelectedPath((p) => (p === id ? targetPath : p));
-      if (scratchDiskPath === id) setScratchDiskPath(targetPath);
+      if (scratchDiskPathRef.current === id) {
+        scratchDiskPathRef.current = targetPath;
+        setScratchDiskPath(targetPath);
+      }
       await reloadWorkspaceTree();
-      return true;
+      return { ok: true, id: targetPath, title: savedTitle, sourcePath: targetPath, postTitle: nextBase };
     },
-    [
-      activeTabId,
-      openDocuments,
-      openTabIds.length,
-      reloadWorkspaceTree,
-      scratchDiskPath,
-      scratchDocumentTitle,
-    ],
+    [reloadWorkspaceTree],
+  );
+  applyTitleRenameRef.current = applyActiveDocumentTitleRename;
+
+  const commitActiveDocumentTitleRename = useCallback(
+    async (rawBase: string) => (await applyActiveDocumentTitleRename(rawBase)).ok,
+    [applyActiveDocumentTitleRename],
   );
 
   const workspaceSidebarPanel = (
@@ -2487,6 +3788,7 @@ export function AppShell() {
       isLoading={isLoadingTree}
       loadError={workspaceError}
       selectedPath={selectedPath}
+      openDocumentTrailPath={openDocumentTrailPath}
       expandedPaths={expandedPaths}
       searchQuery={searchQuery}
       onSearchChange={setSearchQuery}
@@ -2540,6 +3842,15 @@ export function AppShell() {
       proofreadIssues={proofreadIssues}
       workspaceSection={activeWorkspaceSection}
       showQuickLinks={showQuickLinks}
+      relatedSourcePath={activeSourcePath}
+      relatedTitle={
+        (activeDocument?.postTitle ?? "").trim() || editorTitleBase.trim() || "Untitled"
+      }
+      relatedExcerpt={relatedExcerpt}
+      workspaceTree={workspaceTree}
+      relatedAiReady={Boolean(aiCheckConfig?.enabled && aiCheckConfig.hasApiKey)}
+      showRelatedEssays={showRelatedEssays}
+      onRelatedItemsFound={applyRelatedEssayItems}
       showCriteria={showCriteria}
       aiCheckEnabled={Boolean(
         aiCheckConfig?.enabled && aiCheckConfig.hasApiKey && showAiCheck,
@@ -2554,7 +3865,7 @@ export function AppShell() {
 
   const tabBarRow = (
     <div
-      className={`harvy-title-bar-drag h-8 overflow-hidden transition-[background-color,border-color,box-shadow] duration-500 ease-in-out ${
+      className={`harvy-title-bar-drag h-[var(--harvy-tab-bar-height)] overflow-hidden transition-[background-color,border-color,box-shadow] duration-500 ease-in-out ${
         hideTopBarWhileTyping ? "border-transparent bg-stage shadow-none" : "bg-mist"
       }`}
       data-harvy-window-drag
@@ -2646,7 +3957,9 @@ export function AppShell() {
               onStartWriting={handleStartWritingFromIdea}
               showOutliersView={showOutliersView}
               showCollectView={showCollectView}
+              showHeadlinesView={showHeadlinesView}
               showAvatarView={showAvatarView}
+              collectViewOrder={collectViewOrder}
               workspaceSidebarOpen={isWorkspaceSidebarOpen}
               toolsSidebarOpen={readabilityPanelOpen}
             />
@@ -2695,6 +4008,15 @@ export function AppShell() {
               pickLocalImage={pickLocalImage}
               loadImageAt={loadImageAtPos}
               onInsertImage={editorEditable ? () => void handleInsertImage() : undefined}
+              showTitleGeneration={showTitleGeneration}
+              headlinesRunning={headlinePairsRunning}
+              headlinesRunningFromHeadlines={headlinePairsFromShots}
+              headlinesError={headlinePairsError}
+              headlinePairs={headlinePairs}
+              selectedHeadlineIndex={selectedHeadlineIndex}
+              onGenerateHeadlines={handleGenerateHeadlines}
+              onGenerateHeadlinesFromShots={handleGenerateHeadlinesFromShots}
+              onSelectHeadlinePair={handleSelectHeadlinePair}
               onChangeText={updateActiveDocumentContent}
               onEditorReady={handleEditorReady}
               onTypingActivity={emitEditorTypingActivity}
@@ -2716,11 +4038,21 @@ export function AppShell() {
                 focusModeActive ? formatFocusRemaining(focusRemainingMs) : undefined
               }
               onCopyDocument={handleCopyDocument}
+              onPublish={handlePublishDocument}
+              publishEnabled={Boolean(normalizeQuickLinkUrl(publishUrl))}
               onPodcastNotesPdf={performExportPodcastNotesPdf}
-              onSaveAsPdf={performExportPdf}
               onPrint={handlePrintDocument}
-              podcastNotesEnabled={Boolean(aiCheckConfig?.enabled && aiCheckConfig.hasApiKey)}
-              podcastNotesRunning={podcastNotesRunning}
+              podcastNotesEnabled={Boolean(
+                showPodcastNotes && aiCheckConfig?.enabled && aiCheckConfig.hasApiKey,
+              )}
+              podcastNotesRunning={
+                podcastNotesRunning ||
+                podcastNotesPreviewOpen ||
+                (saveAsModalOpen && saveAsPurpose === "podcast-notes")
+              }
+              onSyncWithNotion={() => void performNotionEssaySync()}
+              notionSyncEnabled={notionConnected}
+              notionSyncRunning={notionSyncRunning}
               syncWithChrome
               chromeHidden={hideBottomToolsWhileTyping && !focusModeActive}
             />
@@ -2770,6 +4102,7 @@ export function AppShell() {
               sections={workspaceSections}
               showOutliersView={showOutliersView}
               showCollectView={showCollectView}
+              showHeadlinesView={showHeadlinesView}
               showAvatarView={showAvatarView}
               chromeHidden={hideWorkspaceSectionRail}
               className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
@@ -2820,6 +4153,7 @@ export function AppShell() {
                 sections={workspaceSections}
                 showOutliersView={showOutliersView}
                 showCollectView={showCollectView}
+                showHeadlinesView={showHeadlinesView}
                 showAvatarView={showAvatarView}
                 chromeHidden={hideWorkspaceSectionRail}
                 className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
@@ -2858,7 +4192,7 @@ export function AppShell() {
       )}
 
       <div
-        className={`pointer-events-none absolute top-0 z-30 flex h-8 items-center rounded-md px-0.5 transition-[opacity,background-color,left] duration-500 ease-in-out ${
+        className={`pointer-events-none absolute top-0 z-30 flex h-[var(--harvy-tab-bar-height)] items-center rounded-md px-0.5 transition-[opacity,background-color,left] duration-500 ease-in-out ${
           hideTopBarWhileTyping || focusModeActive ? "bg-stage opacity-0" : "bg-mist/55 opacity-100"
         }`}
         style={{ left: workspaceSidebarToggleLeft }}
@@ -2866,12 +4200,10 @@ export function AppShell() {
         <ChromeSidebarToggleButton
           icon={PanelLeft}
           open={isWorkspaceSidebarOpen}
-          onClick={() => {
-            if (focusModeActive) return;
-            setIsWorkspaceSidebarOpen((v) => !v);
-          }}
+          onClick={toggleLeftSidebar}
           ariaLabelOpen="Hide sidebar"
           ariaLabelClosed="Show sidebar"
+          shortcutHint={formatHotkeyChord(["Option", "ArrowLeft"])}
         />
       </div>
 
@@ -2897,12 +4229,10 @@ export function AppShell() {
           <ChromeSidebarToggleButton
             icon={PanelRight}
             open={readabilityPanelOpen}
-            onClick={() => {
-              if (focusModeActive) return;
-              setReadabilityPanelOpen((v) => !v);
-            }}
+            onClick={toggleRightSidebar}
             ariaLabelOpen="Hide tools panel"
             ariaLabelClosed="Show tools panel"
+            shortcutHint={formatHotkeyChord(["Option", "ArrowRight"])}
           />
         </div>
       </div>
@@ -2922,22 +4252,36 @@ export function AppShell() {
         onShowCriteriaChange={handleShowCriteriaChange}
         showAiCheck={showAiCheck}
         onShowAiCheckChange={handleShowAiCheckChange}
+        showPodcastNotes={showPodcastNotes}
+        onShowPodcastNotesChange={handleShowPodcastNotesChange}
+        showTitleGeneration={showTitleGeneration}
+        onShowTitleGenerationChange={handleShowTitleGenerationChange}
+        showRelatedEssays={showRelatedEssays}
+        onShowRelatedEssaysChange={handleShowRelatedEssaysChange}
         criteria={activeCriteria}
         onCriteriaChange={updateActiveDocumentCriteria}
+        publishUrl={publishUrl}
+        onPublishUrlChange={handlePublishUrlChange}
         spellcheckEnabled={writingAssistancePrefs.spellcheck}
         onSpellcheckChange={handleSpellcheckPref}
         focusVisibilityPrefs={focusVisibilityPrefs}
         onFocusVisibilityPrefChange={handleFocusVisibilityPrefChange}
         documentHeaderPrefs={documentHeaderPrefs}
         onDocumentHeaderPrefChange={handleDocumentHeaderPrefChange}
+        editorPromptPrefs={editorPromptPrefs}
+        onEditorPromptPrefsChange={handleEditorPromptPrefsChange}
         enableCollect={enableCollect}
         onEnableCollectChange={handleEnableCollectChange}
         showOutliersView={showOutliersView}
         showCollectView={showCollectView}
+        showHeadlinesView={showHeadlinesView}
         showAvatarView={showAvatarView}
         onShowOutliersViewChange={handleShowOutliersViewChange}
         onShowCollectViewChange={handleShowCollectViewChange}
+        onShowHeadlinesViewChange={handleShowHeadlinesViewChange}
         onShowAvatarViewChange={handleShowAvatarViewChange}
+        collectViewOrder={collectViewOrder}
+        onCollectViewOrderChange={handleCollectViewOrderChange}
         encouragementPrefs={encouragementPrefs}
         onEncouragementPrefsChange={handleEncouragementPrefsChange}
         onTestEncouragement={testEncouragement}
@@ -2961,6 +4305,35 @@ export function AppShell() {
         onFileNameChange={handleSaveAsFileNameChange}
         folderPreviewContext={saveAsFolderPreviewContext}
       />
+      <PodcastNotesPreviewModal
+        open={podcastNotesPreviewOpen}
+        markdown={podcastNotesMarkdown}
+        generating={podcastNotesRunning}
+        error={podcastNotesPreviewError}
+        onClose={closePodcastNotesPreview}
+        onExport={() => void confirmPodcastNotesExport()}
+        onPrint={() => {
+          if (!podcastNotesMarkdown?.trim()) return;
+          void printMarkdownDocument(
+            "Podcast Notes",
+            ensurePodcastNotesBullets(podcastNotesMarkdown),
+          ).catch((e) => {
+            window.alert(`Print failed: ${e instanceof Error ? e.message : String(e)}`);
+          });
+        }}
+        onShare={(event) => {
+          if (!podcastNotesMarkdown?.trim()) return;
+          void shareMarkdownPdf(
+            "Podcast Notes",
+            ensurePodcastNotesBullets(podcastNotesMarkdown),
+            defaultPodcastNotesPdfFileName(editorTitleBase),
+            shareAnchorFromElement(event.currentTarget),
+          ).catch((e) => {
+            window.alert(`Share failed: ${e instanceof Error ? e.message : String(e)}`);
+          });
+        }}
+        onRetry={retryPodcastNotesPreview}
+      />
       <AboutModal open={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
       <FocusModeModal
         open={isFocusModeOpen}
@@ -2970,6 +4343,28 @@ export function AppShell() {
         onEnd={endFocusMode}
         remainingLabel={
           focusSessionEndsAt != null ? formatFocusRemaining(focusRemainingMs) : undefined
+        }
+      />
+      <PdfConvertPreviewModal
+        open={pdfConvertPreview !== null}
+        sourceName={pdfConvertPreview?.sourceName ?? ""}
+        sourcePath={pdfConvertPreview?.sourcePath ?? ""}
+        workspaceRootPath={workspaceRootPath}
+        markdown={pdfConvertPreview?.markdown ?? null}
+        loading={pdfConvertPreview?.loading ?? false}
+        error={pdfConvertPreview?.error ?? null}
+        submitting={pdfConvertSubmitting}
+        onClose={closePdfConvertPreview}
+        onConvert={() => void confirmPdfConvert()}
+        onRetry={
+          pdfConvertPreview
+            ? () =>
+                void convertPdfToMarkdown({
+                  name: pdfConvertPreview.sourceName,
+                  path: pdfConvertPreview.sourcePath,
+                  kind: "file",
+                })
+            : undefined
         }
       />
       <ImagePreviewModal

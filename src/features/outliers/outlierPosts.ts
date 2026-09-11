@@ -1,5 +1,7 @@
 export type OutlierPost = {
   id: string;
+  /** Saved source this post came from (for cache + refresh). */
+  sourceId: string;
   creatorName: string;
   creatorPhotoUrl?: string | null;
   handle: string;
@@ -44,6 +46,11 @@ export const DEFAULT_CONTENT_TYPE_FILTER: ContentTypeFilter = {
 
 export function isOutlierNote(post: OutlierPost): boolean {
   return post.platform === "Note";
+}
+
+/** Substack Notes / Medium articles / YouTube videos — not platform Notes. */
+export function isOutlierLongForm(post: OutlierPost): boolean {
+  return !isOutlierNote(post);
 }
 
 /** Keep at least one content type enabled. */

@@ -22,7 +22,7 @@ export function PhrasesCsvTable({
     <div
       className={`overflow-auto rounded-lg bg-mist/90 ring-1 ring-line/15 dark:bg-ink/[0.04] dark:ring-white/8 ${maxHeightClass ?? ""} ${fillHeight ? "flex flex-col" : ""}`}
     >
-      <table className={`w-full table-fixed border-collapse text-left ${fillHeight ? "min-h-full" : ""}`}>
+      <table className={`h-auto w-full table-fixed border-collapse text-left ${fillHeight ? "shrink-0" : ""}`}>
         <thead>
           <tr>
             <th className="w-[58%] px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted/55">
@@ -77,7 +77,7 @@ export function PhrasesCsvTable({
                   <button
                     type="button"
                     onClick={() => onRemove(phrase.id)}
-                    className="rounded-md px-1.5 py-1 text-[11px] text-muted/60 transition-colors hover:bg-ink/[0.06] hover:text-ink"
+                    className="rounded-md px-1.5 py-1 text-[12px] text-muted/60 transition-colors hover:bg-ink/[0.06] hover:text-ink"
                     aria-label="Remove phrase"
                   >
                     ×

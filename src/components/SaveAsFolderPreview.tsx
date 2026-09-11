@@ -25,7 +25,7 @@ export function SaveAsFolderPreview({
   }, [folderBase, leafFileName, context]);
 
   const tree = (
-    <pre className="overflow-x-auto whitespace-pre font-mono text-[11px] leading-[1.4] text-muted/68">
+    <pre className="overflow-x-auto whitespace-pre font-mono text-[12px] leading-[1.4] text-muted/68">
       {previewText}
     </pre>
   );

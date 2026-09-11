@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../save/saveRuntime";
 import type { ProofreadIssue } from "../proofread/types";
+import { ensurePodcastNotesBullets } from "./podcastNotesMarkdown";
 
 export type AiProvider = "openai" | "anthropic";
 
@@ -117,7 +118,49 @@ export async function runAiCheck(essay: string): Promise<AiCheckResult> {
 
 export async function generatePodcastNotes(essay: string): Promise<PodcastNotesResult> {
   requireTauri();
-  return invoke<PodcastNotesResult>("ai_check_podcast_notes", { essay });
+  const result = await invoke<PodcastNotesResult>("ai_check_podcast_notes", { essay });
+  return { ...result, markdown: ensurePodcastNotesBullets(result.markdown) };
+}
+
+export type HeadlinePair = {
+  title: string;
+  subtitle: string;
+};
+
+export type HeadlinePairsResult = {
+  pairs: HeadlinePair[];
+  model: string;
+  provider: AiProvider;
+  usage: AiCheckUsage;
+};
+
+export async function generateHeadlinePairs(
+  essay: string,
+  stylePrompt?: string,
+): Promise<HeadlinePairsResult> {
+  requireTauri();
+  return invoke<HeadlinePairsResult>("ai_check_headline_pairs", {
+    essay,
+    stylePrompt: stylePrompt?.trim() ? stylePrompt : null,
+  });
+}
+
+export type HeadlineVisionImageInput = {
+  mimeType: string;
+  dataBase64: string;
+};
+
+export async function generateHeadlinePairsFromShots(
+  essay: string,
+  images: HeadlineVisionImageInput[],
+  stylePrompt?: string,
+): Promise<HeadlinePairsResult> {
+  requireTauri();
+  return invoke<HeadlinePairsResult>("ai_check_headline_pairs_from_shots", {
+    essay,
+    stylePrompt: stylePrompt?.trim() ? stylePrompt : null,
+    images,
+  });
 }
 
 export function providerLabel(provider: AiProvider | null | undefined): string {
@@ -182,8 +225,8 @@ export function locateAiIssuesInText(
 }
 
 /**
- * Drop AI issues that were replaced/edited away, and re-anchor surviving quotes
- * when earlier edits shifted offsets. Used so sidebar counts stay in sync.
+ * Drop AI / related-essay issues that were replaced/edited away, and re-anchor
+ * surviving quotes when earlier edits shifted offsets.
  */
 export function reconcileAiIssuesInText(
   essay: string,
@@ -193,7 +236,7 @@ export function reconcileAiIssuesInText(
   let searchFrom = 0;
 
   for (const issue of issues) {
-    if (issue.type !== "ai") {
+    if (issue.type !== "ai" && issue.type !== "related") {
       kept.push(issue);
       continue;
     }

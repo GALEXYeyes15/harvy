@@ -11,19 +11,6 @@ function logSubstackBackspace(step: string, detail?: Record<string, unknown>): v
   console.log("[HarvySubstackBackspace]", step, detail ?? "");
 }
 
-type TopLevelBlock = { node: PMNode; pos: number };
-
-function listTopLevelBlocks(doc: PMNode): TopLevelBlock[] {
-  const blocks: TopLevelBlock[] = [];
-  let offset = 0;
-  for (let i = 0; i < doc.childCount; i++) {
-    const node = doc.child(i);
-    blocks.push({ node, pos: offset });
-    offset += node.nodeSize;
-  }
-  return blocks;
-}
-
 /** True when a text block has no meaningful text (whitespace, hard breaks, and filler only). */
 export function isTextBlockEffectivelyEmpty(node: PMNode): boolean {
   if (!node.isTextblock) return false;
@@ -47,33 +34,41 @@ function textBlockCursorPos(node: PMNode, blockPos: number, atEnd: boolean): num
   return atEnd ? blockPos + node.nodeSize - 1 : blockPos + 1;
 }
 
-/** Nearest top-level text block before or after `pos` (skips images and other atoms). */
+/** Nearest text block before or after `pos` in document order (enters lists). */
 function findNearestTextBlockPos(doc: PMNode, pos: number, direction: -1 | 1): number | null {
-  const blocks = listTopLevelBlocks(doc);
+  const cap = Math.min(Math.max(0, pos), doc.content.size);
 
   if (direction === -1) {
-    for (let i = blocks.length - 1; i >= 0; i--) {
-      const { node, pos: blockPos } = blocks[i]!;
-      if (blockPos + node.nodeSize <= pos && node.isTextblock) {
-        return textBlockCursorPos(node, blockPos, true);
+    let last: number | null = null;
+    doc.nodesBetween(0, cap, (node, blockPos) => {
+      if (!node.isTextblock) return;
+      if (blockPos + node.nodeSize <= cap) {
+        last = textBlockCursorPos(node, blockPos, true);
       }
-    }
-    return null;
+    });
+    return last;
   }
 
-  for (const { node, pos: blockPos } of blocks) {
-    if (blockPos >= pos && node.isTextblock) {
-      return textBlockCursorPos(node, blockPos, false);
+  let found: number | null = null;
+  doc.nodesBetween(cap, doc.content.size, (node, blockPos) => {
+    if (found != null) return false;
+    if (node.isTextblock && blockPos >= cap) {
+      found = textBlockCursorPos(node, blockPos, false);
+      return false;
     }
-  }
-  return null;
+  });
+  return found;
 }
 
 function docHasTextBlock(doc: PMNode): boolean {
-  for (let i = 0; i < doc.childCount; i++) {
-    if (doc.child(i).isTextblock) return true;
-  }
-  return false;
+  let found = false;
+  doc.descendants((node) => {
+    if (node.isTextblock) {
+      found = true;
+      return false;
+    }
+  });
+  return found;
 }
 
 /** Position of the top-level `horizontalRule` directly before the block containing `$from`, if any. */
@@ -222,8 +217,12 @@ function applyFocusAfterDelete(
 ): Transaction {
   const focusPos = findFocusPosAfterTextBlockDelete(tr.doc, deletePos);
   if (focusPos != null) {
-    const $focus = tr.doc.resolve(focusPos);
-    const preferForward = focusPos >= deletePos;
+    const bounded = Math.min(Math.max(1, focusPos), Math.max(1, tr.doc.content.size - 1));
+    const $focus = tr.doc.resolve(bounded);
+    if ($focus.parent.isTextblock) {
+      return tr.setSelection(TextSelection.create(tr.doc, bounded));
+    }
+    const preferForward = bounded >= deletePos;
     return tr.setSelection(TextSelection.near($focus, preferForward ? 1 : -1));
   }
 
