@@ -606,7 +606,7 @@ pub fn import_workspace_image(app: AppHandle, source_path: String) -> Result<Str
 }
 
 fn headlines_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app_config_dir(app)?.join("headlines");
+    let dir = workspace_root_dir(app)?.join(".harvy").join("headlines");
     fs::create_dir_all(&dir).map_err(|e| {
         format!(
             "Could not create headlines folder '{}': {}",
@@ -614,7 +614,46 @@ fn headlines_dir(app: &AppHandle) -> Result<PathBuf, String> {
             e
         )
     })?;
+    migrate_legacy_headline_files(app, &dir);
     Ok(dir)
+}
+
+fn headlines_catalog_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let harvy_dir = workspace_root_dir(app)?.join(".harvy");
+    fs::create_dir_all(&harvy_dir).map_err(|e| {
+        format!(
+            "Could not create Harvy workspace folder '{}': {}",
+            harvy_dir.display(),
+            e
+        )
+    })?;
+    Ok(harvy_dir.join("headlines.json"))
+}
+
+fn migrate_legacy_headline_files(app: &AppHandle, dest_dir: &Path) {
+    let Ok(legacy) = app_config_dir(app).map(|dir| dir.join("headlines")) else {
+        return;
+    };
+    if !legacy.is_dir() {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(&legacy) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name() else {
+            continue;
+        };
+        let dest = dest_dir.join(name);
+        if dest.exists() {
+            continue;
+        }
+        let _ = fs::copy(&path, dest);
+    }
 }
 
 fn allowed_headline_image_ext(ext: &str) -> bool {
@@ -783,6 +822,106 @@ pub fn read_headline_screenshot(app: AppHandle, path: String) -> Result<Headline
             use base64::Engine;
             base64::engine::general_purpose::STANDARD.encode(bytes)
         },
+    })
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeadlineShotRecord {
+    pub id: String,
+    pub src: String,
+    #[serde(default)]
+    pub created_at: u64,
+}
+
+fn headline_file_created_at(path: &Path) -> u64 {
+    path.metadata()
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn scan_headline_files(dir: &Path) -> Vec<HeadlineShotRecord> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut shots: Vec<HeadlineShotRecord> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            if !path.is_file() {
+                return None;
+            }
+            let ext = path
+                .extension()
+                .and_then(|value| value.to_str())
+                .map(|value| value.to_ascii_lowercase())
+                .unwrap_or_default();
+            if !allowed_headline_image_ext(&ext) {
+                return None;
+            }
+            let src = path.to_string_lossy().to_string();
+            Some(HeadlineShotRecord {
+                id: path
+                    .file_stem()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("headline")
+                    .to_string(),
+                src,
+                created_at: headline_file_created_at(&path),
+            })
+        })
+        .collect();
+    shots.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    shots
+}
+
+fn read_headline_catalog(path: &Path) -> Vec<HeadlineShotRecord> {
+    let Ok(raw) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    serde_json::from_str(&raw).unwrap_or_default()
+}
+
+/// Load the workspace headline catalog, migrating leftover app-support screenshots.
+#[tauri::command]
+pub fn load_headline_shots(app: AppHandle) -> Result<Vec<HeadlineShotRecord>, String> {
+    let dir = headlines_dir(&app)?;
+    let catalog_path = headlines_catalog_path(&app)?;
+    let mut shots = read_headline_catalog(&catalog_path)
+        .into_iter()
+        .filter(|shot| {
+            let src = shot.src.trim();
+            if src.is_empty() {
+                return false;
+            }
+            let path = PathBuf::from(src);
+            path.is_file()
+        })
+        .collect::<Vec<_>>();
+    if shots.is_empty() {
+        shots = scan_headline_files(&dir);
+        if !shots.is_empty() {
+            let _ = save_headline_shots(app.clone(), shots.clone());
+        }
+    }
+    Ok(shots)
+}
+
+/// Persist the headline catalog in the workspace `.harvy` folder.
+#[tauri::command]
+pub fn save_headline_shots(app: AppHandle, shots: Vec<HeadlineShotRecord>) -> Result<(), String> {
+    let path = headlines_catalog_path(&app)?;
+    let body = serde_json::to_string_pretty(&shots)
+        .map_err(|e| format!("Could not serialize headline catalog: {}", e))?;
+    fs::write(&path, format!("{body}\n")).map_err(|e| {
+        format!(
+            "Could not save headline catalog '{}': {}",
+            path.display(),
+            e
+        )
     })
 }
 

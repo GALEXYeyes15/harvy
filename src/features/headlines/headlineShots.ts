@@ -1,9 +1,12 @@
+import { invoke } from "@tauri-apps/api/core";
+import { isTauriRuntime } from "../save/saveRuntime";
+
 const STORAGE_KEY = "harvy:headline-shots";
 
 export type HeadlineShot = {
   id: string;
   createdAt: number;
-  /** Absolute file path (Tauri) or data URL (browser). */
+  /** Absolute file path (Tauri workspace) or data URL (browser). */
   src: string;
 };
 
@@ -39,7 +42,7 @@ function parseHeadlineShot(value: unknown): HeadlineShot | null {
   };
 }
 
-export function loadHeadlineShots(): HeadlineShot[] {
+function loadHeadlineShotsFromLocalStorage(): HeadlineShot[] {
   if (typeof localStorage === "undefined") return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -50,7 +53,22 @@ export function loadHeadlineShots(): HeadlineShot[] {
   }
 }
 
-export function saveHeadlineShots(shots: HeadlineShot[]): void {
+export async function loadHeadlineShots(): Promise<HeadlineShot[]> {
+  if (isTauriRuntime()) {
+    try {
+      return parseHeadlineShots(await invoke<unknown>("load_headline_shots"));
+    } catch {
+      return [];
+    }
+  }
+  return loadHeadlineShotsFromLocalStorage();
+}
+
+export async function saveHeadlineShots(shots: HeadlineShot[]): Promise<void> {
+  if (isTauriRuntime()) {
+    await invoke("save_headline_shots", { shots });
+    return;
+  }
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(shots));
 }

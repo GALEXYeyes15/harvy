@@ -6,6 +6,8 @@ import {
   parseRelatedEssayItems,
   parseRelatedEssaySidecar,
   preferredRelatedUrl,
+  relatedUrlsFromSources,
+  notionUrlFromPageId,
 } from "./relatedEssays";
 import {
   locateRelatedPhrasesInText,
@@ -13,7 +15,7 @@ import {
   relatedIssuesAfterLinking,
   uniqueLinkedRelatedPaths,
 } from "./relatedPhrases";
-import { normalizeEssayTitle, titlesMatch } from "./titleMatch";
+import { guessSubstackPostUrl, normalizeEssayTitle, titlesMatch } from "./titleMatch";
 
 describe("related essays", () => {
   it("skips notes, criteria, and non-markdown files", () => {
@@ -58,6 +60,24 @@ describe("related essays", () => {
       "https://www.notion.so/hello",
     );
     expect(preferredRelatedUrl({})).toBe("");
+  });
+
+  it("builds a Notion URL from a stored page id", () => {
+    expect(notionUrlFromPageId("01234567-89ab-cdef-0123-456789abcdef")).toBe(
+      "https://www.notion.so/0123456789abcdef0123456789abcdef",
+    );
+    expect(notionUrlFromPageId("not-an-id")).toBe("");
+  });
+
+  it("falls back to a Notion page id when URL fields are empty", () => {
+    expect(
+      relatedUrlsFromSources({
+        notionEssayPageId: "01234567-89ab-cdef-0123-456789abcdef",
+      }),
+    ).toEqual({
+      publicUrl: "",
+      notionUrl: "https://www.notion.so/0123456789abcdef0123456789abcdef",
+    });
   });
 
   it("parses a related sidecar list", () => {
@@ -122,7 +142,7 @@ describe("related essays", () => {
     });
   });
 
-  it("locates verbatim related phrases in the draft", () => {
+  it("locates a related phrase and underlines its full sentence", () => {
     const issues = locateRelatedPhrasesInText("Rest will not save you from burnout.", [
       {
         title: "Why Rest Won't Fix Overwhelm",
@@ -135,15 +155,50 @@ describe("related essays", () => {
     expect(issues).toEqual([
       {
         type: "related",
-        text: "Rest will not save you",
+        text: "Rest will not save you from burnout.",
         message: "Same claim about rest.",
         start: 0,
-        end: 22,
+        end: 36,
         relatedPath: "/Essays/rest.md",
         relatedUrl: "https://alex.substack.com/p/rest",
         relatedTitle: "Why Rest Won't Fix Overwhelm",
       },
     ]);
+  });
+
+  it("clamps a multi-sentence phrase to the first sentence only", () => {
+    const essay = "Rest will not save you. Coping is not hoping.";
+    const issues = locateRelatedPhrasesInText(essay, [
+      {
+        title: "Rest",
+        path: "/Essays/rest.md",
+        why: "Same rest claim.",
+        phrase: "Rest will not save you. Coping is not hoping.",
+      },
+    ]);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.text).toBe("Rest will not save you.");
+    expect(issues[0]?.start).toBe(0);
+    expect(issues[0]?.end).toBe("Rest will not save you.".length);
+  });
+
+  it("underlines a sentence at most once", () => {
+    const issues = locateRelatedPhrasesInText("Rest will not save you from burnout.", [
+      {
+        title: "Rest",
+        path: "/Essays/rest.md",
+        why: "Same rest claim.",
+        phrase: "Rest will not save you",
+      },
+      {
+        title: "Burnout",
+        path: "/Essays/burnout.md",
+        why: "Also burnout.",
+        phrase: "save you from burnout",
+      },
+    ]);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.relatedPath).toBe("/Essays/rest.md");
   });
 
   it("counts unique linked essays from sidecar paths and matching hrefs", () => {
@@ -169,7 +224,7 @@ describe("related essays", () => {
 
   it("clears leftover related underlines after two essays are linked", () => {
     const issues = locateRelatedPhrasesInText(
-      "Coping is not hoping, and rest will not save you.",
+      "Coping is not hoping. And rest will not save you.",
       [
         {
           title: "Coping",
@@ -185,12 +240,28 @@ describe("related essays", () => {
         },
       ],
     );
+    expect(issues).toHaveLength(2);
     const afterFirst = relatedIssuesAfterLinking(issues, [], "/Essays/coping.md");
     expect(afterFirst).toHaveLength(1);
     expect(afterFirst[0]?.relatedPath).toBe("/Essays/rest.md");
     expect(relatedIssuesAfterLinking(afterFirst, ["/Essays/coping.md"], "/Essays/rest.md")).toEqual(
       [],
     );
+  });
+
+  it("drops the linked phrase even when the related path is missing", () => {
+    const issues = locateRelatedPhrasesInText("Coping is not hoping, and rest will not save you.", [
+      {
+        title: "Coping",
+        path: "/Essays/coping.md",
+        why: "Names the distinction.",
+        phrase: "Coping is not hoping",
+      },
+    ]);
+    expect(issues).toHaveLength(1);
+    expect(
+      relatedIssuesAfterLinking(issues, [], { start: issues[0]!.start, end: issues[0]!.end }),
+    ).toEqual([]);
   });
 });
 
@@ -210,5 +281,14 @@ describe("titleMatch", () => {
     ).toBe(true);
     expect(titlesMatch("Short", "Shorter")).toBe(false);
     expect(titlesMatch("Unrelated essay title here", "Something else entirely")).toBe(false);
+  });
+
+  it("guesses a Substack post URL from the archive and title", () => {
+    expect(
+      guessSubstackPostUrl(
+        "https://alex.substack.com",
+        "Why Rest Won't Fix Your Overwhelm",
+      ),
+    ).toBe("https://alex.substack.com/p/why-rest-wont-fix-your-overwhelm");
   });
 });

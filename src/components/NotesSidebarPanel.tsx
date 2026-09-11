@@ -12,6 +12,8 @@ type NotesSidebarPanelProps = {
   onTogglePopout?: () => void;
   /** When on, Quick Links appears below Notes. */
   showQuickLinks?: boolean;
+  /** When on, Find Related Essays appears below Notes. */
+  showRelatedEssays?: boolean;
   sourcePath?: string;
   relatedTitle?: string;
   relatedExcerpt?: string;
@@ -25,6 +27,7 @@ export function NotesSidebarPanel({
   onNotesChange,
   onTogglePopout,
   showQuickLinks = false,
+  showRelatedEssays = true,
   sourcePath = "",
   relatedTitle = "",
   relatedExcerpt = "",
@@ -66,16 +69,18 @@ export function NotesSidebarPanel({
           <QuickLinksSidebarPanel />
         </div>
       ) : null}
-      <div className="mt-6 shrink-0">
-        <RelatedEssaysSidebarPanel
-          sourcePath={sourcePath}
-          currentTitle={relatedTitle}
-          currentExcerpt={relatedExcerpt}
-          workspaceTree={workspaceTree}
-          aiReady={aiReady}
-          onRelatedItemsFound={onRelatedItemsFound}
-        />
-      </div>
+      {showRelatedEssays ? (
+        <div className="mt-6 shrink-0">
+          <RelatedEssaysSidebarPanel
+            sourcePath={sourcePath}
+            currentTitle={relatedTitle}
+            currentExcerpt={relatedExcerpt}
+            workspaceTree={workspaceTree}
+            aiReady={aiReady}
+            onRelatedItemsFound={onRelatedItemsFound}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

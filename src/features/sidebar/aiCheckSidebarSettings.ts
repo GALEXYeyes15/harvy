@@ -1,6 +1,7 @@
 const STORAGE_SHOW_AI_CHECK = "harvy:show-ai-check-sidebar";
 const STORAGE_SHOW_PODCAST_NOTES = "harvy:show-podcast-notes";
 const STORAGE_SHOW_TITLE_GENERATION = "harvy:show-title-generation";
+const STORAGE_SHOW_RELATED_ESSAYS = "harvy:show-related-essays";
 
 export type AiCheckSidebarSettings = {
   /** When on, AI check controls appear in the Edit sidebar (Write). */
@@ -9,12 +10,15 @@ export type AiCheckSidebarSettings = {
   showPodcastNotes: boolean;
   /** When on, two-finger click Title or Subtitle to suggest titles. */
   showTitleGeneration: boolean;
+  /** When on, Find Related Essays appears in Notes. */
+  showRelatedEssays: boolean;
 };
 
 const defaultSettings: AiCheckSidebarSettings = {
   showAiCheck: true,
   showPodcastNotes: true,
   showTitleGeneration: true,
+  showRelatedEssays: true,
 };
 
 function readFlag(key: string, fallback: boolean): boolean {
@@ -32,6 +36,10 @@ export function readAiCheckSidebarSettings(): AiCheckSidebarSettings {
       STORAGE_SHOW_TITLE_GENERATION,
       defaultSettings.showTitleGeneration,
     ),
+    showRelatedEssays: readFlag(
+      STORAGE_SHOW_RELATED_ESSAYS,
+      defaultSettings.showRelatedEssays,
+    ),
   };
 }
 
@@ -48,6 +56,9 @@ export function writeAiCheckSidebarSettings(
   }
   if (partial.showTitleGeneration !== undefined) {
     localStorage.setItem(STORAGE_SHOW_TITLE_GENERATION, next.showTitleGeneration ? "true" : "false");
+  }
+  if (partial.showRelatedEssays !== undefined) {
+    localStorage.setItem(STORAGE_SHOW_RELATED_ESSAYS, next.showRelatedEssays ? "true" : "false");
   }
   return next;
 }

@@ -562,16 +562,16 @@ fn strip_markdown_fences(raw: &str) -> String {
 
 fn require_ai_config_for_generation(app: &AppHandle) -> Result<AiCheckConfig, String> {
     let config = read_config(app)?.ok_or_else(|| {
-        "Add an API key in Settings → Sidebars first.".to_string()
+        "Add an API key in Settings → Artificial Intelligence first.".to_string()
     })?;
     if config.api_key.trim().is_empty() {
-        return Err("Add an API key in Settings → Sidebars first.".to_string());
+        return Err("Add an API key in Settings → Artificial Intelligence first.".to_string());
     }
     if !config.enabled {
-        return Err("Enable AI check in Settings → Sidebars first.".to_string());
+        return Err("Enable AI check in Settings → Artificial Intelligence first.".to_string());
     }
     if config.model.trim().is_empty() {
-        return Err("Select a model in Settings → Sidebars first.".to_string());
+        return Err("Select a model in Settings → Artificial Intelligence first.".to_string());
     }
     Ok(config)
 }
@@ -960,16 +960,16 @@ pub fn ai_check_test_connection(
 #[tauri::command]
 pub fn ai_check_run(app: AppHandle, essay: String) -> Result<AiCheckResult, String> {
     let config = read_config(&app)?.ok_or_else(|| {
-        "Add an API key in Settings → Sidebars before running AI check.".to_string()
+        "Add an API key in Settings → Artificial Intelligence before running AI check.".to_string()
     })?;
     if config.api_key.trim().is_empty() {
-        return Err("Add an API key in Settings → Sidebars before running AI check.".to_string());
+        return Err("Add an API key in Settings → Artificial Intelligence before running AI check.".to_string());
     }
     if !config.enabled {
-        return Err("Enable AI check in Settings → Sidebars first.".to_string());
+        return Err("Enable AI check in Settings → Artificial Intelligence first.".to_string());
     }
     if config.model.trim().is_empty() {
-        return Err("Select a model in Settings → Sidebars first.".to_string());
+        return Err("Select a model in Settings → Artificial Intelligence first.".to_string());
     }
     let essay = essay.trim();
     if essay.is_empty() {
@@ -1364,9 +1364,9 @@ pub fn ai_check_headline_pairs_from_shots(
 }
 
 const MAX_RELATED_CANDIDATES: usize = 40;
-const MAX_RELATED_MATCHES: usize = 6;
-const RELATED_EXCERPT_CHARS: usize = 800;
-const RELATED_DRAFT_CHARS: usize = 4000;
+const MAX_RELATED_MATCHES: usize = 3;
+const RELATED_EXCERPT_CHARS: usize = 1200;
+const RELATED_DRAFT_CHARS: usize = 6000;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1406,11 +1406,13 @@ fn truncate_related_text(value: &str, max_chars: usize) -> String {
 }
 
 fn related_essays_system_prompt() -> &'static str {
-    "You rank past essays by how useful they are as related reading for the current draft.\n\
-Return JSON only: {\"matches\":[{\"id\":\"...\",\"why\":\"short reason\",\"phrase\":\"verbatim draft phrase\"}]}.\n\
-Use only candidate ids from the user message. Rank at most 6, strongest first.\n\
-Skip weak or unrelated matches. \"why\" is one short sentence about the shared idea.\n\
-\"phrase\" MUST be copied verbatim from the current draft excerpt — a specific 3 to 12 word span, not a paraphrase."
+    "You pick places in the current draft to link a past essay.\n\
+Return JSON only: {\"matches\":[{\"id\":\"...\",\"why\":\"short reason\",\"phrase\":\"verbatim draft sentence\"}]}.\n\
+Use only candidate ids from the user message. Rank at most 3, strongest first. Prefer no match over a stretch.\n\
+\"phrase\" MUST be exactly one complete sentence copied verbatim from the current draft. Never a fragment, never two sentences, never a paraphrase.\n\
+Judge that sentence with the sentence before and after it. Only match if this local passage is making the same specific claim or describing the same situation as the candidate.\n\
+Shared topics, moods, or keywords are not enough. If the surrounding sentences show a different situation, skip — even when words like stress, work, rest, or habits overlap.\n\
+\"why\" must name the specific shared claim in one short sentence, not a vague theme."
 }
 
 fn compose_related_essays_user_text(
@@ -1421,9 +1423,9 @@ fn compose_related_essays_user_text(
     let mut out = String::new();
     out.push_str("Current draft title: ");
     out.push_str(&truncate_related_text(title, 200));
-    out.push_str("\nCurrent draft excerpt:\n");
+    out.push_str("\n\nRead the full draft before matching. For any sentence you quote, the sentences around it must still support the link.\nCurrent draft:\n");
     out.push_str(&truncate_related_text(excerpt, RELATED_DRAFT_CHARS));
-    out.push_str("\n\nCandidates:\n");
+    out.push_str("\n\nCandidate essays:\n");
     for candidate in candidates.iter().take(MAX_RELATED_CANDIDATES) {
         out.push_str("- id: ");
         out.push_str(candidate.id.trim());
@@ -1726,6 +1728,14 @@ mod tests {
         }];
         let content = openai_headline_user_content("Hello essay", &images);
         assert_eq!(content[1]["image_url"]["url"], "data:image/jpeg;base64,abc");
+    }
+
+    #[test]
+    fn related_essays_prompt_requires_one_contextual_sentence() {
+        let prompt = related_essays_system_prompt();
+        assert!(prompt.contains("exactly one complete sentence"));
+        assert!(prompt.contains("sentence before and after"));
+        assert!(prompt.contains("Shared topics, moods, or keywords are not enough"));
     }
 
     #[test]

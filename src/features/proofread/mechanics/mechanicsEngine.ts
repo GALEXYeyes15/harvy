@@ -63,11 +63,7 @@ export function mechanicsHitToProofreadIssue(text: string, hit: MechanicsRuleHit
 
 /** Run all local mechanics rules against plain document text (no AI). */
 export function runMechanicsProofread(text: string): ProofreadIssue[] {
-  console.log("[HarvyMechanics] runMechanicsProofread", { length: text.length, preview: text.slice(0, 120) });
-
   const rawHits = MECHANICS_RULES.flatMap((rule) => rule.scan(text));
-  console.log("[HarvyMechanics] raw rule hits", rawHits.length, rawHits);
-
   const deduped = dedupeHits(rawHits);
 
   const issues: ProofreadIssue[] = [];

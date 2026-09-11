@@ -10,9 +10,13 @@ import { isTauriRuntime } from "../save/saveRuntime";
 import type { FileNode } from "../workspace/types";
 import {
   collectEssayMarkdownFiles,
+  hydrateRelatedItemUrls,
+  loadRelatedUrlsForPath,
   titleFromPath,
+  type RelatedEssayItem,
 } from "./relatedEssays";
-import { titlesMatch } from "./titleMatch";
+import { guessSubstackPostUrl, titlesMatch } from "./titleMatch";
+import { readCriteriaSidebarSettings } from "../sidebar/criteriaSidebarSettings";
 
 export const PUBLIC_URLS_MATCHED_EVENT = "harvy:public-urls-matched";
 
@@ -146,4 +150,96 @@ export async function matchPublishedEssayUrls(opts: {
     unmatched: Math.max(0, archive.length - usedUrls.size),
     updates,
   };
+}
+
+function publishedUrlForTitle(posts: ArchivePost[], title: string): string {
+  const match = posts.find(
+    (post) => titlesMatch(title, post.title ?? "") && (post.canonicalUrl ?? "").trim(),
+  );
+  return (match?.canonicalUrl ?? "").trim();
+}
+
+export async function resolveRelatedEssayHref(opts: {
+  path?: string;
+  title?: string;
+}): Promise<string> {
+  const path = opts.path?.trim() ?? "";
+  const title = opts.title?.trim() || (path ? titleFromPath(path) : "");
+  const archiveUrl = readCriteriaSidebarSettings().essaysArchiveUrl.trim();
+
+  let publicUrl = "";
+  let notionUrl = "";
+  if (path) {
+    const urls = await loadRelatedUrlsForPath(path);
+    publicUrl = urls.publicUrl;
+    notionUrl = urls.notionUrl;
+  }
+  if (publicUrl) return publicUrl;
+
+  if (archiveUrl && title) {
+    try {
+      const posts = await fetchArchivePosts(archiveUrl);
+      const matched = publishedUrlForTitle(posts, title);
+      if (matched) {
+        if (path) {
+          try {
+            await writePublicUrlOnDisk(path, matched);
+          } catch {
+            // Still use the URL even if the file write fails.
+          }
+        }
+        return matched;
+      }
+    } catch {
+      // Fall through to slug guess / Notion.
+    }
+    const guessed = guessSubstackPostUrl(archiveUrl, title);
+    if (guessed) return guessed;
+  }
+
+  return notionUrl;
+}
+
+export async function hydrateRelatedEssayUrls(
+  items: RelatedEssayItem[],
+): Promise<RelatedEssayItem[]> {
+  const disk = await hydrateRelatedItemUrls(items);
+  const needsArchive = disk.some((item) => !item.publicUrl?.trim() && item.title?.trim());
+  const archiveUrl = needsArchive ? readCriteriaSidebarSettings().essaysArchiveUrl.trim() : "";
+  let posts: ArchivePost[] = [];
+  if (archiveUrl) {
+    try {
+      posts = await fetchArchivePosts(archiveUrl);
+    } catch {
+      posts = [];
+    }
+  }
+
+  const out: RelatedEssayItem[] = [];
+  for (const item of disk) {
+    let publicUrl = item.publicUrl?.trim() ?? "";
+    let notionUrl = item.notionUrl?.trim() ?? "";
+    if (!publicUrl && posts.length && item.title) {
+      const matched = publishedUrlForTitle(posts, item.title);
+      if (matched) {
+        publicUrl = matched;
+        if (item.path) {
+          try {
+            await writePublicUrlOnDisk(item.path, matched);
+          } catch {
+            // Keep the in-memory URL.
+          }
+        }
+      }
+    }
+    if (!publicUrl && archiveUrl && item.title) {
+      publicUrl = guessSubstackPostUrl(archiveUrl, item.title);
+    }
+    out.push({
+      ...item,
+      publicUrl,
+      notionUrl,
+    });
+  }
+  return out;
 }

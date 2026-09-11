@@ -37,7 +37,7 @@ export function RelatedEssaysSidebarPanel({
       return;
     }
     if (!aiReady) {
-      setError("Connect AI in Settings → Sidebars first.");
+      setError("Connect AI in Settings → Artificial Intelligence first.");
       return;
     }
     setRunning(true);

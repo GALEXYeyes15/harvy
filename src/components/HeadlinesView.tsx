@@ -89,7 +89,7 @@ export function HeadlinesView({
   workspaceSidebarOpen?: boolean;
   toolsSidebarOpen?: boolean;
 }) {
-  const [shots, setShots] = useState<HeadlineShot[]>(() => loadHeadlineShots());
+  const [shots, setShots] = useState<HeadlineShot[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeShot, setActiveShot] = useState<HeadlineShot | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -103,7 +103,9 @@ export function HeadlinesView({
     if (incoming.length === 0) return;
     setShots((current) => {
       const next = [...incoming, ...current];
-      saveHeadlineShots(next);
+      void saveHeadlineShots(next).catch((err) => {
+        window.alert(err instanceof Error ? err.message : String(err));
+      });
       return next;
     });
   }, []);
@@ -117,13 +119,25 @@ export function HeadlinesView({
       void deleteHeadlineScreenshotFile(shot.src);
       setShots((current) => {
         const next = current.filter((item) => item.id !== shot.id);
-        saveHeadlineShots(next);
+        void saveHeadlineShots(next).catch((err) => {
+          window.alert(err instanceof Error ? err.message : String(err));
+        });
         return next;
       });
       if (activeShot?.id === shot.id) setActiveShot(null);
     },
     [activeShot],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadHeadlineShots().then((next) => {
+      if (!cancelled) setShots(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleDropFiles = useCallback(
     async (files: File[]) => {

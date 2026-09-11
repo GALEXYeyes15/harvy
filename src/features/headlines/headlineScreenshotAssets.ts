@@ -307,7 +307,7 @@ function compressHeadlineImageForVision(image: HeadlineVisionImage): Promise<Hea
 
 /** Load collected headline screenshots as compact JPEGs for the selected model. */
 export async function loadHeadlineShotsForVision(): Promise<HeadlineVisionImage[]> {
-  const shots = loadHeadlineShots().slice(0, MAX_HEADLINE_VISION_SHOTS);
+  const shots = (await loadHeadlineShots()).slice(0, MAX_HEADLINE_VISION_SHOTS);
   const images: HeadlineVisionImage[] = [];
   for (const shot of shots) {
     const raw = await loadShotRaw(shot);

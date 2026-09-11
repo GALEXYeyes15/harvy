@@ -1,4 +1,6 @@
 import type { EditorView } from "@tiptap/pm/view";
+import { setLinkOnView } from "../editor/editorFormatActions";
+import { hrefForEditorLink } from "../editor/linkUrlValidation";
 import {
   appendHarvyContextMenuSections,
   closeHarvyContextMenu,
@@ -9,6 +11,10 @@ import {
 import { relatedEssayLinkingRef } from "../related-essays/relatedEssayLinkingRef";
 import type { MechanicsSuggestionPopoverAnchor } from "./mechanicsIssueAtClick";
 import { ignoreMechanicsSuggestionForDocument } from "./mechanics/mechanicsSuggestionIgnore";
+import {
+  dispatchProofreadDecorations,
+  mechanicsUnderlineLayerKey,
+} from "./mechanicsUnderlineLayer";
 import { spellingContextMenuRef } from "./spellingContextMenuRef";
 import type { ProofreadIssue } from "./types";
 import { aiCheckPopoverPrefsRef } from "../aiCheck/aiCheckPopoverPrefs";
@@ -28,10 +34,15 @@ function replacementText(issue: ProofreadIssue): string | null {
   return replacement;
 }
 
-function wrapRangeWithLink(view: EditorView, from: number, to: number, href: string): boolean {
-  const markType = view.state.schema.marks.link;
-  if (!markType || from >= to) return false;
-  view.dispatch(view.state.tr.addMark(from, to, markType.create({ href })));
+function embedRelatedEssayLink(view: EditorView, from: number, to: number, href: string): boolean {
+  if (!setLinkOnView(view, from, to, href)) return false;
+  const current = mechanicsUnderlineLayerKey.getState(view.state)?.ranges ?? [];
+  dispatchProofreadDecorations(
+    view,
+    current.filter(
+      (range) => range.type !== "related" || range.from >= to || range.to <= from,
+    ),
+  );
   return true;
 }
 
@@ -43,8 +54,9 @@ function openRelatedEssayPopover(opts: {
   const { issue, pmFrom, pmTo } = anchor;
   const title = issue.relatedTitle?.trim() || "Related essay";
   const message = displayMessage(issue);
-  const url = issue.relatedUrl?.trim() ?? "";
   const path = issue.relatedPath?.trim() ?? "";
+  const url =
+    issue.relatedUrl?.trim() || relatedEssayLinkingRef.urlForPath(path);
 
   openHarvyContextMenuAt({
     view,
@@ -74,11 +86,29 @@ function openRelatedEssayPopover(opts: {
           [
             {
               label: "Link Essay",
-              disabled: !url,
+              disabled: !path && !title && !url,
               onClick: () => {
-                if (!url || !wrapRangeWithLink(view, pmFrom, pmTo, url)) return;
-                relatedEssayLinkingRef.onLinkEssay({ path, url });
-                spellingContextMenuRef.onRefresh();
+                void (async () => {
+                  const href =
+                    hrefForEditorLink(url) ||
+                    hrefForEditorLink(
+                      await relatedEssayLinkingRef.resolveUrl(path, title),
+                    );
+                  if (!href) {
+                    window.alert(
+                      "Add your Substack URL in Settings → Export so Harvy can link this essay.",
+                    );
+                    return;
+                  }
+                  if (!embedRelatedEssayLink(view, pmFrom, pmTo, href)) return;
+                  relatedEssayLinkingRef.onLinkEssay({
+                    path,
+                    url: href,
+                    start: issue.start,
+                    end: issue.end,
+                  });
+                  spellingContextMenuRef.onRefresh();
+                })();
               },
             },
           ],

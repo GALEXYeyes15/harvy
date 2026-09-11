@@ -3,6 +3,13 @@ import { fileNameFromPath, isTauriRuntime } from "../save/saveRuntime";
 import { joinPath, splitFileBaseAndExtension } from "./folderNaming";
 import { resolveProjectDirectory } from "./documentNotes";
 
+/** Sidecar next to a standalone essay, e.g. `Ambition.md` → `Ambition.md.harvy-criteria`. */
+export const DOCUMENT_CRITERIA_SUFFIX = ".harvy-criteria";
+
+export function documentCriteriaSidecarPath(sourcePath: string): string {
+  return `${sourcePath}${DOCUMENT_CRITERIA_SUFFIX}`;
+}
+
 /** Criteria filename inside a project folder, e.g. `Untitled.md` → `Untitled Criteria.md`. */
 export function projectCriteriaFileName(documentLeafFileName: string): string {
   const { base } = splitFileBaseAndExtension(fileNameFromPath(documentLeafFileName));
@@ -19,11 +26,19 @@ export function projectCriteriaPath(documentPath: string): string | null {
 export async function loadDocumentCriteria(sourcePath: string): Promise<string> {
   if (!isTauriRuntime() || !sourcePath.trim()) return "";
 
-  const criteriaPath = projectCriteriaPath(sourcePath);
-  if (!criteriaPath) return "";
+  const projectPath = projectCriteriaPath(sourcePath);
+  if (projectPath) {
+    try {
+      return await invoke<string>("read_workspace_text_file", { path: projectPath });
+    } catch {
+      // Fall through to sidecar next to the essay.
+    }
+  }
 
   try {
-    return await invoke<string>("read_workspace_text_file", { path: criteriaPath });
+    return await invoke<string>("read_workspace_text_file", {
+      path: documentCriteriaSidecarPath(sourcePath),
+    });
   } catch {
     return "";
   }
@@ -33,15 +48,21 @@ export async function saveDocumentCriteria(sourcePath: string, criteria: string)
   if (!isTauriRuntime() || !sourcePath.trim() || !criteria.trim()) return;
 
   const projectDir = resolveProjectDirectory(sourcePath);
-  const criteriaPath = projectCriteriaPath(sourcePath);
-  if (!projectDir || !criteriaPath) return;
+  const projectPath = projectCriteriaPath(sourcePath);
+  if (projectDir && projectPath) {
+    await invoke("ensure_directory", {
+      parentPath: projectDir,
+      folderName: "Notes",
+    });
+    await invoke("write_text_file", {
+      path: projectPath,
+      contents: criteria,
+    });
+    return;
+  }
 
-  await invoke("ensure_directory", {
-    parentPath: projectDir,
-    folderName: "Notes",
-  });
   await invoke("write_text_file", {
-    path: criteriaPath,
+    path: documentCriteriaSidecarPath(sourcePath),
     contents: criteria,
   });
 }
@@ -49,13 +70,23 @@ export async function saveDocumentCriteria(sourcePath: string, criteria: string)
 export async function renameDocumentCriteriaSidecar(fromPath: string, toPath: string): Promise<void> {
   if (!isTauriRuntime() || !fromPath.trim() || !toPath.trim()) return;
 
-  const fromCriteria = projectCriteriaPath(fromPath);
-  const toCriteria = projectCriteriaPath(toPath);
-  if (!fromCriteria || !toCriteria) return;
+  const fromProject = projectCriteriaPath(fromPath);
+  const toProject = projectCriteriaPath(toPath);
+  if (fromProject && toProject) {
+    try {
+      await invoke("rename_fs_path", { fromPath: fromProject, toPath: toProject });
+    } catch {
+      // No project criteria file yet.
+    }
+    return;
+  }
 
   try {
-    await invoke("rename_fs_path", { fromPath: fromCriteria, toPath: toCriteria });
+    await invoke("rename_fs_path", {
+      fromPath: documentCriteriaSidecarPath(fromPath),
+      toPath: documentCriteriaSidecarPath(toPath),
+    });
   } catch {
-    // No criteria file yet.
+    // No sidecar yet.
   }
 }

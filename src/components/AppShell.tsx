@@ -110,7 +110,7 @@ import {
   toggleNotesPopoutWindow,
 } from "../features/notes/notesPopout";
 import { visuallyDeactivateEditor } from "../features/editor/editorCanvasFocus";
-import { runEditorFormat, type LinkFormatOptions } from "../features/editor/editorFormatActions";
+import { runEditorFormat, setLinkOnRange, type LinkFormatOptions } from "../features/editor/editorFormatActions";
 import { calculateEditorStats } from "../features/editor/stats";
 import { pickAndImportWorkspaceImage } from "../features/editor/imageAssets";
 import { copyDocumentToClipboard } from "../features/editor/documentClipboard";
@@ -180,6 +180,7 @@ import {
   RELATED_DRAFT_CHARS,
   renameRelatedEssaySidecar,
   saveRelatedEssaySidecar,
+  preferredRelatedUrl,
   type RelatedEssayItem,
 } from "../features/related-essays/relatedEssays";
 import { syncRelatedEssayLinkingRef } from "../features/related-essays/relatedEssayLinkingRef";
@@ -192,7 +193,9 @@ import {
   uniqueStrings,
 } from "../features/related-essays/relatedPhrases";
 import {
+  hydrateRelatedEssayUrls,
   PUBLIC_URLS_MATCHED_EVENT,
+  resolveRelatedEssayHref,
   type PublishedUrlUpdate,
 } from "../features/related-essays/matchPublishedUrls";
 import { nextActiveTabIdAfterClose, toPageTabs } from "../features/tabs/pageTabs";
@@ -516,6 +519,9 @@ export function AppShell() {
   const [showTitleGeneration, setShowTitleGeneration] = useState(
     () => readAiCheckSidebarSettings().showTitleGeneration,
   );
+  const [showRelatedEssays, setShowRelatedEssays] = useState(
+    () => readAiCheckSidebarSettings().showRelatedEssays,
+  );
   /** In-memory buffer when no tabs open — not a saved file until persistence exists. */
   const [scratchDraftContent, setScratchDraftContent] = useState("");
   /** When set, scratch buffer last wrote to this path. */
@@ -724,6 +730,11 @@ export function AppShell() {
   const handleShowTitleGenerationChange = useCallback((enabled: boolean) => {
     const next = writeAiCheckSidebarSettings({ showTitleGeneration: enabled });
     setShowTitleGeneration(next.showTitleGeneration);
+  }, []);
+
+  const handleShowRelatedEssaysChange = useCallback((enabled: boolean) => {
+    const next = writeAiCheckSidebarSettings({ showRelatedEssays: enabled });
+    setShowRelatedEssays(next.showRelatedEssays);
   }, []);
 
   const showWorkspaceNavigation = enableCollect;
@@ -1558,11 +1569,11 @@ export function AppShell() {
       const purpose = opts?.purpose ?? "document";
       if (purpose === "podcast-notes") {
         if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
-          window.alert("Enable AI check and add an API key in Settings → Sidebars first.");
+          window.alert("Enable AI check and add an API key in Settings → Artificial Intelligence first.");
           return false;
         }
         if (!showPodcastNotes) {
-          window.alert("Turn on Podcast Notes in Settings → Sidebars → Artificial Intelligence.");
+          window.alert("Turn on Podcast Notes in Settings → Artificial Intelligence.");
           return false;
         }
       }
@@ -1933,11 +1944,11 @@ export function AppShell() {
     }
     if (!editorEditable) return;
     if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
-      window.alert("Enable AI check and add an API key in Settings → Sidebars first.");
+      window.alert("Enable AI check and add an API key in Settings → Artificial Intelligence first.");
       return;
     }
     if (!showPodcastNotes) {
-      window.alert("Turn on Podcast Notes in Settings → Sidebars → Artificial Intelligence.");
+      window.alert("Turn on Podcast Notes in Settings → Artificial Intelligence.");
       return;
     }
     const { text } = tiptapEditor
@@ -3174,27 +3185,28 @@ export function AppShell() {
   const applyRelatedEssayItems = useCallback(
     async (items: RelatedEssayItem[]): Promise<string | null> => {
       if (!tiptapEditor || !activeSourcePath) return "Save this essay first.";
-      relatedItemsRef.current = items;
+      const hydrated = await hydrateRelatedEssayUrls(items);
+      relatedItemsRef.current = hydrated;
       const text = proofreadPlainTextAndPositions(tiptapEditor.state.doc).text;
       const hrefs = collectDocLinkHrefs(tiptapEditor.state.doc);
       const linked = uniqueLinkedRelatedPaths({
         linkedPaths: relatedLinkedPathsRef.current,
-        items,
+        items: hydrated,
         hrefs,
       });
       relatedLinkedPathsRef.current = linked;
-      await saveRelatedEssaySidecar(activeSourcePath, { items, linkedPaths: linked });
+      await saveRelatedEssaySidecar(activeSourcePath, { items: hydrated, linkedPaths: linked });
       if (linked.length >= MAX_RELATED_LINKS) {
         persistRelatedIssues([]);
         refreshMechanicsProofread();
         return "This essay already links 2 related essays.";
       }
-      const issues = locateRelatedPhrasesInText(text, items).filter(
+      const issues = locateRelatedPhrasesInText(text, hydrated).filter(
         (issue) => !issue.relatedPath || !linked.includes(issue.relatedPath),
       );
       persistRelatedIssues(issues);
       refreshMechanicsProofread();
-      if (items.length > 0 && issues.length === 0) {
+      if (hydrated.length > 0 && issues.length === 0) {
         return "Found related essays, but no matching phrases in this draft.";
       }
       return null;
@@ -3208,38 +3220,54 @@ export function AppShell() {
     void loadRelatedEssaySidecar(activeSourcePath).then((sidecar) => {
       if (cancelled) return;
       relatedItemsRef.current = sidecar.items;
-      relatedLinkedPathsRef.current = sidecar.linkedPaths;
-      const text = proofreadPlainTextAndPositions(tiptapEditor.state.doc).text;
       const hrefs = collectDocLinkHrefs(tiptapEditor.state.doc);
-      const linked = uniqueLinkedRelatedPaths({
+      relatedLinkedPathsRef.current = uniqueLinkedRelatedPaths({
         linkedPaths: sidecar.linkedPaths,
         items: sidecar.items,
         hrefs,
       });
-      relatedLinkedPathsRef.current = linked;
-      const issues =
-        linked.length >= MAX_RELATED_LINKS
-          ? []
-          : locateRelatedPhrasesInText(text, sidecar.items).filter(
-              (issue) => !issue.relatedPath || !linked.includes(issue.relatedPath),
-            );
-      persistRelatedIssues(issues);
-      refreshMechanicsProofread();
     });
     return () => {
       cancelled = true;
     };
-  }, [activeSourcePath, tiptapEditor, editorInstanceKey, persistRelatedIssues, refreshMechanicsProofread]);
+  }, [activeSourcePath, tiptapEditor, editorInstanceKey]);
 
   useEffect(() => {
     syncRelatedEssayLinkingRef({
-      onLinkEssay: ({ path }) => {
+      urlForPath: (path) => {
+        const item = relatedItemsRef.current.find((entry) => entry.path === path);
+        return item ? preferredRelatedUrl(item) : "";
+      },
+      resolveUrl: async (path, title) => {
         const linkedPath = path.trim();
-        if (!linkedPath) return;
+        const existing = relatedItemsRef.current.find((entry) => entry.path === linkedPath);
+        const fromItem = existing ? preferredRelatedUrl(existing) : "";
+        if (fromItem) return fromItem;
+        const href = await resolveRelatedEssayHref({
+          path: linkedPath,
+          title: title?.trim() || existing?.title,
+        });
+        if (href && existing) {
+          relatedItemsRef.current = relatedItemsRef.current.map((entry) =>
+            entry.path === linkedPath ? { ...entry, publicUrl: href } : entry,
+          );
+        }
+        return href;
+      },
+      applyLink: (from, to, href) => {
+        if (!tiptapEditor) return false;
+        return setLinkOnRange(tiptapEditor, from, to, href);
+      },
+      onLinkEssay: ({ path, start, end }) => {
+        const linkedPath = path.trim();
         const nextLinked = uniqueStrings([...relatedLinkedPathsRef.current, linkedPath]);
         relatedLinkedPathsRef.current = nextLinked;
         persistRelatedIssues(
-          relatedIssuesAfterLinking(relatedProofreadIssuesRef.current, nextLinked, linkedPath),
+          relatedIssuesAfterLinking(relatedProofreadIssuesRef.current, nextLinked, {
+            path: linkedPath,
+            start,
+            end,
+          }),
         );
         if (activeSourcePath) {
           void saveRelatedEssaySidecar(activeSourcePath, {
@@ -3249,7 +3277,7 @@ export function AppShell() {
         }
       },
     });
-  }, [activeSourcePath, persistRelatedIssues]);
+  }, [activeSourcePath, persistRelatedIssues, tiptapEditor]);
 
   const handleGenerateHeadlines = useCallback(async () => {
     if (!isTauriRuntime()) {
@@ -3257,7 +3285,7 @@ export function AppShell() {
       return;
     }
     if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
-      setHeadlinePairsError("Enable AI and add an API key in Settings → Sidebars first.");
+      setHeadlinePairsError("Enable AI and add an API key in Settings → Artificial Intelligence first.");
       return;
     }
     const essay = tiptapEditor
@@ -3287,7 +3315,7 @@ export function AppShell() {
       return;
     }
     if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
-      setHeadlinePairsError("Enable AI and add an API key in Settings → Sidebars first.");
+      setHeadlinePairsError("Enable AI and add an API key in Settings → Artificial Intelligence first.");
       return;
     }
     const essay = tiptapEditor
@@ -3821,6 +3849,7 @@ export function AppShell() {
       relatedExcerpt={relatedExcerpt}
       workspaceTree={workspaceTree}
       relatedAiReady={Boolean(aiCheckConfig?.enabled && aiCheckConfig.hasApiKey)}
+      showRelatedEssays={showRelatedEssays}
       onRelatedItemsFound={applyRelatedEssayItems}
       showCriteria={showCriteria}
       aiCheckEnabled={Boolean(
@@ -4227,6 +4256,8 @@ export function AppShell() {
         onShowPodcastNotesChange={handleShowPodcastNotesChange}
         showTitleGeneration={showTitleGeneration}
         onShowTitleGenerationChange={handleShowTitleGenerationChange}
+        showRelatedEssays={showRelatedEssays}
+        onShowRelatedEssaysChange={handleShowRelatedEssaysChange}
         criteria={activeCriteria}
         onCriteriaChange={updateActiveDocumentCriteria}
         publishUrl={publishUrl}

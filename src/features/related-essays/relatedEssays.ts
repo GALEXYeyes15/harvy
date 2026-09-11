@@ -8,8 +8,8 @@ import type { FileNode } from "../workspace/types";
 
 export const DOCUMENT_RELATED_SUFFIX = ".harvy-related.json";
 export const MAX_RELATED_CANDIDATES = 40;
-export const RELATED_EXCERPT_CHARS = 800;
-export const RELATED_DRAFT_CHARS = 4000;
+export const RELATED_EXCERPT_CHARS = 1200;
+export const RELATED_DRAFT_CHARS = 6000;
 
 export type RelatedEssayItem = {
   title: string;
@@ -84,6 +84,69 @@ export function preferredRelatedUrl(item: {
   notionUrl?: string;
 }): string {
   return item.publicUrl?.trim() || item.notionUrl?.trim() || "";
+}
+
+/** Notion page URLs work with the 32-char id, with or without hyphens. */
+export function notionUrlFromPageId(pageId: string): string {
+  const compact = pageId.replace(/-/g, "").trim().toLowerCase();
+  if (!/^[a-f0-9]{32}$/.test(compact)) return "";
+  return `https://www.notion.so/${compact}`;
+}
+
+export function relatedUrlsFromSources(opts: {
+  publicUrl?: string;
+  notionEssayUrl?: string;
+  notionParentUrl?: string;
+  notionEssayPageId?: string;
+  notionParentPageId?: string;
+}): { publicUrl: string; notionUrl: string } {
+  const publicUrl = opts.publicUrl?.trim() ?? "";
+  const notionUrl =
+    opts.notionEssayUrl?.trim() ||
+    opts.notionParentUrl?.trim() ||
+    notionUrlFromPageId(opts.notionEssayPageId ?? "") ||
+    notionUrlFromPageId(opts.notionParentPageId ?? "") ||
+    "";
+  return { publicUrl, notionUrl };
+}
+
+export async function loadRelatedUrlsForPath(
+  path: string,
+): Promise<{ publicUrl: string; notionUrl: string }> {
+  if (!isTauriRuntime() || !path.trim()) return { publicUrl: "", notionUrl: "" };
+  try {
+    const raw = await invoke<string>("read_workspace_text_file", { path });
+    const { meta } = parseDocumentFrontmatter(raw);
+    const sidecar = await loadNotionEssayLink(path);
+    return relatedUrlsFromSources({
+      publicUrl: meta.publicUrl || sidecar?.publicUrl,
+      notionEssayUrl: meta.notionEssayUrl || sidecar?.essayUrl,
+      notionParentUrl: meta.notionParentUrl || sidecar?.parentUrl,
+      notionEssayPageId: meta.notionEssayPageId || sidecar?.essayPageId,
+      notionParentPageId: meta.notionParentPageId || sidecar?.parentPageId,
+    });
+  } catch {
+    return { publicUrl: "", notionUrl: "" };
+  }
+}
+
+export async function hydrateRelatedItemUrls(
+  items: RelatedEssayItem[],
+): Promise<RelatedEssayItem[]> {
+  const out: RelatedEssayItem[] = [];
+  for (const item of items) {
+    if (preferredRelatedUrl(item) || !item.path.trim()) {
+      out.push(item);
+      continue;
+    }
+    const urls = await loadRelatedUrlsForPath(item.path);
+    out.push({
+      ...item,
+      publicUrl: urls.publicUrl || item.publicUrl || "",
+      notionUrl: urls.notionUrl || item.notionUrl || "",
+    });
+  }
+  return out;
 }
 
 export function parseRelatedEssayItems(raw: string): RelatedEssayItem[] {
@@ -197,13 +260,13 @@ async function loadCandidateFromPath(path: string): Promise<RelatedEssayCandidat
     const excerpt = excerptFromMarkdown(body);
     if (!excerpt) return null;
     const sidecar = await loadNotionEssayLink(path);
-    const publicUrl = meta.publicUrl.trim() || sidecar?.publicUrl.trim() || "";
-    const notionUrl =
-      meta.notionEssayUrl.trim() ||
-      sidecar?.essayUrl.trim() ||
-      meta.notionParentUrl.trim() ||
-      sidecar?.parentUrl.trim() ||
-      "";
+    const { publicUrl, notionUrl } = relatedUrlsFromSources({
+      publicUrl: meta.publicUrl || sidecar?.publicUrl,
+      notionEssayUrl: meta.notionEssayUrl || sidecar?.essayUrl,
+      notionParentUrl: meta.notionParentUrl || sidecar?.parentUrl,
+      notionEssayPageId: meta.notionEssayPageId || sidecar?.essayPageId,
+      notionParentPageId: meta.notionParentPageId || sidecar?.parentPageId,
+    });
     return {
       id: path,
       title: meta.postTitle.trim() || titleFromPath(path),

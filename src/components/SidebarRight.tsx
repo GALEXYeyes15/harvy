@@ -48,6 +48,8 @@ export type SidebarRightProps = {
   onToggleNotesPopout?: () => void;
   /** When on, Quick Links appears below Notes. */
   showQuickLinks?: boolean;
+  /** When on, Find Related Essays appears below Notes. */
+  showRelatedEssays?: boolean;
   relatedSourcePath?: string;
   relatedTitle?: string;
   relatedExcerpt?: string;
@@ -357,6 +359,7 @@ export function SidebarRight({
   onCriteriaChange,
   onToggleNotesPopout,
   showQuickLinks = false,
+  showRelatedEssays = true,
   relatedSourcePath = "",
   relatedTitle = "",
   relatedExcerpt = "",
@@ -392,6 +395,7 @@ export function SidebarRight({
             onNotesChange={onNotesChange}
             onTogglePopout={onToggleNotesPopout}
             showQuickLinks={showQuickLinks}
+            showRelatedEssays={showRelatedEssays}
             sourcePath={relatedSourcePath}
             relatedTitle={relatedTitle}
             relatedExcerpt={relatedExcerpt}
@@ -429,6 +433,7 @@ export function SidebarRight({
             onNotesChange={onNotesChange}
             onTogglePopout={onToggleNotesPopout}
             showQuickLinks={showQuickLinks}
+            showRelatedEssays={showRelatedEssays}
             sourcePath={relatedSourcePath}
             relatedTitle={relatedTitle}
             relatedExcerpt={relatedExcerpt}

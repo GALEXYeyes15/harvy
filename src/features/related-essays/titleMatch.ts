@@ -15,3 +15,19 @@ export function titlesMatch(a: string, b: string, minLength = 8): boolean {
   if (left.length < minLength || right.length < minLength) return false;
   return left.includes(right) || right.includes(left);
 }
+
+export function substackSlugFromTitle(title: string): string {
+  return normalizeEssayTitle(title).replace(/\s+/g, "-");
+}
+
+export function guessSubstackPostUrl(archiveUrl: string, title: string): string {
+  const slug = substackSlugFromTitle(title);
+  const raw = archiveUrl.trim();
+  if (!slug || !raw) return "";
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    return `${url.origin}/p/${slug}`;
+  } catch {
+    return "";
+  }
+}

@@ -153,6 +153,8 @@ type SettingsModalProps = {
   onShowPodcastNotesChange: (enabled: boolean) => void;
   showTitleGeneration: boolean;
   onShowTitleGenerationChange: (enabled: boolean) => void;
+  showRelatedEssays: boolean;
+  onShowRelatedEssaysChange: (enabled: boolean) => void;
   criteria: string;
   onCriteriaChange: (value: string) => void;
   publishUrl: string;
@@ -205,6 +207,8 @@ export function SettingsModal({
   onShowPodcastNotesChange,
   showTitleGeneration,
   onShowTitleGenerationChange,
+  showRelatedEssays,
+  onShowRelatedEssaysChange,
   criteria,
   onCriteriaChange,
   publishUrl,
@@ -296,16 +300,22 @@ export function SettingsModal({
                 onShowQuickLinksChange={onShowQuickLinksChange}
                 showCriteria={showCriteria}
                 onShowCriteriaChange={onShowCriteriaChange}
+                criteria={criteria}
+                onCriteriaChange={onCriteriaChange}
+                parametersPrefs={parametersPrefs}
+                onParametersPrefsChange={onParametersPrefsChange}
+              />
+            ) : null}
+            {activeSection === "ai" ? (
+              <ArtificialIntelligencePanel
                 showAiCheck={showAiCheck}
                 onShowAiCheckChange={onShowAiCheckChange}
                 showPodcastNotes={showPodcastNotes}
                 onShowPodcastNotesChange={onShowPodcastNotesChange}
                 showTitleGeneration={showTitleGeneration}
                 onShowTitleGenerationChange={onShowTitleGenerationChange}
-                criteria={criteria}
-                onCriteriaChange={onCriteriaChange}
-                parametersPrefs={parametersPrefs}
-                onParametersPrefsChange={onParametersPrefsChange}
+                showRelatedEssays={showRelatedEssays}
+                onShowRelatedEssaysChange={onShowRelatedEssaysChange}
               />
             ) : null}
             {activeSection === "export" ? (
@@ -702,12 +712,6 @@ function SidebarsPanel({
   onShowQuickLinksChange,
   showCriteria,
   onShowCriteriaChange,
-  showAiCheck,
-  onShowAiCheckChange,
-  showPodcastNotes,
-  onShowPodcastNotesChange,
-  showTitleGeneration,
-  onShowTitleGenerationChange,
   criteria,
   onCriteriaChange,
   parametersPrefs,
@@ -719,12 +723,6 @@ function SidebarsPanel({
   onShowQuickLinksChange: (enabled: boolean) => void;
   showCriteria: boolean;
   onShowCriteriaChange: (enabled: boolean) => void;
-  showAiCheck: boolean;
-  onShowAiCheckChange: (enabled: boolean) => void;
-  showPodcastNotes: boolean;
-  onShowPodcastNotesChange: (enabled: boolean) => void;
-  showTitleGeneration: boolean;
-  onShowTitleGenerationChange: (enabled: boolean) => void;
   criteria: string;
   onCriteriaChange: (value: string) => void;
   parametersPrefs: ParametersPrefs;
@@ -734,8 +732,6 @@ function SidebarsPanel({
   const [draftTitle, setDraftTitle] = useState("");
   const [draftUrl, setDraftUrl] = useState("");
   const [draftError, setDraftError] = useState<string | null>(null);
-  const [aiConfig, setAiConfig] = useState<AiCheckConfigPublic | null>(null);
-  const [aiToggleError, setAiToggleError] = useState<string | null>(null);
 
   useEffect(() => {
     savePersistedQuickLinks(links);
@@ -750,16 +746,6 @@ function SidebarsPanel({
     return () => window.removeEventListener(QUICK_LINKS_CHANGED_EVENT, sync);
   }, []);
 
-  useEffect(() => {
-    if (!isTauriRuntime()) return;
-    void getAiCheckConfig()
-      .then((next) => {
-        setAiConfig(next);
-        syncAiCheckPopoverPrefs(next);
-      })
-      .catch(() => setAiConfig(null));
-  }, []);
-
   function handleAdd() {
     const url = normalizeQuickLinkUrl(draftUrl);
     if (!url) {
@@ -772,6 +758,105 @@ function SidebarsPanel({
     setDraftUrl("");
     setDraftError(null);
   }
+
+  return (
+    <div className="space-y-5">
+      <SettingsSectionHeader
+        title="Sidebars"
+        description="Workspace files, Parameters, Criteria, and Quick Links."
+      />
+
+      <div>
+        <p className="mb-2 text-[12px] italic leading-snug text-muted/75">Left</p>
+        <div className={SETTINGS_BOX_PAD}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+            Change files
+          </p>
+          {workspaceRootPath ? (
+            <p className="mt-1 break-all text-[13px] font-medium tracking-tight text-ink">
+              {workspaceRootPath}
+            </p>
+          ) : (
+            <p className="mt-1 text-[13px] font-medium tracking-tight text-muted/80">
+              No folder selected
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void onChooseWorkspaceFolder?.()}
+            className="mt-3 rounded-md bg-page px-3 py-2 text-[12px] font-medium text-ink ring-1 ring-line/15 transition-colors hover:bg-ink/[0.04]"
+          >
+            {workspaceRootPath ? "Change folder" : "Choose folder"}
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-5">
+        <p className="text-[12px] italic leading-snug text-muted/75">Right</p>
+
+        <div>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+            Parameters
+          </p>
+          <ParametersFields prefs={parametersPrefs} onChange={onParametersPrefsChange} />
+        </div>
+
+        <CriteriaExpandableSettings
+          showCriteria={showCriteria}
+          onShowCriteriaChange={onShowCriteriaChange}
+          criteria={criteria}
+          onCriteriaChange={onCriteriaChange}
+        />
+
+        <QuickLinksExpandableSettings
+          showQuickLinks={showQuickLinks}
+          onShowQuickLinksChange={onShowQuickLinksChange}
+          links={links}
+          setLinks={setLinks}
+          draftTitle={draftTitle}
+          setDraftTitle={setDraftTitle}
+          draftUrl={draftUrl}
+          setDraftUrl={setDraftUrl}
+          draftError={draftError}
+          setDraftError={setDraftError}
+          onAdd={handleAdd}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ArtificialIntelligencePanel({
+  showAiCheck,
+  onShowAiCheckChange,
+  showPodcastNotes,
+  onShowPodcastNotesChange,
+  showTitleGeneration,
+  onShowTitleGenerationChange,
+  showRelatedEssays,
+  onShowRelatedEssaysChange,
+}: {
+  showAiCheck: boolean;
+  onShowAiCheckChange: (enabled: boolean) => void;
+  showPodcastNotes: boolean;
+  onShowPodcastNotesChange: (enabled: boolean) => void;
+  showTitleGeneration: boolean;
+  onShowTitleGenerationChange: (enabled: boolean) => void;
+  showRelatedEssays: boolean;
+  onShowRelatedEssaysChange: (enabled: boolean) => void;
+}) {
+  const [aiConfig, setAiConfig] = useState<AiCheckConfigPublic | null>(null);
+  const [aiToggleError, setAiToggleError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void getAiCheckConfig()
+      .then((next) => {
+        setAiConfig(next);
+        syncAiCheckPopoverPrefs(next);
+      })
+      .catch(() => setAiConfig(null));
+  }, []);
 
   const handleAiEnabledChange = (nextEnabled: boolean) => {
     setAiToggleError(null);
@@ -820,84 +905,28 @@ function SidebarsPanel({
   return (
     <div className="space-y-5">
       <SettingsSectionHeader
-        title="Sidebars"
-        description="Workspace files, Parameters, AI, and Quick Links."
+        title="Artificial Intelligence"
+        description="API key, models, and AI tools in the editor."
       />
-
-      <div>
-        <p className="mb-2 text-[12px] italic leading-snug text-muted/75">Left</p>
-        <div className={SETTINGS_BOX_PAD}>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-            Change files
-          </p>
-          {workspaceRootPath ? (
-            <p className="mt-1 break-all text-[13px] font-medium tracking-tight text-ink">
-              {workspaceRootPath}
-            </p>
-          ) : (
-            <p className="mt-1 text-[13px] font-medium tracking-tight text-muted/80">
-              No folder selected
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={() => void onChooseWorkspaceFolder?.()}
-            className="mt-3 rounded-md bg-page px-3 py-2 text-[12px] font-medium text-ink ring-1 ring-line/15 transition-colors hover:bg-ink/[0.04]"
-          >
-            {workspaceRootPath ? "Change folder" : "Choose folder"}
-          </button>
-        </div>
-      </div>
-
-      <div className="space-y-5">
-        <p className="text-[12px] italic leading-snug text-muted/75">Right</p>
-
-        <div>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-            Parameters
-          </p>
-          <ParametersFields prefs={parametersPrefs} onChange={onParametersPrefsChange} />
-        </div>
-
-        <CriteriaExpandableSettings
-          showCriteria={showCriteria}
-          onShowCriteriaChange={onShowCriteriaChange}
-          criteria={criteria}
-          onCriteriaChange={onCriteriaChange}
-        />
-
-        <AiCheckExpandableSettings
-          aiConfig={aiConfig}
-          aiToggleError={aiToggleError}
-          showAiCheck={showAiCheck}
-          onAiEnabledChange={handleAiEnabledChange}
-          onShowAiCheckChange={onShowAiCheckChange}
-          onAiShowReplaceChange={handleAiShowReplaceChange}
-          showPodcastNotes={showPodcastNotes}
-          onShowPodcastNotesChange={onShowPodcastNotesChange}
-          showTitleGeneration={showTitleGeneration}
-          onShowTitleGenerationChange={onShowTitleGenerationChange}
-          onAiConfigChange={(next) => {
-            setAiConfig(next);
-            syncAiCheckPopoverPrefs(next);
-            window.dispatchEvent(new CustomEvent("harvy:ai-check-config-changed"));
-          }}
-        />
-
-        <QuickLinksExpandableSettings
-          showQuickLinks={showQuickLinks}
-          onShowQuickLinksChange={onShowQuickLinksChange}
-          links={links}
-          setLinks={setLinks}
-          draftTitle={draftTitle}
-          setDraftTitle={setDraftTitle}
-          draftUrl={draftUrl}
-          setDraftUrl={setDraftUrl}
-          draftError={draftError}
-          setDraftError={setDraftError}
-          onAdd={handleAdd}
-        />
-      </div>
+      <AiCheckExpandableSettings
+        aiConfig={aiConfig}
+        aiToggleError={aiToggleError}
+        showAiCheck={showAiCheck}
+        onAiEnabledChange={handleAiEnabledChange}
+        onShowAiCheckChange={onShowAiCheckChange}
+        onAiShowReplaceChange={handleAiShowReplaceChange}
+        showPodcastNotes={showPodcastNotes}
+        onShowPodcastNotesChange={onShowPodcastNotesChange}
+        showTitleGeneration={showTitleGeneration}
+        onShowTitleGenerationChange={onShowTitleGenerationChange}
+        showRelatedEssays={showRelatedEssays}
+        onShowRelatedEssaysChange={onShowRelatedEssaysChange}
+        onAiConfigChange={(next) => {
+          setAiConfig(next);
+          syncAiCheckPopoverPrefs(next);
+          window.dispatchEvent(new CustomEvent("harvy:ai-check-config-changed"));
+        }}
+      />
     </div>
   );
 }
@@ -2623,6 +2652,8 @@ function AiCheckExpandableSettings({
   onShowPodcastNotesChange,
   showTitleGeneration,
   onShowTitleGenerationChange,
+  showRelatedEssays,
+  onShowRelatedEssaysChange,
   onAiConfigChange,
 }: {
   aiConfig: AiCheckConfigPublic | null;
@@ -2635,9 +2666,11 @@ function AiCheckExpandableSettings({
   onShowPodcastNotesChange: (enabled: boolean) => void;
   showTitleGeneration: boolean;
   onShowTitleGenerationChange: (enabled: boolean) => void;
+  showRelatedEssays: boolean;
+  onShowRelatedEssaysChange: (enabled: boolean) => void;
   onAiConfigChange: (config: AiCheckConfigPublic) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [titlePromptExpanded, setTitlePromptExpanded] = useState(false);
   const aiReady = isTauriRuntime() && Boolean(aiConfig?.hasApiKey && aiConfig?.enabled);
 
@@ -2690,6 +2723,12 @@ function AiCheckExpandableSettings({
             checked={showPodcastNotes}
             onChange={onShowPodcastNotesChange}
             disabled={!aiReady}
+          />
+          <ToggleRow
+            id="enable-related-essays"
+            label="Find Related Essays"
+            checked={showRelatedEssays}
+            onChange={onShowRelatedEssaysChange}
           />
           <ToggleRow
             id="enable-title-generation"

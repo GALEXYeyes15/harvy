@@ -86,6 +86,8 @@ pub fn run() {
             commands::write_headline_screenshot,
             commands::delete_headline_screenshot,
             commands::read_headline_screenshot,
+            commands::load_headline_shots,
+            commands::save_headline_shots,
             commands::write_text_file,
             commands::copy_file_into_directory,
             commands::write_bytes_into_directory,
