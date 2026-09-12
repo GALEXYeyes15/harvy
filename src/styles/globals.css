@@ -1906,6 +1906,16 @@
     background-color: color-mix(in oklab, var(--harvy-legend-color) 38%, transparent);
   }
 
+  /* Sidebar run actions — ink mixed into stage so the chip reads in every palette
+     (Tailwind dark:bg-white only shows on Classic Dark). */
+  .harvy-sidebar-run-btn {
+    background: color-mix(in oklab, var(--color-ink) 12%, var(--color-stage));
+  }
+
+  .harvy-sidebar-run-btn:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--color-ink) 18%, var(--color-stage));
+  }
+
   html.dark body {
     color-scheme: dark;
   }

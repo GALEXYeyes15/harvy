@@ -78,7 +78,7 @@ export function RelatedEssaysSidebarPanel({
         type="button"
         onClick={() => void handleFind()}
         disabled={running}
-        className="flex w-full items-center justify-center gap-2 rounded-md border border-ink bg-transparent px-3 py-2.5 text-[13px] font-medium text-ink transition-colors hover:bg-ink/[0.06] disabled:cursor-not-allowed disabled:opacity-45"
+        className="harvy-sidebar-run-btn flex w-full items-center justify-center gap-2 rounded-md px-3 py-2.5 text-[13px] font-medium text-ink disabled:cursor-not-allowed disabled:opacity-45"
       >
         <Zap size={14} strokeWidth={2} aria-hidden className="shrink-0" />
         <span>{running ? "Finding..." : "Find Related Essays"}</span>

@@ -46,7 +46,7 @@ export function QuickLinksSidebarPanel() {
 
   return (
     <section className="flex min-h-0 flex-col" aria-label="Quick Links">
-      <h3 className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/70">
+      <h3 className="text-[13px] font-semibold text-ink">
         Quick Links
       </h3>
 
