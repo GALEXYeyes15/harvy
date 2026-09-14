@@ -1,12 +1,9 @@
-import { Fragment, useCallback, useState } from "react";
-import { FolderOpen, FolderPlus, Settings } from "lucide-react";
+import { Fragment } from "react";
+import { FolderOpen, Settings } from "lucide-react";
 import { APP_NAME } from "../lib/constants";
 import { posixSegmentToFinderName } from "../features/workspace/finderFileNames";
 import { WorkspaceTree, WORKSPACE_ROW_SHELL_UNSELECTED } from "./WorkspaceTree";
 import type { FileNode } from "../features/workspace/types";
-
-/** Overline / micro-label — consistent with tools panel */
-const OVERLINE = "text-[10px] font-semibold uppercase tracking-[0.16em] text-muted/50";
 
 const CRUMB_BTN =
   "max-w-[min(100%,7rem)] truncate rounded px-0.5 text-left text-muted/55 transition-colors hover:bg-ink/[0.04] hover:text-muted sm:max-w-[10rem]";
@@ -92,8 +89,6 @@ type SidebarLeftProps = {
   onWorkspaceNavigateUp: () => void;
   onOpenSettings?: () => void;
   onOpenAbout?: () => void;
-  /** Create a new folder on disk under the current sidebar directory (desktop only). */
-  onCreateFolder?: () => void | Promise<void>;
   folderRenamePath?: string | null;
   folderRenameDraft?: string;
   onFolderRenameDraftChange?: (value: string) => void;
@@ -123,22 +118,12 @@ export function SidebarLeft({
   onWorkspaceNavigateUp,
   onOpenSettings,
   onOpenAbout,
-  onCreateFolder,
   folderRenamePath = null,
   folderRenameDraft = "",
   onFolderRenameDraftChange = () => {},
   onFolderRenameCommit = () => {},
   onFolderRenameCancel = () => {},
 }: SidebarLeftProps) {
-  /** Single hovered workspace row (by path) so only one row shows the “Open” action at a time. */
-  const [hoveredWorkspaceRowPath, setHoveredWorkspaceRowPath] = useState<string | null>(null);
-  const onWorkspaceRowPointerEnter = useCallback((path: string) => {
-    setHoveredWorkspaceRowPath(path);
-  }, []);
-  const onWorkspaceRowPointerLeave = useCallback((path: string) => {
-    setHoveredWorkspaceRowPath((current) => (current === path ? null : current));
-  }, []);
-
   const isWorkspaceRoot = breadcrumbFolderSegments.length === 0;
   const currentFolderTitle = isWorkspaceRoot
     ? posixSegmentToFinderName(breadcrumbRootDisplayLabel)
@@ -156,18 +141,8 @@ export function SidebarLeft({
         aria-hidden
       />
 
-      <div className="flex shrink-0 flex-col items-stretch pb-3 pl-[var(--harvy-sidebar-content-inset)] pr-2.5 pt-1">
-        <p className={OVERLINE}>Workspace</p>
-        <p className="mt-1.5 truncate text-[15px] font-semibold tracking-tight text-ink">{APP_NAME}</p>
-        <input
-          id="harvy-workspace-search"
-          type="search"
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search…"
-          className="mt-3 w-full rounded-md border-0 bg-mist px-2.5 py-2 text-[12px] text-ink"
-          aria-label="Search documents"
-        />
+      <div className="flex shrink-0 flex-col items-stretch pb-4 pl-[var(--harvy-sidebar-content-inset)] pr-2.5 pt-1">
+        <p className="harvy-app-wordmark truncate text-[21px] font-semibold tracking-tight text-ink">{APP_NAME} Editor</p>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -175,7 +150,7 @@ export function SidebarLeft({
           <div className="flex min-w-0 items-center justify-between gap-2">
             <nav
               aria-label="Workspace path"
-              className="min-w-0 flex-1 truncate text-[10px] font-normal leading-relaxed tracking-wide text-muted/55"
+              className="min-w-0 flex-1 truncate text-[11px] font-normal leading-relaxed tracking-wide text-muted/55"
               title={[
                 breadcrumbVolumeLabel,
                 posixSegmentToFinderName(breadcrumbRootDisplayLabel),
@@ -189,23 +164,17 @@ export function SidebarLeft({
                 onNavigate={onBreadcrumbNavigate}
               />
             </nav>
-            <div className="-translate-y-px flex shrink-0 items-center">
-              {workspaceSelected ? (
-                <button
-                  type="button"
-                  title="New Folder"
-                  aria-label="New folder"
-                  onClick={() => {
-                    void onCreateFolder?.();
-                  }}
-                  className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted/55 transition-[color,background-color] duration-150 ease-in-out hover:bg-ink/[0.07] hover:text-ink/90 dark:hover:bg-white/[0.06] dark:hover:text-white/90"
-                >
-                  <FolderPlus size={14} strokeWidth={1.5} aria-hidden />
-                </button>
-              ) : null}
-            </div>
           </div>
-          <div className={`group/title mt-1 ${WORKSPACE_ROW_SHELL_UNSELECTED}`}>
+          <input
+            id="harvy-workspace-search"
+            type="search"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search…"
+            className="mt-3 w-full rounded-md border-0 bg-mist px-2.5 py-2 text-[12px] text-ink"
+            aria-label="Search documents"
+          />
+          <div className={`group/title mt-3 ${WORKSPACE_ROW_SHELL_UNSELECTED}`}>
             <h2
               className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-snug tracking-tight text-ink"
               title={displayFolderTitle || undefined}
@@ -276,9 +245,6 @@ export function SidebarLeft({
                     expandedPaths={expandedPaths}
                     selectedPath={selectedPath}
                     openDocumentTrailPath={openDocumentTrailPath}
-                    hoveredRowPath={hoveredWorkspaceRowPath}
-                    onWorkspaceRowPointerEnter={onWorkspaceRowPointerEnter}
-                    onWorkspaceRowPointerLeave={onWorkspaceRowPointerLeave}
                     onToggleFolder={onToggleFolder}
                     onSelectNode={onSelectNode}
                     onOpenFolder={onOpenFolder}

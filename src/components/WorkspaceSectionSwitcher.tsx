@@ -59,9 +59,9 @@ export function WorkspaceSectionSwitcher({
             type="button"
             onClick={() => onSectionChange(section)}
             aria-current={active ? "page" : undefined}
-            className={`group relative flex w-full items-center justify-start py-1 pl-2 pr-1 text-left transition-colors ${
+            className={`group relative flex w-full items-center justify-start py-1 pl-2 pr-1 text-left ${
               chromeHidden ? "pointer-events-none" : "pointer-events-auto"
-            } ${active ? "text-ink" : "text-accent/60 hover:text-accent"}`}
+            } ${active ? "text-ink" : "text-accent/60"}`}
           >
             <span
               aria-hidden

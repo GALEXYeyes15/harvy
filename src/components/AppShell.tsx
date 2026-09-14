@@ -129,7 +129,6 @@ import {
 import {
   joinPath,
   parentDirectory,
-  resolveParentForNewFolder,
   sanitizeFileBasename,
   splitFileBaseAndExtension,
   validateFolderName,
@@ -2759,39 +2758,6 @@ export function AppShell() {
     }
   }, [reloadWorkspaceTree]);
 
-  async function handleCreateFolder() {
-    if (!isTauriRuntime()) {
-      window.alert("Creating folders requires the Harvy desktop app.");
-      return;
-    }
-    if (!hasWorkspaceFolder || !supportedTree) {
-      window.alert("Choose a workspace folder before creating folders.");
-      return;
-    }
-    skipFolderRenameCommitRef.current = false;
-    const parent = resolveParentForNewFolder(supportedTree, selectedPath, workspaceBrowsePath);
-    try {
-      const newPath = await invoke<string>("create_unique_directory", {
-        parentPath: parent,
-        baseName: "New Folder",
-      });
-      await reloadWorkspaceTree();
-      const bn = fileNameFromPath(newPath);
-      setExpandedPaths((prev) => new Set([...prev, parent]));
-      setSelectedPath(newPath);
-      const st = {
-        path: newPath,
-        draft: posixSegmentToFinderName(bn),
-        originalBasename: bn,
-      };
-      folderRenameRef.current = st;
-      setFolderRename(st);
-    } catch (e) {
-      console.error(e);
-      window.alert(e instanceof Error ? e.message : String(e));
-    }
-  }
-
   const editorTitle =
     activeDocument?.title ??
     (openTabIds.length === 0 ? scratchDocumentTitle : "Untitled");
@@ -3799,7 +3765,6 @@ export function AppShell() {
       onWorkspaceNavigateUp={closeWorkspaceOneLevel}
       onOpenSettings={() => setIsSettingsOpen(true)}
       onOpenAbout={() => setIsAboutOpen(true)}
-      onCreateFolder={handleCreateFolder}
       folderRenamePath={folderRename?.path ?? null}
       folderRenameDraft={folderRename?.draft ?? ""}
       onFolderRenameDraftChange={updateFolderRenameDraft}
@@ -4221,9 +4186,10 @@ export function AppShell() {
 
       {/* Right tools-panel toggle — window-shell anchored so Notes / layout changes never shift it. */}
       <div
-        className={`pointer-events-none absolute top-8 right-2 z-30 flex h-[2.125rem] items-center transition-opacity duration-500 ease-in-out ${
+        className={`pointer-events-none absolute right-2 z-30 flex h-[2.125rem] items-center transition-opacity duration-500 ease-in-out ${
           hideTopBarWhileTyping || focusModeActive ? "opacity-0" : "opacity-100"
         }`}
+        style={{ top: "calc(var(--harvy-tab-bar-height) + 0.25rem)" }}
       >
         <div className="pointer-events-auto shrink-0">
           <ChromeSidebarToggleButton

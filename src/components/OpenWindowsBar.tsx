@@ -131,8 +131,8 @@ export function OpenWindowsBar({
                       onClick={() => onSelectTab(item.id)}
                       className={
                         active
-                          ? "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[13px] font-semibold leading-tight text-ink/92"
-                          : "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-2 pr-2 text-left text-[13px] font-semibold leading-tight"
+                          ? "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-3.5 pr-2 text-left text-[13px] font-semibold leading-tight text-ink/92"
+                          : "flex min-w-0 flex-1 items-center overflow-hidden py-0.5 pl-3.5 pr-2 text-left text-[13px] font-semibold leading-tight"
                       }
                     >
                       <span className="min-w-0 flex-1 truncate">{item.title}</span>

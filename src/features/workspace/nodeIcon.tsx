@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { File, FileImage, FilePenLine, FileText, FileType, Folder, FolderOpen } from "lucide-react";
+import { ChevronRight, File, FileImage, FilePenLine, FileText, FileType, Folder } from "lucide-react";
 import type { FileNode } from "./types";
 import { IMAGE_EXTENSIONS } from "./tree";
 
@@ -12,11 +12,11 @@ function fileExtension(name: string): string | null {
 
 /**
  * Picks a Lucide icon for a workspace tree node.
- * Directories use open/closed folder icons; files map by extension.
+ * Directories always use the closed folder; files map by extension.
  */
-export function getNodeIcon(node: FileNode, isExpanded?: boolean): LucideIcon {
+export function getNodeIcon(node: FileNode): LucideIcon {
   if (node.kind === "directory") {
-    return isExpanded ? FolderOpen : Folder;
+    return Folder;
   }
 
   const ext = fileExtension(node.name);
@@ -47,13 +47,21 @@ export const WORKSPACE_ICON_PROPS = {
   "aria-hidden": true as const,
 };
 
-export function WorkspaceNodeIcon({
-  node,
-  isExpanded,
-}: {
-  node: FileNode;
-  isExpanded: boolean;
-}) {
-  const Icon = getNodeIcon(node, node.kind === "directory" ? isExpanded : undefined);
+/** Finder-style disclosure triangle — sits to the left of the folder icon. */
+export function WorkspaceFolderChevron({ expanded }: { expanded: boolean }) {
+  return (
+    <ChevronRight
+      size={12}
+      strokeWidth={2.25}
+      aria-hidden
+      className={`shrink-0 text-muted/55 transition-transform duration-200 ease-out ${
+        expanded ? "rotate-90" : "rotate-0"
+      }`}
+    />
+  );
+}
+
+export function WorkspaceNodeIcon({ node }: { node: FileNode }) {
+  const Icon = getNodeIcon(node);
   return <Icon {...WORKSPACE_ICON_PROPS} />;
 }

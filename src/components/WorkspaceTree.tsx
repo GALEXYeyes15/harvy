@@ -4,7 +4,7 @@ import { setWorkspaceImageDragData } from "../features/editor/imageDrop";
 import { armSidebarImagePointerDrag } from "../features/editor/sidebarImageDrag";
 import { posixSegmentToFinderName } from "../features/workspace/finderFileNames";
 import { isImagePreviewable } from "../features/workspace/tree";
-import { WorkspaceNodeIcon } from "../features/workspace/nodeIcon";
+import { WorkspaceFolderChevron, WorkspaceNodeIcon } from "../features/workspace/nodeIcon";
 import type { FileNode } from "../features/workspace/types";
 
 /** Unselected row chrome — reused by `SidebarLeft` folder title row for matching hover/padding. */
@@ -21,13 +21,9 @@ type WorkspaceTreeProps = {
   selectedPath: string | null;
   /** Deepest visible folder or file on the way to the open document. */
   openDocumentTrailPath?: string | null;
-  /** Path of the row currently hovered in the workspace list (lifted to sidebar for single-source truth). */
-  hoveredRowPath: string | null;
-  onWorkspaceRowPointerEnter: (path: string) => void;
-  onWorkspaceRowPointerLeave: (path: string) => void;
   onToggleFolder: (path: string) => void;
   onSelectNode: (node: FileNode) => void;
-  /** Navigate into this folder (sidebar); folders only. */
+  /** Navigate into this folder (sidebar); folders only. Double-click, like Finder. */
   onOpenFolder?: (node: FileNode) => void;
   /** Inline folder rename (path matches this directory row). */
   renamingPath?: string | null;
@@ -42,15 +38,44 @@ const DEPTH_STEP = 14;
 const ICON_GUTTER = 6;
 const FOLDER_ANIMATION_MS = 500;
 
+function WorkspaceFolderDisclosure({
+  name,
+  path,
+  isExpanded,
+  onToggleFolder,
+}: {
+  name: string;
+  path: string;
+  isExpanded: boolean;
+  onToggleFolder: (path: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={isExpanded ? `Collapse ${name}` : `Expand ${name}`}
+      aria-expanded={isExpanded}
+      className="-ml-3.5 inline-flex w-3.5 shrink-0 items-center justify-center self-stretch text-muted/55 hover:text-muted"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggleFolder(path);
+      }}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
+      <WorkspaceFolderChevron expanded={isExpanded} />
+    </button>
+  );
+}
+
 export function WorkspaceTree({
   node,
   depth = 0,
   expandedPaths,
   selectedPath,
   openDocumentTrailPath = null,
-  hoveredRowPath,
-  onWorkspaceRowPointerEnter,
-  onWorkspaceRowPointerLeave,
   onToggleFolder,
   onSelectNode,
   onOpenFolder,
@@ -62,7 +87,6 @@ export function WorkspaceTree({
 }: WorkspaceTreeProps) {
   const isDirectory = node.kind === "directory";
   const isExpanded = isDirectory ? expandedPaths.has(node.path) : false;
-  const isSelected = selectedPath === node.path;
   const isOpenDocumentTrail = openDocumentTrailPath === node.path;
   const isRenaming = Boolean(isDirectory && renamingPath === node.path);
   const isDraggableImage = !isDirectory && isImagePreviewable(node.path);
@@ -70,12 +94,11 @@ export function WorkspaceTree({
 
   const rowShell = isOpenDocumentTrail
     ? WORKSPACE_ROW_SHELL_SELECTED
-    : `relative overflow-hidden ${WORKSPACE_ROW_SHELL_UNSELECTED}`;
+    : `relative ${WORKSPACE_ROW_SHELL_UNSELECTED}`;
 
   const renameShell = `${rowShell} ring-1 ring-ink/12 ring-offset-0 ring-offset-transparent dark:ring-white/[0.08]`;
 
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const isThisRowHovered = hoveredRowPath === node.path;
   const [renderChildren, setRenderChildren] = useState(isExpanded);
   const [childrenOpen, setChildrenOpen] = useState(isExpanded);
 
@@ -106,6 +129,21 @@ export function WorkspaceTree({
   const childNodes = node.children ?? [];
   const hasChildren = childNodes.length > 0;
 
+  const disclosure = isDirectory ? (
+    <WorkspaceFolderDisclosure
+      name={displayName}
+      path={node.path}
+      isExpanded={isExpanded}
+      onToggleFolder={onToggleFolder}
+    />
+  ) : null;
+
+  const nodeIcon = (
+    <span className="inline-flex size-[13px] shrink-0 items-center justify-center">
+      <WorkspaceNodeIcon node={node} />
+    </span>
+  );
+
   return (
     <li>
       {isRenaming ? (
@@ -114,10 +152,9 @@ export function WorkspaceTree({
           style={{ paddingLeft }}
           onClick={(e) => e.stopPropagation()}
         >
+          {disclosure}
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="relative inline-flex size-[13px] shrink-0 items-center justify-center">
-              <WorkspaceNodeIcon node={node} isExpanded={isExpanded} />
-            </span>
+            {nodeIcon}
             <input
               ref={renameInputRef}
               type="text"
@@ -140,24 +177,19 @@ export function WorkspaceTree({
               onClick={(e) => e.stopPropagation()}
             />
           </div>
-          <div className="h-6 w-10 shrink-0" aria-hidden />
         </div>
       ) : (
-        <div
-          className={rowShell}
-          onMouseEnter={() => onWorkspaceRowPointerEnter(node.path)}
-          onMouseLeave={() => onWorkspaceRowPointerLeave(node.path)}
-        >
+        <div className={rowShell} style={{ paddingLeft }}>
           {isOpenDocumentTrail ? (
             <span
               className="pointer-events-none absolute inset-y-1 left-0 w-[2.5px] rounded-full bg-muted"
               aria-hidden
             />
           ) : null}
+          {disclosure}
           <button
             type="button"
             aria-current={isOpenDocumentTrail ? "true" : undefined}
-            aria-expanded={isDirectory ? isExpanded : undefined}
             // HTML5 drag works in the browser; desktop uses pointer drag (Tauri blocks HTML5 drops).
             draggable={isDraggableImage && !isTauriRuntime()}
             onDragStart={(event) => {
@@ -169,63 +201,24 @@ export function WorkspaceTree({
               armSidebarImagePointerDrag(event.nativeEvent, node.path, node.name);
             }}
             onClick={() => {
-              if (isDirectory) onToggleFolder(node.path);
               onSelectNode(node);
+            }}
+            onDoubleClick={(event) => {
+              if (!isDirectory || !onOpenFolder) return;
+              event.preventDefault();
+              onOpenFolder(node);
             }}
             className={`flex min-w-0 flex-1 items-center gap-2 border-0 bg-transparent p-0 text-left font-inherit text-inherit ${
               isDraggableImage ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
             }`}
-            style={{ paddingLeft }}
           >
-            {isDirectory ? (
-              <span className="relative inline-flex size-[13px] shrink-0 items-center justify-center">
-                <span
-                  className={`absolute inset-0 flex items-center justify-center transition-opacity duration-75 ease-out ${
-                    isThisRowHovered ? "opacity-0" : "opacity-100"
-                  }`}
-                >
-                  <WorkspaceNodeIcon node={node} isExpanded={isExpanded} />
-                </span>
-                <span
-                  className={`harvy-workspace-folder-chevron absolute inset-0 flex items-center justify-center font-mono text-[12px] leading-none ${
-                    isThisRowHovered ? "opacity-100" : "opacity-0"
-                  } ${
-                    isSelected ? "text-muted/80" : "text-muted/50"
-                  } ${isExpanded ? "rotate-90" : "rotate-0"}`}
-                  aria-hidden
-                >
-                  &gt;
-                </span>
-              </span>
-            ) : (
-              <WorkspaceNodeIcon node={node} isExpanded={isExpanded} />
-            )}
+            {nodeIcon}
             <span
               className={`min-w-0 flex-1 truncate leading-snug ${isOpenDocumentTrail ? "font-medium" : ""}`}
             >
               {displayName}
             </span>
           </button>
-          <div className="flex h-6 w-10 shrink-0 items-center justify-end">
-            {isDirectory && onOpenFolder ? (
-              <button
-                type="button"
-                aria-label={`Open folder ${displayName}`}
-                className={`rounded px-1.5 py-0.5 text-[10px] font-medium text-muted/65 transition-opacity duration-75 ease-out hover:bg-ink/[0.06] hover:text-ink ${
-                  isThisRowHovered
-                    ? "visible opacity-100 pointer-events-auto"
-                    : "invisible opacity-0 pointer-events-none"
-                }`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onOpenFolder(node);
-                }}
-              >
-                Open
-              </button>
-            ) : null}
-          </div>
         </div>
       )}
 
@@ -236,7 +229,7 @@ export function WorkspaceTree({
           }`}
         >
           <div className="min-h-0 overflow-hidden">
-            <ul className="mt-0.5 space-y-0.5">
+            <ul className="space-y-0.5">
               {childNodes.map((child) => (
                 <WorkspaceTree
                   key={child.path}
@@ -245,9 +238,6 @@ export function WorkspaceTree({
                   expandedPaths={expandedPaths}
                   selectedPath={selectedPath}
                   openDocumentTrailPath={openDocumentTrailPath}
-                  hoveredRowPath={hoveredRowPath}
-                  onWorkspaceRowPointerEnter={onWorkspaceRowPointerEnter}
-                  onWorkspaceRowPointerLeave={onWorkspaceRowPointerLeave}
                   onToggleFolder={onToggleFolder}
                   onSelectNode={onSelectNode}
                   onOpenFolder={onOpenFolder}
