@@ -19,16 +19,23 @@ export async function syncMechanicsProofread(
   setProofreadIssues: (issues: ProofreadIssue[]) => void,
   getExtraIssues?: () => ProofreadIssue[],
   setExtraIssues?: (issues: ProofreadIssue[]) => void,
+  options?: { includeLocalMechanics?: boolean },
 ): Promise<ProofreadIssue[]> {
-  try {
-    await ensureHunspellLoaded();
-  } catch {
-    // Typo-map spelling still works if dictionary load fails.
+  const includeLocalMechanics = options?.includeLocalMechanics !== false;
+
+  if (includeLocalMechanics) {
+    try {
+      await ensureHunspellLoaded();
+    } catch {
+      // Typo-map spelling still works if dictionary load fails.
+    }
   }
 
   const snapshot = proofreadPlainTextAndPositions(editor.state.doc);
 
-  const issues = filterIgnoredMechanicsSuggestions(runMechanicsProofread(snapshot.text));
+  const issues = includeLocalMechanics
+    ? filterIgnoredMechanicsSuggestions(runMechanicsProofread(snapshot.text))
+    : [];
   const reconciledExtra = reconcileAiIssuesInText(snapshot.text, getExtraIssues?.() ?? []);
   const extra = filterIgnoredMechanicsSuggestions(reconciledExtra);
   if (setExtraIssues) {

@@ -9,7 +9,7 @@ import type { FileNode } from "../features/workspace/types";
 
 /** Unselected row chrome — reused by `SidebarLeft` folder title row for matching hover/padding. */
 export const WORKSPACE_ROW_SHELL_UNSELECTED =
-  "flex w-full min-w-0 items-center rounded-md px-2 py-[5px] text-[12px] text-muted/90 transition-colors duration-100 ease-out hover:bg-ink/[0.035] hover:text-ink";
+  "flex w-full min-w-0 items-center rounded-md px-2 py-[10px] text-[12px] text-muted/90 transition-colors duration-100 ease-out hover:bg-ink/[0.035] hover:text-ink";
 
 const WORKSPACE_ROW_SHELL_SELECTED =
   "relative flex w-full min-w-0 items-center rounded-md bg-muted/[0.14] px-2 py-[5px] text-[12px] text-muted/90";
@@ -35,7 +35,7 @@ type WorkspaceTreeProps = {
 
 const DEPTH_STEP = 14;
 /** Extra inset so the open-document bar isn’t flush against the icon column. */
-const ICON_GUTTER = 6;
+const ICON_GUTTER = 18;
 const FOLDER_ANIMATION_MS = 500;
 
 function WorkspaceFolderDisclosure({

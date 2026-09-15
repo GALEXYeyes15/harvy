@@ -93,6 +93,10 @@ import {
   readCriteriaSidebarSettings,
   writeCriteriaSidebarSettings,
 } from "../features/sidebar/criteriaSidebarSettings";
+import {
+  readMechanicsSidebarSettings,
+  writeMechanicsSidebarSettings,
+} from "../features/sidebar/mechanicsSidebarSettings";
 import { SaveAsModal, type SaveAsOrganizeMode } from "./SaveAsModal";
 import type { EditorCommand } from "../features/editor/commands";
 import { documentTextForStats, ingestTextFileContent } from "../features/editor/documentMarkdown";
@@ -506,6 +510,9 @@ export function AppShell() {
   const [showCriteria, setShowCriteria] = useState(
     () => readCriteriaSidebarSettings().showCriteria,
   );
+  const [showMechanics, setShowMechanics] = useState(
+    () => readMechanicsSidebarSettings().showMechanics,
+  );
   const [publishUrl, setPublishUrl] = useState(
     () => readCriteriaSidebarSettings().publishUrl,
   );
@@ -709,6 +716,11 @@ export function AppShell() {
     if (!next.showCriteria) {
       setMode((current) => (current === "criteria" ? "notes" : current));
     }
+  }, []);
+
+  const handleShowMechanicsChange = useCallback((enabled: boolean) => {
+    const next = writeMechanicsSidebarSettings({ showMechanics: enabled });
+    setShowMechanics(next.showMechanics);
   }, []);
 
   const handlePublishUrlChange = useCallback((value: string) => {
@@ -2984,8 +2996,9 @@ export function AppShell() {
   }, [showReadabilityHighlights, tiptapEditor, parametersPrefs.fkComplexityThreshold]);
 
   useEffect(() => {
+    if (!showMechanics) return;
     void ensureHunspellLoaded();
-  }, []);
+  }, [showMechanics]);
 
   useEffect(() => {
     aiProofreadIssuesRef.current = aiProofreadIssues;
@@ -3062,8 +3075,11 @@ export function AppShell() {
   }, []);
 
   const extraProofreadIssues = useCallback(
-    () => [...aiProofreadIssuesRef.current, ...relatedProofreadIssuesRef.current],
-    [],
+    () =>
+      showMechanics
+        ? [...aiProofreadIssuesRef.current, ...relatedProofreadIssuesRef.current]
+        : [...relatedProofreadIssuesRef.current],
+    [showMechanics],
   );
 
   const persistExtraIssues = useCallback(
@@ -3086,6 +3102,7 @@ export function AppShell() {
         setProofreadIssues,
         extraProofreadIssues,
         persistExtraIssues,
+        { includeLocalMechanics: showMechanics },
       );
     };
 
@@ -3102,7 +3119,7 @@ export function AppShell() {
       tiptapEditor.off("update", onUpdate);
       if (debounceId) clearTimeout(debounceId);
     };
-  }, [tiptapEditor, editorEditable, extraProofreadIssues, persistExtraIssues]);
+  }, [tiptapEditor, editorEditable, extraProofreadIssues, persistExtraIssues, showMechanics]);
 
   const refreshMechanicsProofread = useCallback(() => {
     if (!tiptapEditor) return;
@@ -3111,11 +3128,12 @@ export function AppShell() {
       setProofreadIssues,
       extraProofreadIssues,
       persistExtraIssues,
+      { includeLocalMechanics: showMechanics },
     );
-  }, [tiptapEditor, extraProofreadIssues, persistExtraIssues]);
+  }, [tiptapEditor, extraProofreadIssues, persistExtraIssues, showMechanics]);
 
   const handleRunAiCheck = useCallback(async () => {
-    if (!tiptapEditor || !isTauriRuntime()) return;
+    if (!showMechanics || !showAiCheck || !tiptapEditor || !isTauriRuntime()) return;
     setMode("edit");
     setAiCheckRunning(true);
     setAiCheckError(null);
@@ -3140,13 +3158,14 @@ export function AppShell() {
         setProofreadIssues,
         () => [...located, ...relatedProofreadIssuesRef.current],
         persistExtraIssues,
+        { includeLocalMechanics: showMechanics },
       );
     } catch (e) {
       setAiCheckError(e instanceof Error ? e.message : String(e));
     } finally {
       setAiCheckRunning(false);
     }
-  }, [tiptapEditor, persistAiIssues, persistExtraIssues]);
+  }, [tiptapEditor, persistAiIssues, persistExtraIssues, showMechanics, showAiCheck]);
 
   const applyRelatedEssayItems = useCallback(
     async (items: RelatedEssayItem[]): Promise<string | null> => {
@@ -3817,8 +3836,12 @@ export function AppShell() {
       showRelatedEssays={showRelatedEssays}
       onRelatedItemsFound={applyRelatedEssayItems}
       showCriteria={showCriteria}
+      showMechanics={showMechanics}
       aiCheckEnabled={Boolean(
-        aiCheckConfig?.enabled && aiCheckConfig.hasApiKey && showAiCheck,
+        showMechanics &&
+          aiCheckConfig?.enabled &&
+          aiCheckConfig.hasApiKey &&
+          showAiCheck,
       )}
       aiCheckModelLabel={aiCheckModelDisplay}
       aiCheckRunning={aiCheckRunning}
@@ -4216,6 +4239,8 @@ export function AppShell() {
         onShowQuickLinksChange={handleShowQuickLinksChange}
         showCriteria={showCriteria}
         onShowCriteriaChange={handleShowCriteriaChange}
+        showMechanics={showMechanics}
+        onShowMechanicsChange={handleShowMechanicsChange}
         showAiCheck={showAiCheck}
         onShowAiCheckChange={handleShowAiCheckChange}
         showPodcastNotes={showPodcastNotes}

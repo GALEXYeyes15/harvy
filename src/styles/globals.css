@@ -1915,6 +1915,14 @@
     background: color-mix(in oklab, var(--color-ink) 18%, var(--color-stage));
   }
 
+  html.dark .harvy-sidebar-run-btn {
+    background: color-mix(in oklab, var(--color-ink) 7%, var(--color-stage));
+  }
+
+  html.dark .harvy-sidebar-run-btn:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--color-ink) 11%, var(--color-stage));
+  }
+
   html.dark body {
     color-scheme: dark;
   }

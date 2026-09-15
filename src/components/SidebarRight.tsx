@@ -58,6 +58,8 @@ export type SidebarRightProps = {
   onRelatedItemsFound?: (items: RelatedEssayItem[]) => Promise<string | null>;
   /** When on, Criteria appears as a tools tab (Write). */
   showCriteria?: boolean;
+  /** When on, Spellings / Grammar / Suggestions appear in Edit. */
+  showMechanics?: boolean;
   proofreadIssues?: ProofreadIssue[];
   workspaceSection?: WorkspaceSection;
   /** When AI check is configured + enabled in Settings. */
@@ -173,6 +175,7 @@ function EditSidebarView({
   stats,
   selectedWordCount,
   proofreadIssues = [],
+  showMechanics = true,
   aiCheckEnabled = false,
   aiCheckModelLabel = null,
   aiCheckRunning = false,
@@ -183,6 +186,7 @@ function EditSidebarView({
   stats: EditorStats;
   selectedWordCount: number | null;
   proofreadIssues?: ProofreadIssue[];
+  showMechanics?: boolean;
   aiCheckEnabled?: boolean;
   aiCheckModelLabel?: string | null;
   aiCheckRunning?: boolean;
@@ -244,30 +248,31 @@ function EditSidebarView({
           />
         </div>
 
-        <div className={`${DIVIDER} ${COMPACT_SECTION_GAP}`} aria-hidden />
-
-        <SectionLabel text="Mechanics" />
-
-        <div className={COMPACT_ROWS_GAP}>
-          <StatRow label={<ProofreadLabelAccent text="Spellings" type="spelling" />} value={spellings} />
-          <StatRow label={<ProofreadLabelAccent text="Grammar" type="grammar" />} value={grammar} />
-          <StatRow
-            label={<ProofreadLabelAccent text="Suggestions" type="suggestion" />}
-            value={suggestions}
-          />
-          {aiCheckEnabled || aiIssues > 0 ? (
-            <StatRow label={<ProofreadLabelAccent text="AI check" type="ai" />} value={aiIssues} />
-          ) : null}
-        </div>
-
-        {aiCheckEnabled ? (
-          <AiCheckRunControls
-            modelLabel={aiCheckModelLabel}
-            running={aiCheckRunning}
-            costLabel={aiCheckCostLabel}
-            error={aiCheckError}
-            onRun={onRunAiCheck}
-          />
+        {showMechanics ? (
+          <>
+            <div className={`${DIVIDER} ${COMPACT_SECTION_GAP}`} aria-hidden />
+            <SectionLabel text="Mechanics" />
+            <div className={COMPACT_ROWS_GAP}>
+              <StatRow label={<ProofreadLabelAccent text="Spellings" type="spelling" />} value={spellings} />
+              <StatRow label={<ProofreadLabelAccent text="Grammar" type="grammar" />} value={grammar} />
+              <StatRow
+                label={<ProofreadLabelAccent text="Suggestions" type="suggestion" />}
+                value={suggestions}
+              />
+              {aiCheckEnabled || aiIssues > 0 ? (
+                <StatRow label={<ProofreadLabelAccent text="AI check" type="ai" />} value={aiIssues} />
+              ) : null}
+            </div>
+            {aiCheckEnabled ? (
+              <AiCheckRunControls
+                modelLabel={aiCheckModelLabel}
+                running={aiCheckRunning}
+                costLabel={aiCheckCostLabel}
+                error={aiCheckError}
+                onRun={onRunAiCheck}
+              />
+            ) : null}
+          </>
         ) : null}
       </div>
     </div>
@@ -367,6 +372,7 @@ export function SidebarRight({
   relatedAiReady = false,
   onRelatedItemsFound,
   showCriteria = true,
+  showMechanics = true,
   proofreadIssues = [],
   workspaceSection = "write",
   aiCheckEnabled = false,
@@ -448,6 +454,7 @@ export function SidebarRight({
             stats={stats}
             selectedWordCount={selectedWordCount}
             proofreadIssues={proofreadIssues}
+            showMechanics={showMechanics}
             aiCheckEnabled={aiCheckEnabled}
             aiCheckModelLabel={aiCheckModelLabel}
             aiCheckRunning={aiCheckRunning}

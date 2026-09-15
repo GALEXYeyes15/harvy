@@ -147,6 +147,8 @@ type SettingsModalProps = {
   onShowQuickLinksChange: (enabled: boolean) => void;
   showCriteria: boolean;
   onShowCriteriaChange: (enabled: boolean) => void;
+  showMechanics: boolean;
+  onShowMechanicsChange: (enabled: boolean) => void;
   showAiCheck: boolean;
   onShowAiCheckChange: (enabled: boolean) => void;
   showPodcastNotes: boolean;
@@ -201,6 +203,8 @@ export function SettingsModal({
   onShowQuickLinksChange,
   showCriteria,
   onShowCriteriaChange,
+  showMechanics,
+  onShowMechanicsChange,
   showAiCheck,
   onShowAiCheckChange,
   showPodcastNotes,
@@ -300,6 +304,8 @@ export function SettingsModal({
                 onShowQuickLinksChange={onShowQuickLinksChange}
                 showCriteria={showCriteria}
                 onShowCriteriaChange={onShowCriteriaChange}
+                showMechanics={showMechanics}
+                onShowMechanicsChange={onShowMechanicsChange}
                 criteria={criteria}
                 onCriteriaChange={onCriteriaChange}
                 parametersPrefs={parametersPrefs}
@@ -308,6 +314,7 @@ export function SettingsModal({
             ) : null}
             {activeSection === "ai" ? (
               <ArtificialIntelligencePanel
+                showMechanics={showMechanics}
                 showAiCheck={showAiCheck}
                 onShowAiCheckChange={onShowAiCheckChange}
                 showPodcastNotes={showPodcastNotes}
@@ -712,6 +719,8 @@ function SidebarsPanel({
   onShowQuickLinksChange,
   showCriteria,
   onShowCriteriaChange,
+  showMechanics,
+  onShowMechanicsChange,
   criteria,
   onCriteriaChange,
   parametersPrefs,
@@ -723,6 +732,8 @@ function SidebarsPanel({
   onShowQuickLinksChange: (enabled: boolean) => void;
   showCriteria: boolean;
   onShowCriteriaChange: (enabled: boolean) => void;
+  showMechanics: boolean;
+  onShowMechanicsChange: (enabled: boolean) => void;
   criteria: string;
   onCriteriaChange: (value: string) => void;
   parametersPrefs: ParametersPrefs;
@@ -763,7 +774,7 @@ function SidebarsPanel({
     <div className="space-y-5">
       <SettingsSectionHeader
         title="Sidebars"
-        description="Workspace files, Parameters, Criteria, and Quick Links."
+        description="Workspace files, Parameters, Mechanics, Criteria, and Quick Links."
       />
 
       <div>
@@ -801,6 +812,18 @@ function SidebarsPanel({
           <ParametersFields prefs={parametersPrefs} onChange={onParametersPrefsChange} />
         </div>
 
+        <div className={SETTINGS_BOX_EXPANDABLE}>
+          <ul>
+            <ToggleRow
+              id="enable-mechanics-sidebar"
+              label="Mechanics"
+              description="Spellings, grammar, suggestions, and AI Check in Edit. Turn off to use another checker."
+              checked={showMechanics}
+              onChange={onShowMechanicsChange}
+            />
+          </ul>
+        </div>
+
         <CriteriaExpandableSettings
           showCriteria={showCriteria}
           onShowCriteriaChange={onShowCriteriaChange}
@@ -827,6 +850,7 @@ function SidebarsPanel({
 }
 
 function ArtificialIntelligencePanel({
+  showMechanics,
   showAiCheck,
   onShowAiCheckChange,
   showPodcastNotes,
@@ -836,6 +860,7 @@ function ArtificialIntelligencePanel({
   showRelatedEssays,
   onShowRelatedEssaysChange,
 }: {
+  showMechanics: boolean;
   showAiCheck: boolean;
   onShowAiCheckChange: (enabled: boolean) => void;
   showPodcastNotes: boolean;
@@ -911,6 +936,7 @@ function ArtificialIntelligencePanel({
       <AiCheckExpandableSettings
         aiConfig={aiConfig}
         aiToggleError={aiToggleError}
+        showMechanics={showMechanics}
         showAiCheck={showAiCheck}
         onAiEnabledChange={handleAiEnabledChange}
         onShowAiCheckChange={onShowAiCheckChange}
@@ -2644,6 +2670,7 @@ function HeadlinePromptSettings() {
 function AiCheckExpandableSettings({
   aiConfig,
   aiToggleError,
+  showMechanics,
   showAiCheck,
   onAiEnabledChange,
   onShowAiCheckChange,
@@ -2658,6 +2685,7 @@ function AiCheckExpandableSettings({
 }: {
   aiConfig: AiCheckConfigPublic | null;
   aiToggleError: string | null;
+  showMechanics: boolean;
   showAiCheck: boolean;
   onAiEnabledChange: (enabled: boolean) => void;
   onShowAiCheckChange: (enabled: boolean) => void;
@@ -2706,16 +2734,19 @@ function AiCheckExpandableSettings({
           <ToggleRow
             id="enable-ai-check"
             label="Show AI Check"
+            description={
+              showMechanics ? undefined : "Turn on Mechanics in Sidebars first."
+            }
             checked={showAiCheck}
             onChange={onShowAiCheckChange}
-            disabled={!aiReady}
+            disabled={!aiReady || !showMechanics}
           />
           <ToggleRow
             id="ai-check-show-replace"
             label="Show In-Line Replacements"
             checked={aiConfig?.showReplaceSuggestions !== false}
             onChange={onAiShowReplaceChange}
-            disabled={!aiReady}
+            disabled={!aiReady || !showMechanics}
           />
           <ToggleRow
             id="enable-podcast-notes"
