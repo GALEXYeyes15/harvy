@@ -221,7 +221,7 @@ export function OutlierDetailModal({ open, post, onClose }: OutlierDetailModalPr
       maxWidthClass="max-w-[min(560px,calc(100vw-3rem))]"
       panelSizeClassName="flex h-[min(820px,90vh)] w-full max-w-[min(560px,calc(100vw-3rem))] max-h-[90vh] min-h-0"
       bodyClassName="min-h-0 flex-1 overflow-y-auto px-5 pb-6 pt-1"
-      panelClassName="dark:bg-[#121212]"
+      panelClassName="dark:bg-canvas"
     >
       <div className="space-y-5">
         <header className="flex items-start gap-3">

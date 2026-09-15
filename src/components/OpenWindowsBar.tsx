@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { useCallback } from "react";
 import { tabNavLeadingPadding } from "../features/chrome/tabNavChromeInsets";
 import type { PageTab } from "../features/tabs/pageTabs";
@@ -80,7 +80,7 @@ export function OpenWindowsBar({
       >
         {/* Padding box is itself the drag target for the gap left of the arrows. */}
         <div
-          className={`flex h-full shrink-0 items-stretch gap-px ${LEADING_PAD_SYNC}`}
+          className={`harvy-tab-nav flex h-full shrink-0 items-stretch gap-px ${LEADING_PAD_SYNC}`}
           style={{ paddingLeft: leadingNavPadding }}
           data-harvy-window-drag
         >
@@ -108,7 +108,7 @@ export function OpenWindowsBar({
         <div className="flex min-h-0 min-w-0 flex-1 items-stretch" data-harvy-window-drag>
           <div className="h-full max-w-full min-w-0 overflow-x-auto overflow-y-visible overscroll-x-contain whitespace-nowrap [mask-image:linear-gradient(90deg,#000_0%,#000_calc(100%-1rem),transparent)] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <div
-              className="relative flex h-full w-max min-h-0 min-w-0 flex-nowrap items-stretch gap-px pb-0 pl-1 pr-2 pt-0"
+              className="relative flex h-full w-max min-h-0 min-w-0 flex-nowrap items-stretch pb-0 pr-2 pt-0"
               role="tablist"
               aria-label="Open pages"
             >
@@ -120,7 +120,7 @@ export function OpenWindowsBar({
                     className={
                       active
                         ? "harvy-page-tab harvy-page-tab--active relative z-10 box-border flex w-[160px] shrink-0 items-stretch rounded-t-none rounded-b-none bg-stage pl-0 pr-2"
-                        : "harvy-page-tab harvy-page-tab--idle relative z-0 flex w-[160px] shrink-0 items-stretch rounded-none bg-transparent pr-2 text-muted/40 transition-colors hover:bg-ink/[0.03] hover:text-muted/65"
+                        : "harvy-page-tab harvy-page-tab--idle relative z-0 flex w-[160px] shrink-0 items-stretch rounded-none bg-transparent pr-2 text-muted/40 transition-colors hover:text-muted/80"
                     }
                   >
                     <button
@@ -150,13 +150,13 @@ export function OpenWindowsBar({
                         e.stopPropagation();
                         onCloseTab(item.id);
                       }}
-                      className={`harvy-page-tab-close absolute top-0 right-2 bottom-0 z-10 flex items-center rounded px-1 text-[12px] leading-none hover:bg-ink/[0.06] focus-visible:opacity-100 focus-visible:pointer-events-auto ${
+                      className={`harvy-page-tab-close absolute top-1/2 right-1 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md hover:bg-ink/[0.08] focus-visible:opacity-100 focus-visible:pointer-events-auto ${
                         active
                           ? "text-accent/70 hover:text-accent"
                           : "text-accent/40 hover:text-accent/70"
                       }`}
                     >
-                      ×
+                      <X size={16} strokeWidth={1.75} aria-hidden />
                     </button>
                   </div>
                 );
@@ -165,9 +165,9 @@ export function OpenWindowsBar({
                 type="button"
                 aria-label="Create new page"
                 onClick={onCreateTab}
-                className="flex w-8 shrink-0 items-center justify-center text-[15px] leading-none text-accent/60 transition-colors hover:bg-ink/[0.04] hover:text-accent"
+                className="flex w-8 shrink-0 items-center justify-center text-accent/60 transition-colors hover:bg-ink/[0.04] hover:text-accent"
               >
-                +
+                <Plus size={16} strokeWidth={1.75} aria-hidden />
               </button>
             </div>
           </div>

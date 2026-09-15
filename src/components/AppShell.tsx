@@ -137,7 +137,7 @@ import {
   splitFileBaseAndExtension,
   validateFolderName,
 } from "../features/workspace/folderNaming";
-import { finderNameToPosixSegment, posixSegmentToFinderName } from "../features/workspace/finderFileNames";
+import { finderNameToPosixSegment } from "../features/workspace/finderFileNames";
 import {
   browsePathFromFolderSegments,
   filterFileTree,

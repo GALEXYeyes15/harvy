@@ -143,26 +143,26 @@ export const DEFAULT_LIGHT_PALETTE: StylePalette = {
   canvas: "#faf7f2",
   panel: "#faf7f2",
   stage: "#faf7f2",
-  mist: "#f6f2eb",
+  mist: "#eeeae5",
   page: "#faf7f2",
   ink: "#2a2622",
-  muted: "#6e6860",
-  accent: "#5f6a7a",
+  muted: "#7f7d7b",
+  accent: "#7f7d7b",
   line: "#e0d8cf",
-  focusRing: "#5f6a7a",
+  focusRing: "#7f7d7b",
 };
 
 export const DEFAULT_DARK_PALETTE: StylePalette = {
-  canvas: "#121212",
-  panel: "#151515",
-  stage: "#1a1a1a",
-  mist: "#171717",
-  page: "#1d1d1d",
+  canvas: "#191919",
+  panel: "#191919",
+  stage: "#191919",
+  mist: "#1e1f20",
+  page: "#191919",
   ink: "#e5e5e5",
-  muted: "#a1a1a1",
-  accent: "#6a7588",
+  muted: "#787878",
+  accent: "#787878",
   line: "#ffffff14",
-  focusRing: "#6a7588",
+  focusRing: "#787878",
 };
 
 export const CYBER_LIGHT_PALETTE: StylePalette = {
@@ -716,7 +716,7 @@ export function stageBackgroundRgb(
       if (rgb) return rgb;
     }
   }
-  return resolvedTheme === "dark" ? [26, 26, 26] : [250, 247, 242];
+  return resolvedTheme === "dark" ? [25, 25, 25] : [250, 247, 242];
 }
 
 function hexToRgb(hex: string): [number, number, number] | null {

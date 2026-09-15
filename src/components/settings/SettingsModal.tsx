@@ -1183,7 +1183,7 @@ function AppearancePanel({
             subtitle={systemPrefersDark ? "(System)" : undefined}
             selected={classicDarkSelected}
             bodyFontId="libre-baskerville"
-            previewStyle={{ backgroundColor: "#1d1d1d", color: "#e5e5e5" }}
+            previewStyle={{ backgroundColor: "#191919", color: "#e5e5e5" }}
             onSelect={selectClassicDark}
             onEdit={openEditClassic}
           />
