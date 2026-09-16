@@ -1,6 +1,7 @@
 import type { WorkspaceDocument } from "../workspace/types";
 
-/** One open page tab in the shell chrome (order is defined by `openTabIds` in AppShell). */
+/** Cap on untitled tabs created from the tab-strip add button. */
+export const MAX_OPEN_PAGE_TABS = 7;
 export type PageTab = {
   id: string;
   title: string;

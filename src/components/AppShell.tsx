@@ -177,6 +177,11 @@ import {
   serializeDocumentWithFrontmatter,
 } from "../features/editor/documentFrontmatter";
 import { EMPTY_NOTION_ESSAY_FIELDS, type FileNode, type WorkspaceDocument } from "../features/workspace/types";
+import { searchWorkspaceMarkdown } from "../features/workspace/markdownSearch";
+import {
+  applyWorkspaceSearchHighlight,
+  clearWorkspaceSearchHighlight,
+} from "../features/editor/workspaceSearchHighlight";
 import {
   excerptFromMarkdown,
   loadRelatedEssaySidecar,
@@ -201,7 +206,7 @@ import {
   resolveRelatedEssayHref,
   type PublishedUrlUpdate,
 } from "../features/related-essays/matchPublishedUrls";
-import { nextActiveTabIdAfterClose, toPageTabs } from "../features/tabs/pageTabs";
+import { MAX_OPEN_PAGE_TABS, nextActiveTabIdAfterClose, toPageTabs } from "../features/tabs/pageTabs";
 import {
   defaultPdfFileName,
   defaultPodcastNotesPdfFileName,
@@ -444,6 +449,9 @@ export function AppShell() {
   /** Left-to-right order of open tabs; each id must exist in `openDocuments` while the tab is open. */
   const [openTabIds, setOpenTabIds] = useState<string[]>(() => [HARVY_DEFAULT_UNTITLED_TAB_ID]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchHits, setSearchHits] = useState<FileNode[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const pendingSearchRevealRef = useRef<{ path: string; query: string } | null>(null);
   const [mode, setMode] = useState<SidebarToolsMode>("notes");
   const [activeWorkspaceSection, setActiveWorkspaceSection] = useState<WorkspaceSection>("write");
   /** After Research’s first paint, animate padding with sidebar toggles. */
@@ -1181,7 +1189,37 @@ export function AppShell() {
 
   const hasWorkspaceFolder = Boolean(workspaceRootPath && supportedTree);
 
+  useEffect(() => {
+    const needle = searchQuery.trim();
+    if (!needle || !hasWorkspaceFolder) {
+      setSearchHits(null);
+      setIsSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setIsSearching(true);
+    const timer = window.setTimeout(() => {
+      void searchWorkspaceMarkdown(needle)
+        .then((hits) => {
+          if (!cancelled) setSearchHits(hits);
+        })
+        .catch(() => {
+          if (!cancelled) setSearchHits([]);
+        })
+        .finally(() => {
+          if (!cancelled) setIsSearching(false);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [searchQuery, hasWorkspaceFolder]);
+
   const workspaceListRoots = useMemo(() => {
+    if (searchQuery.trim()) {
+      return searchHits ?? [];
+    }
     const base = filteredTree ?? supportedTree;
     if (!base) return [];
     const anchor =
@@ -1191,7 +1229,7 @@ export function AppShell() {
           (supportedTree ? findNodeByPath(supportedTree, workspaceBrowsePath) : null);
     if (!anchor || anchor.kind !== "directory") return [];
     return filterFileTree(anchor.children ?? []);
-  }, [filteredTree, supportedTree, workspaceBrowsePath]);
+  }, [filteredTree, supportedTree, workspaceBrowsePath, searchQuery, searchHits]);
 
   const breadcrumbAnchorPath = workspaceBrowsePath ?? supportedTree?.path ?? null;
 
@@ -1398,12 +1436,13 @@ export function AppShell() {
   }, []);
 
   const createUntitledTab = useCallback(() => {
+    if (openTabIds.length >= MAX_OPEN_PAGE_TABS) return;
     const id = `harvy:untitled:${Math.random().toString(36).slice(2, 10)}`;
     const nextDoc = createUntitledWorkspaceDocument(id);
     setOpenDocuments((prev) => ({ ...prev, [id]: nextDoc }));
     setOpenTabIds((prev) => [...prev, id]);
     setActiveTabId(id);
-  }, []);
+  }, [openTabIds.length]);
 
   function updateActiveDocumentContent(nextValue: string) {
     if (activeTabId) {
@@ -2603,6 +2642,37 @@ export function AppShell() {
     setOpenTabIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   }
 
+  const tryApplyPendingSearchReveal = useCallback((editor: Editor | null, tabId: string | null) => {
+    const pending = pendingSearchRevealRef.current;
+    if (!pending || !editor || tabId !== pending.path) return;
+    if (applyWorkspaceSearchHighlight(editor, pending.query)) {
+      pendingSearchRevealRef.current = null;
+    }
+  }, []);
+
+  async function handleRevealSearchHit(node: FileNode) {
+    const query = searchQuery.trim();
+    if (!query || node.kind !== "file") return;
+    pendingSearchRevealRef.current = { path: node.path, query };
+    await selectNode(node);
+    tryApplyPendingSearchReveal(tiptapEditor, activeTabId === node.path ? node.path : null);
+  }
+
+  useEffect(() => {
+    tryApplyPendingSearchReveal(tiptapEditor, activeTabId);
+  }, [tiptapEditor, activeTabId, activeDocument?.content, tryApplyPendingSearchReveal]);
+
+  useEffect(() => {
+    if (!tiptapEditor) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-harvy-search-hit]")) return;
+      clearWorkspaceSearchHighlight(tiptapEditor.view);
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => window.removeEventListener("pointerdown", onPointerDown, true);
+  }, [tiptapEditor]);
+
   async function handleCreateMarkdownFile() {
     if (!isTauriRuntime()) {
       window.alert("Creating files on disk requires the Harvy desktop app.");
@@ -3777,8 +3847,10 @@ export function AppShell() {
       expandedPaths={expandedPaths}
       searchQuery={searchQuery}
       onSearchChange={setSearchQuery}
+      isSearching={isSearching}
       onToggleFolder={toggleFolder}
       onSelectNode={selectNode}
+      onRevealSearchHit={handleRevealSearchHit}
       onOpenFolder={openWorkspaceFolder}
       onBreadcrumbNavigate={navigateBreadcrumbDisplayIndex}
       onWorkspaceNavigateUp={closeWorkspaceOneLevel}

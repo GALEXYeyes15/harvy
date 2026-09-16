@@ -82,8 +82,10 @@ type SidebarLeftProps = {
   expandedPaths: Set<string>;
   searchQuery: string;
   onSearchChange: (value: string) => void;
+  isSearching?: boolean;
   onToggleFolder: (path: string) => void;
   onSelectNode: (node: FileNode) => void;
+  onRevealSearchHit?: (node: FileNode) => void;
   onOpenFolder: (node: FileNode) => void;
   onBreadcrumbNavigate: (segmentIndex: number) => void;
   onWorkspaceNavigateUp: () => void;
@@ -111,8 +113,10 @@ export function SidebarLeft({
   expandedPaths,
   searchQuery,
   onSearchChange,
+  isSearching = false,
   onToggleFolder,
   onSelectNode,
+  onRevealSearchHit,
   onOpenFolder,
   onBreadcrumbNavigate,
   onWorkspaceNavigateUp,
@@ -209,6 +213,9 @@ export function SidebarLeft({
             {isLoading ? (
               <p className="py-2 text-[12px] leading-relaxed text-muted/80">Loading workspace…</p>
             ) : null}
+            {!isLoading && isSearching ? (
+              <p className="py-2 text-[12px] leading-relaxed text-muted/80">Searching…</p>
+            ) : null}
             {!isLoading && !workspaceSelected ? (
               <div className="py-3">
                 <p className="text-[12px] leading-relaxed text-muted/80">
@@ -230,12 +237,12 @@ export function SidebarLeft({
             {!isLoading && workspaceSelected && !loadError && !workspaceHasData ? (
               <p className="py-2 text-[12px] leading-relaxed text-muted/80">Workspace is empty.</p>
             ) : null}
-            {!isLoading && workspaceSelected && !loadError && workspaceHasData && workspaceRoots.length === 0 ? (
+            {!isLoading && !isSearching && workspaceSelected && !loadError && workspaceHasData && workspaceRoots.length === 0 ? (
               <p className="py-2 text-[12px] leading-relaxed text-muted/80">
                 {searchQuery.trim() ? "No matching items." : "Nothing to show in this folder."}
               </p>
             ) : null}
-            {!isLoading && workspaceSelected && !loadError && workspaceRoots.length > 0 ? (
+            {!isLoading && !isSearching && workspaceSelected && !loadError && workspaceRoots.length > 0 ? (
               <ul className="space-y-0.5">
                 {workspaceRoots.map((node) => (
                   <WorkspaceTree
@@ -247,6 +254,7 @@ export function SidebarLeft({
                     openDocumentTrailPath={openDocumentTrailPath}
                     onToggleFolder={onToggleFolder}
                     onSelectNode={onSelectNode}
+                    onRevealSearchHit={onRevealSearchHit}
                     onOpenFolder={onOpenFolder}
                     renamingPath={folderRenamePath}
                     renameDraft={folderRenameDraft}

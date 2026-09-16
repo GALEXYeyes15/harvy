@@ -3,6 +3,8 @@ export type FileNode = {
   path: string;
   kind: "file" | "directory";
   children?: FileNode[];
+  /** Phrase matches in this file when the workspace search is active. */
+  searchHitCount?: number;
 };
 
 export type WorkspaceDocument = {

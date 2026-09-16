@@ -23,6 +23,8 @@ type WorkspaceTreeProps = {
   openDocumentTrailPath?: string | null;
   onToggleFolder: (path: string) => void;
   onSelectNode: (node: FileNode) => void;
+  /** Open this search hit and highlight the current query in the editor. */
+  onRevealSearchHit?: (node: FileNode) => void;
   /** Navigate into this folder (sidebar); folders only. Double-click, like Finder. */
   onOpenFolder?: (node: FileNode) => void;
   /** Inline folder rename (path matches this directory row). */
@@ -78,6 +80,7 @@ export function WorkspaceTree({
   openDocumentTrailPath = null,
   onToggleFolder,
   onSelectNode,
+  onRevealSearchHit,
   onOpenFolder,
   renamingPath = null,
   renameDraft = "",
@@ -219,6 +222,21 @@ export function WorkspaceTree({
               {displayName}
             </span>
           </button>
+          {typeof node.searchHitCount === "number" ? (
+            <button
+              type="button"
+              data-harvy-search-hit
+              aria-label={`Show ${node.searchHitCount} ${node.searchHitCount === 1 ? "match" : "matches"} in ${displayName}`}
+              className="shrink-0 text-[11px] leading-snug text-muted/55"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                (onRevealSearchHit ?? onSelectNode)(node);
+              }}
+            >
+              ({node.searchHitCount} found)
+            </button>
+          ) : null}
         </div>
       )}
 
@@ -240,6 +258,7 @@ export function WorkspaceTree({
                   openDocumentTrailPath={openDocumentTrailPath}
                   onToggleFolder={onToggleFolder}
                   onSelectNode={onSelectNode}
+                  onRevealSearchHit={onRevealSearchHit}
                   onOpenFolder={onOpenFolder}
                   renamingPath={renamingPath}
                   renameDraft={renameDraft}

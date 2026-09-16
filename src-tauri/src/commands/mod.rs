@@ -244,6 +244,118 @@ pub fn get_workspace_tree(app: AppHandle) -> Result<FileNode, String> {
     build_tree(&canonical_root, 0, &root_label)
 }
 
+const MAX_MARKDOWN_SEARCH_BYTES: u64 = 2 * 1024 * 1024;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MarkdownSearchHit {
+    pub path: String,
+    pub name: String,
+    pub count: usize,
+}
+
+pub(crate) fn count_needle(haystack: &str, needle: &str) -> usize {
+    if needle.is_empty() {
+        return 0;
+    }
+    let hay = haystack.to_lowercase();
+    let pin = needle.to_lowercase();
+    let mut count = 0usize;
+    let mut start = 0usize;
+    while let Some(found) = hay[start..].find(&pin) {
+        count += 1;
+        start += found + pin.len();
+        if start >= hay.len() {
+            break;
+        }
+    }
+    count
+}
+
+fn is_markdown_search_file(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.ends_with(".md") || lower.ends_with(".markdown") || lower.ends_with(".mkd")
+}
+
+fn should_skip_search_dir(name: &str) -> bool {
+    name.starts_with('.') || name.eq_ignore_ascii_case("notes")
+}
+
+fn collect_markdown_search_hits(dir: &Path, needle: &str, out: &mut Vec<MarkdownSearchHit>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        let name = entry.file_name().to_string_lossy().to_string();
+        if file_type.is_dir() {
+            if should_skip_search_dir(&name) {
+                continue;
+            }
+            collect_markdown_search_hits(&path, needle, out);
+            continue;
+        }
+        if !file_type.is_file() || !is_markdown_search_file(&name) {
+            continue;
+        }
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        if meta.len() > MAX_MARKDOWN_SEARCH_BYTES {
+            continue;
+        }
+        let Ok(text) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let stem = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let mut haystack = String::with_capacity(stem.len() + 1 + text.len());
+        haystack.push_str(&stem);
+        haystack.push('\n');
+        haystack.push_str(&text);
+        let count = count_needle(&haystack, needle);
+        if count == 0 {
+            continue;
+        }
+        out.push(MarkdownSearchHit {
+            path: path.to_string_lossy().to_string(),
+            name,
+            count,
+        });
+    }
+}
+
+/// Search Markdown files under the workspace root for a case-insensitive phrase.
+#[tauri::command]
+pub fn search_workspace_markdown(app: AppHandle, query: String) -> Result<Vec<MarkdownSearchHit>, String> {
+    let needle = query.trim();
+    if needle.is_empty() {
+        return Ok(Vec::new());
+    }
+    let root = canonical(&workspace_root_dir(&app)?)?;
+    let mut hits = Vec::new();
+    collect_markdown_search_hits(&root, needle, &mut hits);
+    hits.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| cmp_natural_ignore_case(&a.name, &b.name)));
+    Ok(hits)
+}
+
+#[cfg(test)]
+mod markdown_search_tests {
+    use super::count_needle;
+
+    #[test]
+    fn counts_case_insensitive_non_overlapping_phrases() {
+        assert_eq!(count_needle("Burnout and burnout.", "burnout"), 2);
+        assert_eq!(count_needle("aaa", "aa"), 1);
+        assert_eq!(count_needle("Hello world", "xyz"), 0);
+        assert_eq!(count_needle("", "burnout"), 0);
+    }
+}
+
 /// Localized volume name for the filesystem containing `path` (e.g. `Macintosh HD` on macOS).
 #[tauri::command]
 pub fn get_volume_display_name_for_path(app: AppHandle, path: String) -> Result<String, String> {

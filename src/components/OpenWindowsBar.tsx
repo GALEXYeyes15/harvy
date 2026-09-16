@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { useCallback } from "react";
 import { tabNavLeadingPadding } from "../features/chrome/tabNavChromeInsets";
-import type { PageTab } from "../features/tabs/pageTabs";
+import { MAX_OPEN_PAGE_TABS, type PageTab } from "../features/tabs/pageTabs";
 
 const TAB_NAV_BTN =
   "flex h-full w-7 shrink-0 items-center justify-center rounded text-accent/50 transition-colors hover:bg-ink/[0.04] hover:text-accent/85 disabled:pointer-events-none disabled:opacity-25";
@@ -150,10 +150,8 @@ export function OpenWindowsBar({
                         e.stopPropagation();
                         onCloseTab(item.id);
                       }}
-                      className={`harvy-page-tab-close absolute top-1/2 right-1 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md hover:bg-ink/[0.08] focus-visible:opacity-100 focus-visible:pointer-events-auto ${
-                        active
-                          ? "text-accent/70 hover:text-accent"
-                          : "text-accent/40 hover:text-accent/70"
+                      className={`harvy-page-tab-close absolute top-1/2 right-1 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center focus-visible:opacity-100 focus-visible:pointer-events-auto ${
+                        active ? "text-accent/70" : "text-accent/40"
                       }`}
                     >
                       <X size={16} strokeWidth={1.75} aria-hidden />
@@ -161,14 +159,16 @@ export function OpenWindowsBar({
                   </div>
                 );
               })}
-              <button
-                type="button"
-                aria-label="Create new page"
-                onClick={onCreateTab}
-                className="flex w-8 shrink-0 items-center justify-center text-accent/60 transition-colors hover:bg-ink/[0.04] hover:text-accent"
-              >
-                <Plus size={16} strokeWidth={1.75} aria-hidden />
-              </button>
+              {tabs.length < MAX_OPEN_PAGE_TABS ? (
+                <button
+                  type="button"
+                  aria-label="Create new page"
+                  onClick={onCreateTab}
+                  className="flex w-8 shrink-0 items-center justify-center text-accent/60"
+                >
+                  <Plus size={16} strokeWidth={1.75} aria-hidden />
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

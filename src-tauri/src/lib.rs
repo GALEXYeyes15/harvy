@@ -79,6 +79,7 @@ pub fn run() {
             commands::get_workspace_root,
             commands::set_workspace_root,
             commands::get_workspace_tree,
+            commands::search_workspace_markdown,
             commands::get_volume_display_name_for_path,
             commands::read_workspace_text_file,
             commands::import_workspace_image,

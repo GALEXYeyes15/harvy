@@ -1754,6 +1754,17 @@
     background-color: color-mix(in oklab, var(--color-ink) 14%, transparent);
   }
 
+  .ProseMirror-harvy .harvy-workspace-search-hit {
+    background-color: color-mix(in oklab, var(--color-ink) 16%, var(--color-page));
+    border-radius: 2px;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  html.dark .ProseMirror-harvy .harvy-workspace-search-hit {
+    background-color: color-mix(in oklab, var(--color-ink) 22%, transparent);
+  }
+
   /* Native webview spellcheck (Chromium/WebKit `::spelling-error`) — red wavy, minimal layout impact */
   .ProseMirror-harvy ::spelling-error {
     text-decoration-line: underline;
