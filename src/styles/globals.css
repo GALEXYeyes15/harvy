@@ -1085,11 +1085,6 @@
     background: color-mix(in oklab, var(--color-ink) 6%, transparent);
   }
 
-  .harvy-export-submenu {
-    position: relative;
-    min-width: 12.5rem;
-  }
-
   .harvy-workspace-folder-children {
     display: grid;
     grid-template-rows: 0fr;

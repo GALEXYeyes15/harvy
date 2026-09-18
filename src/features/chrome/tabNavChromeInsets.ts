@@ -1,5 +1,5 @@
 /** Back / forward tab nav buttons in {@link OpenWindowsBar} — `w-7`. */
-export const TAB_NAV_BTN_WIDTH = "1.25rem";
+export const TAB_NAV_BTN_WIDTH = "1.75rem";
 
 /** Left padding before the back button (matches tab bar nav group). */
 export function tabNavLeadingPadding(

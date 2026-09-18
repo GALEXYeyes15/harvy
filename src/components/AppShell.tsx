@@ -24,7 +24,6 @@ import { SidebarLeft } from "./SidebarLeft";
 import { ChromeSidebarToggleButton } from "./ChromeSidebarToggleButton";
 import { SidebarRight } from "./SidebarRight";
 import { EditorToolbar } from "./EditorToolbar";
-import { EditorAmbientControls } from "./EditorAmbientControls";
 import {
   FOCUS_MODE_DURATION_MS,
   FocusModeModal,
@@ -153,6 +152,11 @@ import {
   type PdfTextRun,
 } from "../features/workspace/pdfImport";
 import { isPathUnderWorkspaceRoot, normalizeFsPath } from "../features/workspace/workspacePaths";
+import {
+  readLastOpenDocumentRelative,
+  rememberLastOpenDocument,
+  resolveLastOpenDocumentAbsPath,
+} from "../features/workspace/lastOpenDocument";
 import {
   isExactOpenDocument,
   resolveOpenDocumentPath,
@@ -448,6 +452,8 @@ export function AppShell() {
   const [activeTabId, setActiveTabId] = useState<string | null>(() => HARVY_DEFAULT_UNTITLED_TAB_ID);
   /** Left-to-right order of open tabs; each id must exist in `openDocuments` while the tab is open. */
   const [openTabIds, setOpenTabIds] = useState<string[]>(() => [HARVY_DEFAULT_UNTITLED_TAB_ID]);
+  const [pendingLastOpenPath, setPendingLastOpenPath] = useState<string | null>(null);
+  const [lastOpenRestoreDone, setLastOpenRestoreDone] = useState(() => !isTauriRuntime());
   const [searchQuery, setSearchQuery] = useState("");
   const [searchHits, setSearchHits] = useState<FileNode[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -473,7 +479,7 @@ export function AppShell() {
     () => readWorkspaceSettings().collectViewOrder,
   );
   const [collectItems, setCollectItems] = useState<CollectItem[]>(() => loadPersistedCollectItems());
-  const [isWorkspaceSidebarOpen, setIsWorkspaceSidebarOpen] = useState(true);
+  const [isWorkspaceSidebarOpen, setIsWorkspaceSidebarOpen] = useState(false);
   /** `null` = browse at the selected workspace root. */
   const [workspaceBrowsePath, setWorkspaceBrowsePath] = useState<string | null>(null);
   /** Folder names under the workspace root — excludes volume label. */
@@ -511,7 +517,7 @@ export function AppShell() {
   const [podcastNotesPreviewError, setPodcastNotesPreviewError] = useState<string | null>(null);
   const podcastNotesGenerationRef = useRef(0);
   const [isTopChromeHidden, setIsTopChromeHidden] = useState(false);
-  const [readabilityPanelOpen, setReadabilityPanelOpen] = useState(true);
+  const [readabilityPanelOpen, setReadabilityPanelOpen] = useState(false);
   const [showQuickLinks, setShowQuickLinks] = useState(
     () => readQuickLinksSettings().showQuickLinks,
   );
@@ -620,6 +626,10 @@ export function AppShell() {
   const editorFocusSuppressedRef = useRef(false);
   const editorFocusBeforeSaveAsRef = useRef<boolean | null>(null);
   const printDocumentRef = useRef<() => void>(() => {});
+  const copyDocumentRef = useRef<() => void | Promise<void>>(async () => {});
+  const publishDocumentRef = useRef<() => void | Promise<void>>(async () => {});
+  const podcastNotesPdfRef = useRef<() => void | Promise<void>>(async () => {});
+  const notionSyncRef = useRef<() => void | Promise<void>>(async () => {});
 
   const setEditorInactive = useCallback((inactive: boolean) => {
     editorFocusSuppressedRef.current = inactive;
@@ -848,8 +858,6 @@ export function AppShell() {
   const hideDocumentTitleWhileTyping =
     focusModeActive ||
     (isTopChromeHidden && !focusVisibilityPrefs.keepDocumentTitleVisibleWhileTyping);
-  const hideBottomToolsWhileTyping =
-    isTopChromeHidden && !focusVisibilityPrefs.keepBottomToolsVisibleWhileTyping;
   /** Collect/Write rail: always hidden in Focus mode; otherwise follows typing chrome. */
   const hideWorkspaceSectionRail = focusModeActive || isTopChromeHidden;
   const openTabIdsRef = useRef(openTabIds);
@@ -858,6 +866,9 @@ export function AppShell() {
   const scratchDocumentTitleRef = useRef(scratchDocumentTitle);
   const scratchDiskPathRef = useRef(scratchDiskPath);
   const handleCreateMarkdownFileRef = useRef<() => Promise<void>>(async () => {});
+  const selectNodeRef = useRef<
+    (node: FileNode, options?: { reload?: boolean; skipDirtyPrompt?: boolean }) => Promise<void>
+  >(async () => {});
   const notionEssayLinkRef = useRef<NotionEssayLink | null>(null);
   const lastNotionSyncedRef = useRef("");
   const notionSyncedPathRef = useRef<string | null>(null);
@@ -903,14 +914,12 @@ export function AppShell() {
     return result;
   }, [currentTitleRenameSnapshot]);
 
-  const editorTypingActivityHandlerRef = useRef<(() => void) | null>(null);
   const bothSidebarsClosed = !isWorkspaceSidebarOpen && !readabilityPanelOpen;
 
   const emitEditorTypingActivity = useCallback(() => {
     if (bothSidebarsClosed) {
       setIsTopChromeHidden(true);
     }
-    editorTypingActivityHandlerRef.current?.();
   }, [bothSidebarsClosed]);
 
   const toggleLeftSidebar = useCallback(() => {
@@ -923,7 +932,7 @@ export function AppShell() {
     setReadabilityPanelOpen((open) => !open);
   }, [focusModeActive]);
 
-  /** Bottom bar: snap both rails to the same state — both on unless both already on, then both off. */
+  /** Snap both rails to the same state — both on unless both already on, then both off. */
   const toggleBothSidebars = useCallback(() => {
     if (focusModeActive) return;
     if (isWorkspaceSidebarOpen && readabilityPanelOpen) {
@@ -1154,19 +1163,28 @@ export function AppShell() {
           setWorkspaceRootPath(null);
           setWorkspaceTree(null);
           setIsLoadingTree(false);
+          setLastOpenRestoreDone(true);
           return;
         }
         setWorkspaceRootPath(root);
+        const lastRelative = readLastOpenDocumentRelative();
+        const lastAbs = lastRelative ? resolveLastOpenDocumentAbsPath(root, lastRelative) : null;
         const tree = await reloadWorkspaceTree();
-        if (cancelled || !tree) return;
+        if (cancelled || !tree) {
+          if (!cancelled) setLastOpenRestoreDone(true);
+          return;
+        }
         setExpandedPaths(new Set());
         setSelectedPath(tree.path);
         setBreadcrumbFolderSegments([]);
+        if (lastAbs) setPendingLastOpenPath(lastAbs);
+        else setLastOpenRestoreDone(true);
       } catch (error) {
         if (!cancelled) {
           setWorkspaceError(
             `Could not load workspace. ${error instanceof Error ? error.message : String(error)}`,
           );
+          setLastOpenRestoreDone(true);
         }
       } finally {
         if (!cancelled) setIsLoadingTree(false);
@@ -2032,6 +2050,7 @@ export function AppShell() {
     setEditorInactive,
     runPodcastNotesGeneration,
   ]);
+  podcastNotesPdfRef.current = performExportPodcastNotesPdf;
 
   const retryPodcastNotesPreview = useCallback(() => {
     if (podcastNotesRunning || saveAsSubmitting) return;
@@ -2318,8 +2337,12 @@ export function AppShell() {
     setFileMenuHandlers({
       save: () => void performSave(),
       saveAs: () => void openSaveAsModal(),
+      copyDocument: () => void copyDocumentRef.current(),
       exportPdf: () => void performExportPdf(),
       print: () => printDocumentRef.current(),
+      publish: () => void publishDocumentRef.current(),
+      podcastNotesPdf: () => void podcastNotesPdfRef.current(),
+      syncWithNotion: () => void notionSyncRef.current(),
       newMarkdownFile: () => void handleCreateMarkdownFileRef.current(),
     });
   }, [performSave, openSaveAsModal, performExportPdf]);
@@ -2335,13 +2358,45 @@ export function AppShell() {
       openResearch: () => {
         if (enableCollect) handleWorkspaceSectionChange("collect");
       },
+      setShowResearch: handleEnableCollectChange,
+      openFocusMode: () => setIsFocusModeOpen(true),
+      endFocusMode: () => {
+        endFocusMode();
+        setIsFocusModeOpen(false);
+      },
     });
-  }, [enableCollect, handleWorkspaceSectionChange]);
+  }, [enableCollect, endFocusMode, handleEnableCollectChange, handleWorkspaceSectionChange]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
-    void setupNativeAppMenu().catch((err) => console.error("Native app menu:", err));
-  }, []);
+    void setupNativeAppMenu({
+      showResearch: enableCollect,
+      focusModeActive,
+      publishEnabled: Boolean(normalizeQuickLinkUrl(publishUrl)),
+      podcastNotesEnabled: Boolean(
+        showPodcastNotes && aiCheckConfig?.enabled && aiCheckConfig.hasApiKey,
+      ),
+      podcastNotesRunning:
+        podcastNotesRunning ||
+        podcastNotesPreviewOpen ||
+        (saveAsModalOpen && saveAsPurpose === "podcast-notes"),
+      notionSyncEnabled: notionConnected,
+      notionSyncRunning: notionSyncRunning,
+    }).catch((err) => console.error("Native app menu:", err));
+  }, [
+    enableCollect,
+    focusModeActive,
+    publishUrl,
+    showPodcastNotes,
+    aiCheckConfig?.enabled,
+    aiCheckConfig?.hasApiKey,
+    podcastNotesRunning,
+    podcastNotesPreviewOpen,
+    saveAsModalOpen,
+    saveAsPurpose,
+    notionConnected,
+    notionSyncRunning,
+  ]);
 
   useEffect(() => setupWindowDragRegions(), []);
 
@@ -2527,7 +2582,7 @@ export function AppShell() {
     );
   }
 
-  async function selectNode(node: FileNode, options?: { reload?: boolean }) {
+  async function selectNode(node: FileNode, options?: { reload?: boolean; skipDirtyPrompt?: boolean }) {
     if (node.kind === "directory") {
       setSelectedPath(node.path);
       return;
@@ -2550,7 +2605,7 @@ export function AppShell() {
       return;
     }
 
-    if (isDirty && node.path !== activeTabId) {
+    if (isDirty && node.path !== activeTabId && !options?.skipDirtyPrompt) {
       const ok = window.confirm("Discard unsaved changes and open this file?");
       if (!ok) return;
     }
@@ -2641,6 +2696,54 @@ export function AppShell() {
     setActiveTabId(id);
     setOpenTabIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   }
+  selectNodeRef.current = selectNode;
+
+  useEffect(() => {
+    if (!pendingLastOpenPath || !hasWorkspaceFolder) return;
+    const path = pendingLastOpenPath;
+    let cancelled = false;
+    void (async () => {
+      try {
+        if (!isTextPreviewable(path)) {
+          rememberLastOpenDocument(workspaceRootPath, null);
+          return;
+        }
+        const exists = await invoke<boolean>("path_exists", { path });
+        if (cancelled) return;
+        if (!exists) {
+          rememberLastOpenDocument(workspaceRootPath, null);
+          return;
+        }
+        await selectNodeRef.current(
+          { name: fileNameFromPath(path), path, kind: "file" },
+          { skipDirtyPrompt: true },
+        );
+        if (cancelled) return;
+        setOpenTabIds((prev) => prev.filter((id) => id !== HARVY_DEFAULT_UNTITLED_TAB_ID));
+        setOpenDocuments((prev) => {
+          const untitled = prev[HARVY_DEFAULT_UNTITLED_TAB_ID];
+          if (!untitled || isDocumentDirty(untitled)) return prev;
+          const { [HARVY_DEFAULT_UNTITLED_TAB_ID]: _removed, ...rest } = prev;
+          return rest;
+        });
+      } catch (error) {
+        console.error("Could not restore last document:", error);
+      } finally {
+        if (!cancelled) {
+          setPendingLastOpenPath(null);
+          setLastOpenRestoreDone(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingLastOpenPath, hasWorkspaceFolder, workspaceRootPath]);
+
+  useEffect(() => {
+    if (!lastOpenRestoreDone) return;
+    rememberLastOpenDocument(workspaceRootPath, openDocumentPath);
+  }, [lastOpenRestoreDone, workspaceRootPath, openDocumentPath]);
 
   const tryApplyPendingSearchReveal = useCallback((editor: Editor | null, tabId: string | null) => {
     const pending = pendingSearchRevealRef.current;
@@ -3448,6 +3551,9 @@ export function AppShell() {
   const handleCopyDocument = useCallback(async () => {
     return copyDocumentToClipboard(tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath);
   }, [tiptapEditor, copyDocumentFallbackMarkdown, workspaceRootPath]);
+  copyDocumentRef.current = () => {
+    void handleCopyDocument();
+  };
 
   const handlePrintDocument = useCallback(() => {
     void printDocumentFromEditor(
@@ -3581,6 +3687,7 @@ export function AppShell() {
       tiptapEditor,
     ],
   );
+  notionSyncRef.current = () => void performNotionEssaySync();
 
   const handlePublishDocument = useCallback(async () => {
     const destination = normalizeQuickLinkUrl(publishUrl);
@@ -3610,6 +3717,7 @@ export function AppShell() {
     workspaceRootPath,
     performNotionEssaySync,
   ]);
+  publishDocumentRef.current = handlePublishDocument;
 
   useEffect(() => {
     const payload = `${notionEssayTitle}\0${activeDocument?.content ?? scratchDraftContent}`;
@@ -3987,10 +4095,8 @@ export function AppShell() {
     paddingRight:
       sidebarOverlayLayout && readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0,
   };
-  /** Write column: clear the Collect/Write rail so title/body aren’t flush against it. */
-  const writeInsetStyle = showWorkspaceNavigation
-    ? { paddingLeft: WORKSPACE_SECTION_SWITCHER_WIDTH_PX }
-    : undefined;
+  /** Write column: keep the Collect/Write rail inset even when Research is hidden. */
+  const writeInsetStyle = { paddingLeft: WORKSPACE_SECTION_SWITCHER_WIDTH_PX };
 
   const editorPanelSection = (
     <div className="flex min-h-0 w-full flex-1 justify-center overflow-hidden bg-stage">
@@ -4088,33 +4194,6 @@ export function AppShell() {
               editor={tiptapEditor}
               isEditable={editorEditable}
               onApplyFormat={runEditorFormatCommand}
-            />
-            <EditorAmbientControls
-              activityHandlerRef={editorTypingActivityHandlerRef}
-              onToggleBothSidebars={toggleBothSidebars}
-              onOpenFocusMode={() => setIsFocusModeOpen(true)}
-              focusModeActive={focusModeActive}
-              focusRemainingLabel={
-                focusModeActive ? formatFocusRemaining(focusRemainingMs) : undefined
-              }
-              onCopyDocument={handleCopyDocument}
-              onPublish={handlePublishDocument}
-              publishEnabled={Boolean(normalizeQuickLinkUrl(publishUrl))}
-              onPodcastNotesPdf={performExportPodcastNotesPdf}
-              onPrint={handlePrintDocument}
-              podcastNotesEnabled={Boolean(
-                showPodcastNotes && aiCheckConfig?.enabled && aiCheckConfig.hasApiKey,
-              )}
-              podcastNotesRunning={
-                podcastNotesRunning ||
-                podcastNotesPreviewOpen ||
-                (saveAsModalOpen && saveAsPurpose === "podcast-notes")
-              }
-              onSyncWithNotion={() => void performNotionEssaySync()}
-              notionSyncEnabled={notionConnected}
-              notionSyncRunning={notionSyncRunning}
-              syncWithChrome
-              chromeHidden={hideBottomToolsWhileTyping && !focusModeActive}
             />
           </div>
         </div>

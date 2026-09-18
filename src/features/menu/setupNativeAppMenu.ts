@@ -1,4 +1,4 @@
-import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
+import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getFileMenuHandlers } from "./fileMenuBridge";
 import { getViewMenuHandlers } from "./viewMenuBridge";
@@ -8,12 +8,33 @@ function isLikelyMac(): boolean {
   return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
 }
 
+export type NativeAppMenuOptions = {
+  /** When true, Research is shown in the workspace and Open Research is enabled. */
+  showResearch?: boolean;
+  /** When true, End Focus Mode is enabled. */
+  focusModeActive?: boolean;
+  publishEnabled?: boolean;
+  podcastNotesEnabled?: boolean;
+  podcastNotesRunning?: boolean;
+  notionSyncEnabled?: boolean;
+  notionSyncRunning?: boolean;
+};
+
 /**
- * Installs a native application / window menu with File actions (macOS menu bar when applicable).
+ * Installs a native application / window menu (macOS menu bar when applicable).
  *
  * Save As opens Harvy’s in-app Save As sheet; choosing Where uses the native folder picker.
+ * Rebuild when Research, Focus, or Export availability changes so items stay in sync.
  */
-export async function setupNativeAppMenu(): Promise<void> {
+export async function setupNativeAppMenu(options: NativeAppMenuOptions = {}): Promise<void> {
+  const showResearch = options.showResearch ?? true;
+  const focusModeActive = options.focusModeActive ?? false;
+  const publishEnabled = options.publishEnabled ?? false;
+  const podcastNotesEnabled = options.podcastNotesEnabled ?? false;
+  const podcastNotesRunning = options.podcastNotesRunning ?? false;
+  const notionSyncEnabled = options.notionSyncEnabled ?? false;
+  const notionSyncRunning = options.notionSyncRunning ?? false;
+
   const harvy = await Submenu.new({
     text: "Harvy",
     items: [
@@ -29,6 +50,45 @@ export async function setupNativeAppMenu(): Promise<void> {
     ],
   });
 
+  const exportMenu = await Submenu.new({
+    text: "Export…",
+    items: [
+      await MenuItem.new({
+        id: "file-export-pdf",
+        text: "Export as PDF…",
+        accelerator: "CmdOrCtrl+Shift+E",
+        action: () => {
+          void getFileMenuHandlers().exportPdf();
+        },
+      }),
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      await MenuItem.new({
+        id: "file-publish",
+        text: "Copy, Sync, + Publish",
+        enabled: publishEnabled,
+        action: () => {
+          void getFileMenuHandlers().publish();
+        },
+      }),
+      await MenuItem.new({
+        id: "file-podcast-notes",
+        text: podcastNotesRunning ? "Export Podcast Notes…" : "Export Podcast Notes",
+        enabled: podcastNotesEnabled && !podcastNotesRunning,
+        action: () => {
+          void getFileMenuHandlers().podcastNotesPdf();
+        },
+      }),
+      await MenuItem.new({
+        id: "file-sync-notion",
+        text: notionSyncRunning ? "Syncing with Notion…" : "Sync with Notion",
+        enabled: notionSyncEnabled && !notionSyncRunning,
+        action: () => {
+          void getFileMenuHandlers().syncWithNotion();
+        },
+      }),
+    ],
+  });
+
   const file = await Submenu.new({
     text: "File",
     items: [
@@ -40,6 +100,13 @@ export async function setupNativeAppMenu(): Promise<void> {
         },
       }),
       await PredefinedMenuItem.new({ item: "Separator" }),
+      await MenuItem.new({
+        id: "file-copy-document",
+        text: "Copy",
+        action: () => {
+          void getFileMenuHandlers().copyDocument();
+        },
+      }),
       await MenuItem.new({
         id: "file-save",
         text: "Save",
@@ -57,14 +124,7 @@ export async function setupNativeAppMenu(): Promise<void> {
         },
       }),
       await PredefinedMenuItem.new({ item: "Separator" }),
-      await MenuItem.new({
-        id: "file-export-pdf",
-        text: "Export as PDF…",
-        accelerator: "CmdOrCtrl+Shift+E",
-        action: () => {
-          void getFileMenuHandlers().exportPdf();
-        },
-      }),
+      exportMenu,
       await PredefinedMenuItem.new({ item: "Separator" }),
       await MenuItem.new({
         id: "file-print",
@@ -109,10 +169,20 @@ export async function setupNativeAppMenu(): Promise<void> {
           getViewMenuHandlers().openWrite();
         },
       }),
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      await CheckMenuItem.new({
+        id: "view-show-research",
+        text: "Show Research",
+        checked: showResearch,
+        action: () => {
+          getViewMenuHandlers().setShowResearch(!showResearch);
+        },
+      }),
       await MenuItem.new({
-        id: "view-research",
-        text: "Research",
+        id: "view-open-research",
+        text: "Open Research",
         accelerator: "CmdOrCtrl+R",
+        enabled: showResearch,
         action: () => {
           getViewMenuHandlers().openResearch();
         },
@@ -120,7 +190,28 @@ export async function setupNativeAppMenu(): Promise<void> {
     ],
   });
 
-  const menu = await Menu.new({ items: [harvy, file, edit, view] });
+  const focus = await Submenu.new({
+    text: "Focus",
+    items: [
+      await MenuItem.new({
+        id: "focus-open",
+        text: "Focus Mode…",
+        action: () => {
+          getViewMenuHandlers().openFocusMode();
+        },
+      }),
+      await MenuItem.new({
+        id: "focus-end",
+        text: "End Focus Mode",
+        enabled: focusModeActive,
+        action: () => {
+          getViewMenuHandlers().endFocusMode();
+        },
+      }),
+    ],
+  });
+
+  const menu = await Menu.new({ items: [harvy, file, edit, view, focus] });
 
   if (isLikelyMac()) {
     await menu.setAsAppMenu();

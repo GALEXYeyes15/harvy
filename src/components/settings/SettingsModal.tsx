@@ -2338,12 +2338,6 @@ function EditorPanel({
             onFocusVisibilityPrefChange({ keepDocumentTitleVisibleWhileTyping: v })
           }
         />
-        <ToggleRow
-          id="keep-bottom-tools-visible-while-typing"
-          label="Control Panel"
-          checked={focusVisibilityPrefs.keepBottomToolsVisibleWhileTyping}
-          onChange={(v) => onFocusVisibilityPrefChange({ keepBottomToolsVisibleWhileTyping: v })}
-        />
       </SettingsGroup>
     </div>
   );
