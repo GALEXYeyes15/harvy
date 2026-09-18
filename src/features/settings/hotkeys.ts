@@ -45,6 +45,12 @@ export const HOTKEY_GROUPS: HotkeyGroup[] = [
         action: "Toggle both sidebars",
         keys: ["Option", "ArrowDown"],
       },
+      {
+        id: "reveal-chrome",
+        action: "Show tabs and title",
+        keys: ["Escape"],
+        note: "After they hide while typing with both sidebars closed",
+      },
     ],
   },
   {

@@ -17,6 +17,15 @@ import {
   writeStoredAppearanceStyleId,
   type AppearanceStyleId,
 } from "../theme/appearanceStyles";
+import {
+  readSystemTypography,
+  SYSTEM_TYPOGRAPHY_CHANGED_EVENT,
+  SYSTEM_TYPOGRAPHY_KEY,
+} from "../theme/systemTypography";
+import {
+  EDITOR_COLUMN_BASE_PX,
+  editorColumnLayout,
+} from "../features/editor/editorColumnLayout";
 import { AboutModal } from "./settings/AboutModal";
 import { SettingsModal } from "./settings/SettingsModal";
 import { EncouragementToast } from "./EncouragementToast";
@@ -320,6 +329,19 @@ function useSidebarOverlayLayoutMode(): boolean {
   return overlay;
 }
 
+function useWindowInnerWidth(): number {
+  const [width, setWidth] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth : 1280,
+  );
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return width;
+}
+
 /** In-memory tab id for the default unsaved document; must not be passed as a workspace filesystem path. */
 const HARVY_DEFAULT_UNTITLED_TAB_ID = "harvy:untitled";
 
@@ -435,6 +457,7 @@ function getFolderSegmentsRelativeToRoot(rootPath: string, targetPath: string): 
 
 export function AppShell() {
   const sidebarOverlayLayout = useSidebarOverlayLayoutMode();
+  const windowInnerWidth = useWindowInnerWidth();
   const isWindowFullscreen = useWindowFullscreen();
   const workspaceSidebarToggleLeft = isWindowFullscreen
     ? "0.5rem"
@@ -561,6 +584,7 @@ export function AppShell() {
   const [appearanceStyleId, setAppearanceStyleId] = useState<AppearanceStyleId>(
     () => readStoredAppearanceStyleId(),
   );
+  const [systemTypography, setSystemTypography] = useState(readSystemTypography);
   const [systemPrefersDark, setSystemPrefersDark] = useState(() =>
     typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)").matches : false,
   );
@@ -860,6 +884,12 @@ export function AppShell() {
     (isTopChromeHidden && !focusVisibilityPrefs.keepDocumentTitleVisibleWhileTyping);
   /** Collect/Write rail: always hidden in Focus mode; otherwise follows typing chrome. */
   const hideWorkspaceSectionRail = focusModeActive || isTopChromeHidden;
+  /**
+   * When the tab bar collapses, keep its height inside the scroll surface so the page
+   * doesn’t jump under the overlay titlebar. The filename row overlays the editor and
+   * does not reserve layout space.
+   */
+  const chromeScrollPad = hideTopBarWhileTyping ? "var(--harvy-tab-bar-height)" : "0px";
   const openTabIdsRef = useRef(openTabIds);
   const activeTabIdRef = useRef(activeTabId);
   const openDocumentsRef = useRef(openDocuments);
@@ -1068,14 +1098,24 @@ export function AppShell() {
     }
   }, [bothSidebarsClosed, focusModeActive]);
 
+  /** Esc brings chrome back after typing hid it. Mouse movement does not. */
   useEffect(() => {
-    if (focusModeActive || !bothSidebarsClosed) return;
-    const onPointerMove = () => {
+    if (focusModeActive || !bothSidebarsClosed || !isTopChromeHidden) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (!isTopChromeHidden) return;
+      const el = event.target as HTMLElement | null;
+      if (el?.closest('[role="dialog"]')) return;
+      if (el?.closest("[data-floating-text-menu]")) return;
+      if (el?.closest(".harvy-context-menu")) return;
+      if (el?.closest("input, textarea, select")) return;
+      event.preventDefault();
+      event.stopPropagation();
       setIsTopChromeHidden(false);
     };
-    window.addEventListener("mousemove", onPointerMove, { passive: true });
-    return () => window.removeEventListener("mousemove", onPointerMove);
-  }, [bothSidebarsClosed, focusModeActive]);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [bothSidebarsClosed, focusModeActive, isTopChromeHidden]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -1101,6 +1141,19 @@ export function AppShell() {
   useEffect(() => {
     writeStoredAppearanceStyleId(appearanceStyleId);
   }, [appearanceStyleId]);
+
+  useEffect(() => {
+    const sync = () => setSystemTypography(readSystemTypography());
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === SYSTEM_TYPOGRAPHY_KEY) sync();
+    };
+    window.addEventListener(SYSTEM_TYPOGRAPHY_CHANGED_EVENT, sync);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(SYSTEM_TYPOGRAPHY_CHANGED_EVENT, sync);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
 
   const reloadWorkspaceTree = useCallback(async (): Promise<FileNode | null> => {
     if (!isTauriRuntime()) {
@@ -4033,8 +4086,10 @@ export function AppShell() {
 
   const tabBarRow = (
     <div
-      className={`harvy-title-bar-drag h-[var(--harvy-tab-bar-height)] overflow-hidden transition-[background-color,border-color,box-shadow] duration-500 ease-in-out ${
-        hideTopBarWhileTyping ? "border-transparent bg-stage shadow-none" : "bg-mist"
+      className={`harvy-title-bar-drag overflow-hidden transition-[height,background-color,border-color,box-shadow] duration-500 ease-in-out ${
+        hideTopBarWhileTyping
+          ? "h-0 border-transparent bg-stage shadow-none"
+          : "h-[var(--harvy-tab-bar-height)] bg-mist"
       }`}
       data-harvy-window-drag
     >
@@ -4060,10 +4115,10 @@ export function AppShell() {
 
   const documentHeaderRow = (
     <div
-      className={`h-[2.125rem] overflow-hidden transition-[background-color,border-color,box-shadow] duration-500 ease-in-out ${
-        hideTopBarWhileTyping && hideDocumentTitleWhileTyping
-          ? "border-transparent bg-stage shadow-none"
-          : "bg-mist/25"
+      className={`absolute inset-x-0 top-0 z-20 h-[2.125rem] overflow-hidden transition-[opacity,background-color] duration-500 ease-in-out ${
+        hideDocumentTitleWhileTyping
+          ? "pointer-events-none border-transparent bg-transparent opacity-0 shadow-none"
+          : "bg-mist/25 opacity-100"
       }`}
     >
       <EditorDocumentHeader
@@ -4097,13 +4152,44 @@ export function AppShell() {
   };
   /** Write column: keep the Collect/Write rail inset even when Research is hidden. */
   const writeInsetStyle = { paddingLeft: WORKSPACE_SECTION_SWITCHER_WIDTH_PX };
+  const writeColumnLayout = editorColumnLayout({
+    baseWidthPx: EDITOR_COLUMN_BASE_PX,
+    lineExpansionPx: systemTypography.lineExpansionPx,
+    windowWidthPx: windowInnerWidth,
+    leftReservePx: sidebarOverlayLayout && isWorkspaceSidebarOpen ? WORKSPACE_SIDEBAR_WIDTH_PX : 0,
+    rightReservePx: sidebarOverlayLayout && readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0,
+  });
+  const editorPanelPadStyle =
+    !collectUsesFullWidth && sidebarOverlayLayout
+      ? {
+          paddingLeft: writeColumnLayout.paddingLeftPx,
+          paddingRight: writeColumnLayout.paddingRightPx,
+        }
+      : undefined;
+  const writeColumnStyle = collectUsesFullWidth
+    ? undefined
+    : {
+        maxWidth: sidebarOverlayLayout
+          ? writeColumnLayout.maxWidthPx
+          : EDITOR_COLUMN_BASE_PX + systemTypography.lineExpansionPx,
+      };
 
   const editorPanelSection = (
-    <div className="flex min-h-0 w-full flex-1 justify-center overflow-hidden bg-stage">
+    <div
+      className={`flex min-h-0 w-full flex-1 justify-center overflow-hidden bg-stage ${
+        !collectUsesFullWidth && sidebarOverlayLayout
+          ? "transition-[padding] duration-500 ease-in-out"
+          : ""
+      }`}
+      style={editorPanelPadStyle}
+    >
       <section
         className={`flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-stage ${
-          collectUsesFullWidth ? "max-w-none" : "mx-auto max-w-[820px]"
+          collectUsesFullWidth
+            ? "max-w-none"
+            : "mx-auto w-full transition-[max-width] duration-500 ease-in-out"
         }`}
+        style={writeColumnStyle}
         aria-label={collectUsesFullWidth ? "Research" : "Editor"}
         role="tabpanel"
         id="harvy-editor-panel"
@@ -4170,6 +4256,7 @@ export function AppShell() {
               showMechanicsUnderlines={showMechanicsUnderlines}
               blockBackspace={focusModeActive}
               focusModeActive={focusModeActive}
+              chromeScrollPad={chromeScrollPad}
               workspaceRootPath={workspaceRootPath}
               pickLocalImage={pickLocalImage}
               loadImageAt={loadImageAtPos}

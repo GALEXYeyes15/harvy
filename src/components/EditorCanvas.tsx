@@ -97,6 +97,11 @@ type EditorCanvasProps = {
   blockBackspace?: boolean;
   /** Focus mode presentation: hidden caret, hidden mouse cursor. */
   focusModeActive?: boolean;
+  /**
+   * Extra top space inside the scroll surface, matching collapsed chrome height.
+   * Keeps the page in place while the clip expands to the window edge.
+   */
+  chromeScrollPad?: string;
   onChangeText: (value: string) => void;
   /** Fires when the TipTap instance is created or destroyed (null on unmount). */
   onEditorReady: (editor: Editor | null) => void;
@@ -146,6 +151,7 @@ export function EditorCanvas({
   showMechanicsUnderlines,
   blockBackspace = false,
   focusModeActive = false,
+  chromeScrollPad = "0px",
   onChangeText,
   onEditorReady,
   onTypingActivity,
@@ -592,7 +598,10 @@ export function EditorCanvas({
         onDragOver={handleSurfaceDragOver}
         onDrop={handleSurfaceDrop}
       >
-        <div className="flex min-h-full w-full flex-col px-10 pb-52 pt-6 sm:px-14 sm:pb-9 sm:pt-8">
+        <div
+          className="flex min-h-full w-full flex-col px-10 pb-52 pt-[calc(var(--harvy-chrome-scroll-pad,0px)+1.5rem)] transition-[padding-top] duration-500 ease-in-out sm:px-14 sm:pb-9 sm:pt-[calc(var(--harvy-chrome-scroll-pad,0px)+2rem)]"
+          style={{ ["--harvy-chrome-scroll-pad" as string]: chromeScrollPad }}
+        >
           {showPostTitle || showSubtitle ? (
             <div className="harvy-doc-header shrink-0">
               {showPostTitle ? (

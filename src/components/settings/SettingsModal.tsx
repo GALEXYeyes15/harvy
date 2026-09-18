@@ -61,6 +61,7 @@ import {
   applySystemTypography,
   readSystemTypography,
   SYSTEM_BODY_FONT_SIZE_LIMITS,
+  SYSTEM_LINE_EXPANSION_LIMITS,
   writeSystemTypography,
 } from "../../theme/systemTypography";
 import {
@@ -1147,20 +1148,36 @@ function AppearancePanel({
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
           System
         </p>
-        <div className={`flex items-center justify-between gap-4 ${SETTINGS_BOX_PAD}`}>
-          <p className="text-[13px] font-medium text-ink">Body text</p>
-          <TypographyStepper
-            value={systemTypography.bodyFontSizePx}
-            min={SYSTEM_BODY_FONT_SIZE_LIMITS.min}
-            max={SYSTEM_BODY_FONT_SIZE_LIMITS.max}
-            step={SYSTEM_BODY_FONT_SIZE_LIMITS.step}
-            ariaLabel="Body text size"
-            onChange={(bodyFontSizePx) => {
-              const next = writeSystemTypography({ bodyFontSizePx });
-              setSystemTypography(next);
-              applySystemTypography(next);
-            }}
-          />
+        <div className={`space-y-3 ${SETTINGS_BOX_PAD}`}>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-[13px] font-medium text-ink">Body text</p>
+            <TypographyStepper
+              value={systemTypography.bodyFontSizePx}
+              min={SYSTEM_BODY_FONT_SIZE_LIMITS.min}
+              max={SYSTEM_BODY_FONT_SIZE_LIMITS.max}
+              step={SYSTEM_BODY_FONT_SIZE_LIMITS.step}
+              ariaLabel="Body text size"
+              onChange={(bodyFontSizePx) => {
+                const next = writeSystemTypography({ bodyFontSizePx });
+                setSystemTypography(next);
+                applySystemTypography(next);
+              }}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-[13px] font-medium text-ink">Line expansion</p>
+            <TypographyStepper
+              value={systemTypography.lineExpansionPx}
+              min={SYSTEM_LINE_EXPANSION_LIMITS.min}
+              max={SYSTEM_LINE_EXPANSION_LIMITS.max}
+              step={SYSTEM_LINE_EXPANSION_LIMITS.step}
+              ariaLabel="Line expansion"
+              onChange={(lineExpansionPx) => {
+                const next = writeSystemTypography({ lineExpansionPx });
+                setSystemTypography(next);
+              }}
+            />
+          </div>
         </div>
       </div>
 
@@ -2322,7 +2339,7 @@ function EditorPanel({
       <SettingsGroup
         label="While Typing"
         labelStyle="italic"
-        hint="Applies when both sidebars are closed."
+        hint="Applies when both sidebars are closed. Press Esc to show the chrome again."
       >
         <ToggleRow
           id="keep-top-bar-visible-while-typing"
