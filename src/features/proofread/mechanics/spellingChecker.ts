@@ -77,10 +77,6 @@ export function isSpellingTokenValid(word: string): boolean {
   return false;
 }
 
-function suggestionForWord(word: string): string | undefined {
-  return getSpellingSuggestions(word, 1)[0];
-}
-
 /** Suggested replacements for a misspelled token (typo map, Hunspell, then fuzzy fallback). */
 export function getSpellingSuggestions(word: string, limit = 3): string[] {
   if (limit <= 0) return [];
@@ -159,11 +155,11 @@ export function scanSpellingIssues(text: string): MechanicsRuleHit[] {
       continue;
     }
 
-    const replacement = suggestionForWord(word);
+    // Hunspell suggest costs 20–75ms per word and this scan reruns on every typing pause;
+    // the spelling popover asks for suggestions on click instead.
     hits.push({
       category: "spelling",
       message: `Possible misspelling: “${word}”`,
-      ...(replacement ? { replacement: applyReplacementCase(word, replacement) } : {}),
       start: match.index,
       end: match.index + word.length,
       severity: "high",

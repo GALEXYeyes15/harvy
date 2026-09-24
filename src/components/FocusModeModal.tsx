@@ -1,3 +1,4 @@
+import { useEffect, useState, type CSSProperties } from "react";
 import { CenteredOverlayModal } from "./overlay/CenteredOverlayModal";
 
 export const FOCUS_MODE_DURATION_MS = 25 * 60 * 1000;
@@ -9,8 +10,6 @@ type FocusModeModalProps = {
   endsAt: number | null;
   onStart: () => void;
   onEnd: () => void;
-  /** Live remaining label while active (e.g. "24:32"). */
-  remainingLabel?: string;
 };
 
 export function FocusModeModal({
@@ -19,9 +18,9 @@ export function FocusModeModal({
   endsAt,
   onStart,
   onEnd,
-  remainingLabel,
 }: FocusModeModalProps) {
   const active = endsAt != null;
+  const remainingLabel = useFocusRemainingLabel(open ? endsAt : null);
 
   return (
     <CenteredOverlayModal
@@ -37,7 +36,8 @@ export function FocusModeModal({
       {active ? (
         <div className="space-y-5">
           <p className="text-[13px] leading-relaxed text-muted/90">
-            Sidebars stay closed and Backspace and arrow keys are disabled until the timer ends.
+            Sidebars stay closed, the line you are on stays in the middle of the screen, and
+            Backspace and arrow keys are disabled until the timer ends.
           </p>
           <div className="rounded-lg bg-mist/90 px-3.5 py-3 dark:bg-ink/[0.04]">
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
@@ -71,7 +71,8 @@ export function FocusModeModal({
         <div className="space-y-5">
           <p className="text-[13px] leading-relaxed text-muted/90">
             A 25-minute writing sprint. Harvy goes fullscreen and stays frontmost. Sidebars stay
-            closed, and Backspace and arrow keys are turned off so you keep moving forward.
+            closed, the current line stays in the middle of the screen, and Backspace and arrow keys
+            are turned off so you keep moving forward.
           </p>
           <ul className="space-y-2 text-[12px] leading-snug text-muted/80">
             <li className="flex gap-2">
@@ -84,11 +85,15 @@ export function FocusModeModal({
             </li>
             <li className="flex gap-2">
               <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted/50" aria-hidden />
+              <span>Typewriter scrolling — the line you are on stays in the middle</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted/50" aria-hidden />
               <span>Backspace and arrow keys are disabled in the editor</span>
             </li>
             <li className="flex gap-2">
               <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted/50" aria-hidden />
-              <span>Press Esc anytime to end Focus mode</span>
+              <span>Press Shift+Esc anytime to end Focus mode</span>
             </li>
           </ul>
           <div className="flex items-center justify-end gap-2 pt-1">
@@ -121,4 +126,44 @@ export function formatFocusRemaining(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Live "m:ss" label for a Focus session. Ticks locally so only the timer re-renders —
+ * lifting this state into AppShell re-rendered the whole editor several times a second.
+ */
+export function useFocusRemainingLabel(endsAt: number | null): string | undefined {
+  const [label, setLabel] = useState(() =>
+    endsAt == null ? undefined : formatFocusRemaining(endsAt - Date.now()),
+  );
+
+  useEffect(() => {
+    if (endsAt == null) {
+      setLabel(undefined);
+      return;
+    }
+    const tick = () => setLabel(formatFocusRemaining(endsAt - Date.now()));
+    tick();
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
+  }, [endsAt]);
+
+  return label;
+}
+
+export function FocusModeTimer({
+  endsAt,
+  className,
+  style,
+}: {
+  endsAt: number;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  const label = useFocusRemainingLabel(endsAt);
+  return (
+    <p className={className} style={style} aria-live="off" aria-label={`${label} remaining`}>
+      {label}
+    </p>
+  );
 }

@@ -1,3 +1,4 @@
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauriRuntime } from "../save/saveRuntime";
 
@@ -40,13 +41,19 @@ export async function enterFocusModeWindowLock(): Promise<void> {
     await win.setClosable(false);
     await win.setMinimizable(false);
     await win.setFocus();
+    // Window focus alone leaves keystrokes going nowhere until a click; the webview
+    // itself has to become the key view for typing to reach the editor.
+    await getCurrentWebview().setFocus();
   } catch (err) {
     console.error("Focus mode window lock failed to apply:", err);
   }
 
   const unlistenFocus = await win.onFocusChanged(({ payload: focused }) => {
     if (focused) return;
-    void win.setFocus().catch(() => undefined);
+    void win
+      .setFocus()
+      .then(() => getCurrentWebview().setFocus())
+      .catch(() => undefined);
   });
 
   activeLock = { snapshot, unlistenFocus };

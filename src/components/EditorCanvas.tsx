@@ -1,6 +1,8 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -16,7 +18,16 @@ import Link from "@tiptap/extension-link";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { handleBackspaceOnEmptyTextBlockKeyDown } from "../features/editor/emptyTextBlockDeletion";
 import { EmptyTextBlockBackspace } from "../features/editor/emptyTextBlockBackspace";
-import { FocusModeGuards, isFocusModeBlockedKey } from "../features/editor/focusModeGuards";
+import {
+  FocusModeGuards,
+  isFocusModeBlockedKey,
+  isFocusModeSelectAllKey,
+} from "../features/editor/focusModeGuards";
+import {
+  applyTypewriterPadding,
+  clearTypewriterPadding,
+  scrollTypewriterLine,
+} from "../features/editor/typewriterScrolling";
 import { HarvyParagraph } from "../features/editor/harvyParagraph";
 import { HarvyPlaceholder } from "../features/editor/harvyPlaceholder";
 import { editorHtmlToMarkdown, toEditorHtml } from "../features/editor/documentMarkdown";
@@ -184,11 +195,50 @@ export function EditorCanvas({
   workspaceRootPathRef.current = workspaceRootPath;
   const onTypingActivityRef = useRef(onTypingActivity);
   onTypingActivityRef.current = onTypingActivity;
+  const onChangeTextRef = useRef(onChangeText);
+  onChangeTextRef.current = onChangeText;
+  const markdownFlushTimerRef = useRef(0);
+  const liveEditorRef = useRef<Editor | null>(null);
+  const flushEditorMarkdown = useCallback((useTransition: boolean) => {
+    if (markdownFlushTimerRef.current) {
+      window.clearTimeout(markdownFlushTimerRef.current);
+      markdownFlushTimerRef.current = 0;
+    }
+    const ed = liveEditorRef.current;
+    if (!ed || ed.isDestroyed) return;
+    const markdown = editorHtmlToMarkdown(ed.getHTML());
+    if (useTransition) {
+      startTransition(() => {
+        onChangeTextRef.current(markdown);
+      });
+      return;
+    }
+    onChangeTextRef.current(markdown);
+  }, []);
+  const onEditorUpdateRef = useRef<() => void>(() => {});
+  onEditorUpdateRef.current = () => {
+    onTypingActivityRef.current?.();
+    if (markdownFlushTimerRef.current) window.clearTimeout(markdownFlushTimerRef.current);
+    markdownFlushTimerRef.current = window.setTimeout(() => {
+      markdownFlushTimerRef.current = 0;
+      flushEditorMarkdown(true);
+    }, 160);
+  };
   const onEditorUserActivatedRef = useRef(onEditorUserActivated);
   onEditorUserActivatedRef.current = onEditorUserActivated;
   const blockBackspaceRef = useRef(blockBackspace);
   blockBackspaceRef.current = blockBackspace;
+  const focusModeActiveRef = useRef(focusModeActive);
+  focusModeActiveRef.current = focusModeActive;
   const writingSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const typewriterRafRef = useRef(0);
+  const typewriterScheduleRef = useRef<() => void>(() => {});
+  const typewriterScrollToSelectionRef = useRef<() => boolean>(() => false);
+  typewriterScrollToSelectionRef.current = () => {
+    if (!focusModeActiveRef.current) return false;
+    typewriterScheduleRef.current();
+    return true;
+  };
   const dropInFlightRef = useRef(false);
   const [headlineMenuOpen, setHeadlineMenuOpen] = useState(false);
   const [headlineAnchorEl, setHeadlineAnchorEl] = useState<HTMLElement | null>(null);
@@ -220,6 +270,27 @@ export function EditorCanvas({
     }),
     [editorFocusSuppressedRef],
   );
+
+  // Only read when useEditor (re)creates the instance; parsing the whole doc every render stalls typing.
+  const initialEditorHtml = useMemo(
+    () => toEditorHtml(text, { sourcePath: contentSourcePath }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isEditable, placeholder],
+  );
+
+  const autosizeTextarea = useCallback((el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  useLayoutEffect(() => {
+    autosizeTextarea(document.getElementById("harvy-post-title") as HTMLTextAreaElement | null);
+  }, [autosizeTextarea, postTitle, showPostTitle]);
+
+  useLayoutEffect(() => {
+    autosizeTextarea(document.getElementById("harvy-post-subtitle") as HTMLTextAreaElement | null);
+  }, [autosizeTextarea, subtitle, showSubtitle]);
 
   const editor = useEditor(
     {
@@ -260,7 +331,7 @@ export function EditorCanvas({
         HarvyMarkdownShortcuts,
         HarvyListKeyboard,
       ],
-      content: toEditorHtml(text, { sourcePath: contentSourcePath }),
+      content: initialEditorHtml,
       editable: isEditable,
       enableInputRules: ["harvyMarkdownShortcuts"],
       editorProps: {
@@ -273,8 +344,12 @@ export function EditorCanvas({
             "editor-content ProseMirror-harvy block min-h-full w-full max-w-none resize-none bg-transparent pb-10 pt-1 font-normal text-ink caret-muted outline-none focus:outline-none placeholder:text-ink/45 sm:pb-11 sm:pt-1.5 " +
             (isEditable ? "cursor-text" : "cursor-default select-text opacity-75"),
         },
+        handleScrollToSelection: () => typewriterScrollToSelectionRef.current(),
         handleKeyDown: (view, event) => {
-          if (blockBackspaceRef.current && isFocusModeBlockedKey(event.key)) {
+          if (
+            blockBackspaceRef.current &&
+            (isFocusModeBlockedKey(event.key) || isFocusModeSelectAllKey(event))
+          ) {
             event.preventDefault();
             return true;
           }
@@ -282,16 +357,34 @@ export function EditorCanvas({
         },
       },
       onUpdate: ({ editor: ed }) => {
-        onChangeText(editorHtmlToMarkdown(ed.getHTML()));
-        onTypingActivityRef.current?.();
+        liveEditorRef.current = ed;
+        onEditorUpdateRef.current();
       },
     },
     [isEditable, placeholder],
   );
 
   useEffect(() => {
+    if (editor) {
+      liveEditorRef.current = editor;
+      editor.setOptions({
+        onUpdate: ({ editor: ed }) => {
+          liveEditorRef.current = ed;
+          onEditorUpdateRef.current();
+        },
+      });
+    }
     onEditorReady(editor);
-    return () => onEditorReady(null);
+    return () => {
+      if (markdownFlushTimerRef.current) {
+        window.clearTimeout(markdownFlushTimerRef.current);
+        markdownFlushTimerRef.current = 0;
+        if (editor && !editor.isDestroyed) {
+          onChangeTextRef.current(editorHtmlToMarkdown(editor.getHTML()));
+        }
+      }
+      onEditorReady(null);
+    };
   }, [editor, onEditorReady]);
 
   /**
@@ -321,6 +414,45 @@ export function EditorCanvas({
   useEffect(() => {
     if (!editor) return;
     editor.view.dom.classList.toggle("harvy-focus-mode-editor", focusModeActive);
+  }, [editor, focusModeActive]);
+
+  useEffect(() => {
+    const scroller = writingSurfaceRef.current;
+    if (!editor || !scroller) return;
+
+    if (!focusModeActive) {
+      typewriterScheduleRef.current = () => {};
+      clearTypewriterPadding(scroller);
+      return;
+    }
+
+    // One measure per frame, just before paint: the browser lays out for that paint anyway,
+    // and ProseMirror's default scroll-into-view would read caret coords on every key too.
+    const scheduleCenter = () => {
+      if (typewriterRafRef.current) return;
+      typewriterRafRef.current = window.requestAnimationFrame(() => {
+        typewriterRafRef.current = 0;
+        if (editor.isDestroyed) return;
+        applyTypewriterPadding(scroller, scroller.clientHeight);
+        scrollTypewriterLine(editor.view, scroller);
+      });
+    };
+    typewriterScheduleRef.current = scheduleCenter;
+
+    applyTypewriterPadding(scroller, scroller.clientHeight);
+    scheduleCenter();
+    window.addEventListener("resize", scheduleCenter);
+    // The scroller is overflow-hidden in Focus, but the browser can still move it (drag-select,
+    // native caret reveal). Snap back; our own centering lands on 0 offset and stops.
+    scroller.addEventListener("scroll", scheduleCenter, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", scheduleCenter);
+      typewriterScheduleRef.current = () => {};
+      if (typewriterRafRef.current) window.cancelAnimationFrame(typewriterRafRef.current);
+      typewriterRafRef.current = 0;
+      window.removeEventListener("resize", scheduleCenter);
+      clearTypewriterPadding(scroller);
+    };
   }, [editor, focusModeActive]);
 
   useEffect(() => {
@@ -376,6 +508,7 @@ export function EditorCanvas({
     editor.setOptions({
       editorProps: {
         ...editor.options.editorProps,
+        handleScrollToSelection: () => typewriterScrollToSelectionRef.current(),
         handleDrop: (_view, event, _slice, moved) => {
           if (moved) return false;
           if (!isEditableRef.current) return false;
@@ -593,14 +726,33 @@ export function EditorCanvas({
     >
       <div
         ref={writingSurfaceRef}
-        className={`relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain ${focusModeActive ? "cursor-none" : isEditable ? "cursor-text" : ""}`}
+        className={`relative min-h-0 flex-1 overflow-x-hidden overscroll-y-contain ${
+          focusModeActive
+            ? "harvy-focus-mode-scroller cursor-none overflow-y-hidden"
+            : `overflow-y-auto ${isEditable ? "cursor-text" : ""}`
+        }`}
+        onMouseDownCapture={(event) => {
+          if (!focusModeActive) return;
+          // Clicks, drags, and double-clicks would move the caret or select text in Focus.
+          event.preventDefault();
+          event.stopPropagation();
+          editor?.view.focus();
+        }}
         onMouseDown={handleCanvasMouseDown}
         onDragOver={handleSurfaceDragOver}
         onDrop={handleSurfaceDrop}
       >
         <div
-          className="flex min-h-full w-full flex-col px-10 pb-52 pt-[calc(var(--harvy-chrome-scroll-pad,0px)+1.5rem)] transition-[padding-top] duration-500 ease-in-out sm:px-14 sm:pb-9 sm:pt-[calc(var(--harvy-chrome-scroll-pad,0px)+2rem)]"
-          style={{ ["--harvy-chrome-scroll-pad" as string]: chromeScrollPad }}
+          className={`flex min-h-full w-full flex-col px-10 sm:px-14 ${
+            focusModeActive
+              ? "harvy-typewriter-scrolling"
+              : "pb-52 pt-[calc(var(--harvy-chrome-scroll-pad,0px)+1.5rem)] transition-[padding-top] duration-500 ease-in-out sm:pb-9 sm:pt-[calc(var(--harvy-chrome-scroll-pad,0px)+2rem)]"
+          }`}
+          style={
+            focusModeActive
+              ? undefined
+              : { ["--harvy-chrome-scroll-pad" as string]: chromeScrollPad }
+          }
         >
           {showPostTitle || showSubtitle ? (
             <div className="harvy-doc-header shrink-0">
@@ -642,11 +794,7 @@ export function EditorCanvas({
                       el.style.height = "auto";
                       el.style.height = `${el.scrollHeight}px`;
                     }}
-                    ref={(el) => {
-                      if (!el) return;
-                      el.style.height = "auto";
-                      el.style.height = `${el.scrollHeight}px`;
-                    }}
+                    ref={autosizeTextarea}
                     className="harvy-doc-title"
                   />
                 </>
@@ -685,11 +833,7 @@ export function EditorCanvas({
                       el.style.height = "auto";
                       el.style.height = `${el.scrollHeight}px`;
                     }}
-                    ref={(el) => {
-                      if (!el) return;
-                      el.style.height = "auto";
-                      el.style.height = `${el.scrollHeight}px`;
-                    }}
+                    ref={autosizeTextarea}
                     className={`harvy-doc-subtitle${showPostTitle ? "" : " harvy-doc-subtitle--solo"}`}
                   />
                 </>
@@ -699,7 +843,10 @@ export function EditorCanvas({
           <label htmlFor="harvy-editor" className="sr-only">
             {documentTitle}
           </label>
-          <EditorContent editor={editor} className="block min-h-full w-full flex-1 pb-52" />
+          <EditorContent
+            editor={editor}
+            className={`block min-h-full w-full flex-1 ${focusModeActive ? "" : "pb-52"}`}
+          />
         </div>
         <HeadlineSuggestMenu
           open={headlineMenuOpen}

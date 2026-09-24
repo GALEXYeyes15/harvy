@@ -149,6 +149,19 @@ fn notion_client() -> Result<Client, String> {
         .map_err(|e| format!("Could not build HTTP client: {}", e))
 }
 
+/// Tauri runs sync commands on the UI/IPC thread. Blocking HTTP there beachballs
+/// the app (macOS `_dispatch_semaphore_wait_slow` in reqwest). Network work goes
+/// through this helper so the window stays responsive.
+async fn run_blocking<T, F>(work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|e| format!("Notion request failed: {e}"))?
+}
+
 fn notion_headers(token: &str) -> Result<reqwest::header::HeaderMap, String> {
     let mut headers = reqwest::header::HeaderMap::new();
     let auth = format!("Bearer {}", token.trim());
@@ -742,7 +755,15 @@ pub fn notion_clear_ideas_config(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn notion_fetch_database_schema(
+pub async fn notion_fetch_database_schema(
+    app: AppHandle,
+    token: Option<String>,
+    database_id_or_url: Option<String>,
+) -> Result<Vec<NotionPropertyInfo>, String> {
+    run_blocking(move || fetch_database_schema(app, token, database_id_or_url)).await
+}
+
+fn fetch_database_schema(
     app: AppHandle,
     token: Option<String>,
     database_id_or_url: Option<String>,
@@ -808,7 +829,11 @@ fn status_property_type(schema_props: &Value, status_property: &str) -> Option<S
 }
 
 #[tauri::command]
-pub fn notion_query_idea_pages(app: AppHandle) -> Result<Vec<NotionIdeaPage>, String> {
+pub async fn notion_query_idea_pages(app: AppHandle) -> Result<Vec<NotionIdeaPage>, String> {
+    run_blocking(move || query_idea_pages(app)).await
+}
+
+fn query_idea_pages(app: AppHandle) -> Result<Vec<NotionIdeaPage>, String> {
     let config = require_config(&app)?;
     let client = notion_client()?;
     let mut results = query_idea_database_pages(&client, &config)?;
@@ -1015,7 +1040,11 @@ fn page_to_idea(page: &Value, config: &NotionIdeasConfig) -> Option<NotionIdeaPa
 }
 
 #[tauri::command]
-pub fn notion_mark_idea_started(app: AppHandle, page_id: String) -> Result<(), String> {
+pub async fn notion_mark_idea_started(app: AppHandle, page_id: String) -> Result<(), String> {
+    run_blocking(move || mark_idea_started(app, page_id)).await
+}
+
+fn mark_idea_started(app: AppHandle, page_id: String) -> Result<(), String> {
     let config = require_config(&app)?;
     let trimmed = page_id.trim();
     if trimmed.is_empty() {
@@ -1115,7 +1144,15 @@ fn looks_like_iso_date(value: &str) -> bool {
 }
 
 #[tauri::command]
-pub fn notion_mark_essay_published(
+pub async fn notion_mark_essay_published(
+    app: AppHandle,
+    page_id: String,
+    publish_date: String,
+) -> Result<(), String> {
+    run_blocking(move || mark_essay_published(app, page_id, publish_date)).await
+}
+
+fn mark_essay_published(
     app: AppHandle,
     page_id: String,
     publish_date: String,
@@ -1176,7 +1213,11 @@ pub fn notion_mark_essay_published(
 }
 
 #[tauri::command]
-pub fn notion_test_ideas_connection(app: AppHandle) -> Result<usize, String> {
+pub async fn notion_test_ideas_connection(app: AppHandle) -> Result<usize, String> {
+    run_blocking(move || test_ideas_connection(app)).await
+}
+
+fn test_ideas_connection(app: AppHandle) -> Result<usize, String> {
     let config = require_config(&app)?;
     let client = notion_client()?;
     let pages = query_idea_database_pages(&client, &config)?;
@@ -1187,7 +1228,14 @@ const NOTION_CHILDREN_PAGE_SIZE: usize = 100;
 const TITLE_LIMIT: usize = 2000;
 
 #[tauri::command]
-pub fn notion_sync_essay(
+pub async fn notion_sync_essay(
+    app: AppHandle,
+    input: NotionSyncEssayInput,
+) -> Result<NotionSyncEssayResult, String> {
+    run_blocking(move || sync_essay(app, input)).await
+}
+
+fn sync_essay(
     app: AppHandle,
     input: NotionSyncEssayInput,
 ) -> Result<NotionSyncEssayResult, String> {
@@ -1659,7 +1707,15 @@ fn patch_page_url_property(
 }
 
 #[tauri::command]
-pub fn notion_set_page_public_url(
+pub async fn notion_set_page_public_url(
+    app: AppHandle,
+    page_id: String,
+    public_url: String,
+) -> Result<(), String> {
+    run_blocking(move || set_page_public_url(app, page_id, public_url)).await
+}
+
+fn set_page_public_url(
     app: AppHandle,
     page_id: String,
     public_url: String,

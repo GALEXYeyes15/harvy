@@ -24,6 +24,15 @@ function findEnclosingHarvyPlaceholder(
   return null;
 }
 
+function isHintlessEmptyPlaceholder(node: PMNode): boolean {
+  return (
+    node.type.name === "harvyOutlineParagraph" &&
+    node.attrs.kind === "placeholder" &&
+    !((node.attrs.writingScaffold as string | null) ?? "").trim() &&
+    isNodeEmpty(node)
+  );
+}
+
 function isCreateOutlineMode(editor: { storage: { harvyOutlineParagraph?: { createOutlineMode?: boolean } } }): boolean {
   return editor.storage.harvyOutlineParagraph?.createOutlineMode ?? false;
 }
@@ -237,13 +246,26 @@ export const HarvyOutlineParagraph = Node.create({
             return true;
           });
 
+          const tr = newState.tr;
+
+          const onlyChild = newState.doc.childCount === 1 ? newState.doc.firstChild : null;
+          if (
+            toRestore.length === 0 &&
+            onlyChild &&
+            isHintlessEmptyPlaceholder(onlyChild)
+          ) {
+            // Clearing the doc refills it with this node (it's first in the block group);
+            // swap to a paragraph so the empty-doc prompt shows.
+            tr.setNodeMarkup(0, paragraphType);
+            return tr;
+          }
+
           if (toRestore.length === 0) {
             return null;
           }
 
           toRestore.sort((a, b) => b.pos - a.pos);
 
-          const tr = newState.tr;
           for (const { pos, node } of toRestore) {
             const scaffold = String(node.attrs.harvyRestorableScaffold ?? "");
             const outline = outlineType.create(

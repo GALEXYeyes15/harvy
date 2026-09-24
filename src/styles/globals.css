@@ -1702,12 +1702,35 @@
     caret-color: transparent;
   }
 
+  /* Typewriter scrolling still works; hide only the writing-surface overlay bar. */
+  .harvy-focus-mode-scroller {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .harvy-focus-mode-scroller::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+    background: transparent;
+  }
+
   .harvy-focus-mode-hint {
     pointer-events: none;
     font-size: var(--ui-font-size);
     line-height: 1.35;
     letter-spacing: 0.01em;
     color: color-mix(in oklab, var(--color-muted) 78%, transparent);
+  }
+
+  /* Typewriter scrolling: pad inherits --harvy-typewriter-pad from the scroller. */
+  .harvy-typewriter-scrolling {
+    padding-top: var(--harvy-typewriter-pad, 42vh);
+    padding-bottom: var(--harvy-typewriter-pad, 42vh);
+  }
+
+  .harvy-focus-mode-timer {
+    font-variant-numeric: tabular-nums;
   }
 
   .harvy-focus-mode-hint kbd {

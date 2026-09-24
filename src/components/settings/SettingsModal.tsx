@@ -2339,7 +2339,7 @@ function EditorPanel({
       <SettingsGroup
         label="While Typing"
         labelStyle="italic"
-        hint="Applies when both sidebars are closed. Press Esc to show the chrome again."
+        hint="Applies when both sidebars are closed. Press Shift+Esc to show the chrome again."
       >
         <ToggleRow
           id="keep-top-bar-visible-while-typing"

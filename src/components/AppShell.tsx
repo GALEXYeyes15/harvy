@@ -36,7 +36,7 @@ import { EditorToolbar } from "./EditorToolbar";
 import {
   FOCUS_MODE_DURATION_MS,
   FocusModeModal,
-  formatFocusRemaining,
+  FocusModeTimer,
 } from "./FocusModeModal";
 import {
   enterFocusModeWindowLock,
@@ -516,7 +516,6 @@ export function AppShell() {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isFocusModeOpen, setIsFocusModeOpen] = useState(false);
   const [focusSessionEndsAt, setFocusSessionEndsAt] = useState<number | null>(null);
-  const [focusRemainingMs, setFocusRemainingMs] = useState(0);
   const [imagePreview, setImagePreview] = useState<ImagePreviewTarget | null>(null);
   const [pdfConvertPreview, setPdfConvertPreview] = useState<{
     sourcePath: string;
@@ -1017,19 +1016,20 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [enableCollect, handleWorkspaceSectionChange]);
 
+  const focusEditorForFocusModeRef = useRef<() => void>(() => {});
+
   const startFocusMode = useCallback(() => {
     setIsWorkspaceSidebarOpen(false);
     setReadabilityPanelOpen(false);
     setIsTopChromeHidden(true);
     setFocusSessionEndsAt(Date.now() + FOCUS_MODE_DURATION_MS);
-    void enterFocusModeWindowLock().catch((err) =>
-      console.error("Focus mode window lock:", err),
-    );
+    void enterFocusModeWindowLock()
+      .then(() => focusEditorForFocusModeRef.current())
+      .catch((err) => console.error("Focus mode window lock:", err));
   }, []);
 
   const endFocusMode = useCallback(() => {
     setFocusSessionEndsAt(null);
-    setFocusRemainingMs(0);
     void exitFocusModeWindowLock().catch((err) =>
       console.error("Focus mode window unlock:", err),
     );
@@ -1037,20 +1037,35 @@ export function AppShell() {
 
   useEffect(() => {
     if (focusSessionEndsAt == null) return;
-
-    const tick = () => {
-      const remaining = focusSessionEndsAt - Date.now();
-      if (remaining <= 0) {
-        endFocusMode();
-        return;
-      }
-      setFocusRemainingMs(remaining);
-    };
-
-    tick();
-    const id = window.setInterval(tick, 250);
-    return () => window.clearInterval(id);
+    const id = window.setTimeout(endFocusMode, Math.max(0, focusSessionEndsAt - Date.now()));
+    return () => window.clearTimeout(id);
   }, [focusSessionEndsAt, endFocusMode]);
+
+  /**
+   * Start every Focus session with the caret at the end of the body, ready to type. The Focus
+   * dialog's focus-restore effect is a child effect, so it has already run by the time this
+   * fires. The fullscreen transition can take key focus away after that, so focus again when
+   * the window lock settles and whenever the window regains focus during the session.
+   */
+  useEffect(() => {
+    if (!focusModeActive || !tiptapEditor) {
+      focusEditorForFocusModeRef.current = () => {};
+      return;
+    }
+    const focusEditor = () => {
+      if (tiptapEditor.isDestroyed) return;
+      setEditorInactive(false);
+      tiptapEditor.commands.focus("end", { scrollIntoView: true });
+    };
+    focusEditorForFocusModeRef.current = focusEditor;
+    focusEditor();
+    window.addEventListener("focus", focusEditor);
+    return () => {
+      focusEditorForFocusModeRef.current = () => {};
+      window.removeEventListener("focus", focusEditor);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusModeActive, tiptapEditor]);
 
   /** While Focus mode runs, keep both rails closed even if something tries to reopen them. */
   useEffect(() => {
@@ -1060,18 +1075,22 @@ export function AppShell() {
     if (!isTopChromeHidden) setIsTopChromeHidden(true);
   }, [focusModeActive, isWorkspaceSidebarOpen, readabilityPanelOpen, isTopChromeHidden]);
 
-  /** Esc ends Focus mode when no overlay dialog is open. Block common leave shortcuts. */
+  /**
+   * Shift+Esc ends Focus mode when no overlay dialog is open; plain Esc is swallowed so it can't
+   * reveal chrome mid-session. Block common leave shortcuts.
+   */
   useEffect(() => {
     if (!focusModeActive) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
       if (event.key === "Escape") {
         if (isFocusModeOpen || isSettingsOpen || isAboutOpen || exportOverlayOpen) return;
         event.preventDefault();
-        endFocusMode();
+        event.stopPropagation();
+        if (event.shiftKey) endFocusMode();
         return;
       }
 
-      const mod = event.metaKey || event.ctrlKey;
       if (!mod) return;
       const key = event.key.toLowerCase();
       // Soft-block in-app quit/hide/minimize shortcuts (OS Cmd+Tab still works).
@@ -1098,11 +1117,11 @@ export function AppShell() {
     }
   }, [bothSidebarsClosed, focusModeActive]);
 
-  /** Esc brings chrome back after typing hid it. Mouse movement does not. */
+  /** Shift+Esc brings chrome back after typing hid it. Mouse movement does not. */
   useEffect(() => {
     if (focusModeActive || !bothSidebarsClosed || !isTopChromeHidden) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || !event.shiftKey) return;
       if (!isTopChromeHidden) return;
       const el = event.target as HTMLElement | null;
       if (el?.closest('[role="dialog"]')) return;
@@ -1452,7 +1471,9 @@ export function AppShell() {
   const editorEditable = Boolean(activeDocument) || openTabIds.length === 0;
 
   const stats = useMemo(() => {
-    const text = documentTextForStats(scratchEditorBody);
+    const text = tiptapEditor
+      ? tiptapEditor.state.doc.textBetween(0, tiptapEditor.state.doc.content.size, "\n\n")
+      : documentTextForStats(scratchEditorBody);
     const sentenceComplexity = tiptapEditor
       ? countSentenceComplexityInDoc(tiptapEditor.state.doc)
       : countSentenceComplexityFromStoredDocument(scratchEditorBody, activeDocument?.sourcePath ?? null);
@@ -4434,15 +4455,15 @@ export function AppShell() {
       </div>
 
       {focusModeActive ? (
-        <p
-          className="harvy-focus-mode-hint absolute z-30"
-          style={{
-            top: isWindowFullscreen ? "0.65rem" : "0.55rem",
-            left: workspaceSidebarToggleLeft,
-          }}
-        >
-          press <kbd>[esc]</kbd> to end focus mode
+        <p className="harvy-focus-mode-hint absolute bottom-3 left-4 z-30">
+          press <kbd>[shift+esc]</kbd> to end focus mode
         </p>
+      ) : null}
+      {focusSessionEndsAt != null ? (
+        <FocusModeTimer
+          endsAt={focusSessionEndsAt}
+          className="harvy-focus-mode-hint harvy-focus-mode-timer absolute bottom-3 right-4 z-30"
+        />
       ) : null}
 
       {/* Right tools-panel toggle — window-shell anchored so Notes / layout changes never shift it. */}
@@ -4570,9 +4591,6 @@ export function AppShell() {
         endsAt={focusSessionEndsAt}
         onStart={startFocusMode}
         onEnd={endFocusMode}
-        remainingLabel={
-          focusSessionEndsAt != null ? formatFocusRemaining(focusRemainingMs) : undefined
-        }
       />
       <PdfConvertPreviewModal
         open={pdfConvertPreview !== null}
