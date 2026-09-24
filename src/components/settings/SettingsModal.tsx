@@ -2347,14 +2347,6 @@ function EditorPanel({
           checked={focusVisibilityPrefs.keepTopBarVisibleWhileTyping}
           onChange={(v) => onFocusVisibilityPrefChange({ keepTopBarVisibleWhileTyping: v })}
         />
-        <ToggleRow
-          id="keep-document-title-visible-while-typing"
-          label="Document Name"
-          checked={focusVisibilityPrefs.keepDocumentTitleVisibleWhileTyping}
-          onChange={(v) =>
-            onFocusVisibilityPrefChange({ keepDocumentTitleVisibleWhileTyping: v })
-          }
-        />
       </SettingsGroup>
     </div>
   );

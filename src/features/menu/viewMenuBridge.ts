@@ -10,6 +10,8 @@ export type ViewMenuHandlers = {
   openFocusMode: () => void;
   /** End a running Focus session. */
   endFocusMode: () => void;
+  /** Bring back the tabs and title after typing hid them. */
+  showTabs: () => void;
 };
 
 let handlers: ViewMenuHandlers = {
@@ -19,6 +21,7 @@ let handlers: ViewMenuHandlers = {
   setShowResearch: () => {},
   openFocusMode: () => {},
   endFocusMode: () => {},
+  showTabs: () => {},
 };
 
 export function setViewMenuHandlers(next: ViewMenuHandlers): void {

@@ -49,7 +49,6 @@ import { PodcastNotesPreviewModal } from "./PodcastNotesPreviewModal";
 import { FloatingTextMenu } from "./FloatingTextMenu";
 import { setSpellingDocumentKey } from "../features/proofread/mechanics/spellingDictionary";
 import { syncSpellingContextMenuRef } from "../features/proofread/spellingContextMenuRef";
-import { EditorDocumentHeader } from "./EditorDocumentHeader";
 import { OpenWindowsBar } from "./OpenWindowsBar";
 import { CollectPanel } from "./CollectPanel";
 import type { CollectItem } from "../features/collect/collectItems";
@@ -459,6 +458,8 @@ export function AppShell() {
   const sidebarOverlayLayout = useSidebarOverlayLayoutMode();
   const windowInnerWidth = useWindowInnerWidth();
   const isWindowFullscreen = useWindowFullscreen();
+  /** Windowed macOS: the native title (document name) and traffic lights get their own strip above the tabs. */
+  const showWindowTitleStrip = isTauriRuntime() && isMacOSPlatform() && !isWindowFullscreen;
   const workspaceSidebarToggleLeft = isWindowFullscreen
     ? "0.5rem"
     : "calc(var(--harvy-traffic-light-inset, 0px) + 0.5rem)";
@@ -644,6 +645,10 @@ export function AppShell() {
       document.documentElement.classList.remove("harvy-macos-overlay-titlebar");
     };
   }, []);
+
+  useLayoutEffect(() => {
+    document.documentElement.classList.toggle("harvy-window-title-strip", showWindowTitleStrip);
+  }, [showWindowTitleStrip]);
 
   const [editorVisuallyInactive, setEditorVisuallyInactive] = useState(false);
   const editorFocusSuppressedRef = useRef(false);
@@ -878,18 +883,10 @@ export function AppShell() {
   const hideTopBarWhileTyping =
     focusModeActive ||
     (isTopChromeHidden && !focusVisibilityPrefs.keepTopBarVisibleWhileTyping);
-  const hideDocumentTitleWhileTyping =
-    focusModeActive ||
-    (isTopChromeHidden && !focusVisibilityPrefs.keepDocumentTitleVisibleWhileTyping);
   /** Collect/Write rail: always hidden in Focus mode; otherwise follows typing chrome. */
   const hideWorkspaceSectionRail = focusModeActive || isTopChromeHidden;
-  const showChromeRevealHint =
+  const tabsHiddenByTyping =
     !focusModeActive && isTopChromeHidden && !isWorkspaceSidebarOpen && !readabilityPanelOpen;
-  const chromeRevealHintTarget = hideTopBarWhileTyping
-    ? "tabs"
-    : hideDocumentTitleWhileTyping
-      ? "title"
-      : "menu";
   /**
    * When the tab bar collapses, keep its height inside the scroll surface so the page
    * doesn’t jump under the overlay titlebar. The filename row overlays the editor and
@@ -2445,6 +2442,7 @@ export function AppShell() {
         endFocusMode();
         setIsFocusModeOpen(false);
       },
+      showTabs: () => setIsTopChromeHidden(false),
     });
   }, [enableCollect, endFocusMode, handleEnableCollectChange, handleWorkspaceSectionChange]);
 
@@ -2453,6 +2451,7 @@ export function AppShell() {
     void setupNativeAppMenu({
       showResearch: enableCollect,
       focusModeActive,
+      tabsHidden: tabsHiddenByTyping,
       publishEnabled: Boolean(normalizeQuickLinkUrl(publishUrl)),
       podcastNotesEnabled: Boolean(
         showPodcastNotes && aiCheckConfig?.enabled && aiCheckConfig.hasApiKey,
@@ -2467,6 +2466,7 @@ export function AppShell() {
   }, [
     enableCollect,
     focusModeActive,
+    tabsHiddenByTyping,
     publishUrl,
     showPodcastNotes,
     aiCheckConfig?.enabled,
@@ -3030,6 +3030,14 @@ export function AppShell() {
   const editorTitleBase = saveAsModalOpen
     ? documentTitleBaseFromSaveAsFileName(saveAsLiveFileName)
     : splitFileBaseAndExtension(editorTitle).base || "Untitled";
+  const nativeWindowTitle = isDirty ? `${editorTitleBase} (Unsaved)` : editorTitleBase;
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void getCurrentWindow()
+      .setTitle(nativeWindowTitle)
+      .catch((err) => console.error("Window title:", err));
+  }, [nativeWindowTitle]);
 
   const notesDocumentTitle =
     titleRenameDraft !== null
@@ -4015,11 +4023,6 @@ export function AppShell() {
   );
   applyTitleRenameRef.current = applyActiveDocumentTitleRename;
 
-  const commitActiveDocumentTitleRename = useCallback(
-    async (rawBase: string) => (await applyActiveDocumentTitleRename(rawBase)).ok,
-    [applyActiveDocumentTitleRename],
-  );
-
   const workspaceSidebarPanel = (
     <SidebarLeft
       workspaceSelected={hasWorkspaceFolder}
@@ -4141,29 +4144,6 @@ export function AppShell() {
     </div>
   );
 
-  const documentHeaderRow = (
-    <div
-      className={`absolute inset-x-0 top-0 z-20 h-[2.125rem] overflow-hidden transition-[opacity,background-color] duration-500 ease-in-out ${
-        hideDocumentTitleWhileTyping
-          ? "pointer-events-none border-transparent bg-transparent opacity-0 shadow-none"
-          : "bg-mist/25 opacity-100"
-      }`}
-    >
-      <EditorDocumentHeader
-        documentTitleBase={editorTitleBase}
-        documentDirty={isDirty}
-        workspaceSidebarOpen={isWorkspaceSidebarOpen}
-        overlayWorkspaceRail={sidebarOverlayLayout}
-        isWindowFullscreen={isWindowFullscreen}
-        readabilityPanelOpen={readabilityPanelOpen}
-        titleHidden={hideDocumentTitleWhileTyping}
-        titleRenameEnabled={titleRenameEnabled}
-        onCommitDocumentTitle={commitActiveDocumentTitleRename}
-        onTitleDraftChange={setTitleRenameDraft}
-      />
-    </div>
-  );
-
   const collectUsesFullWidth = activeWorkspaceSection === "collect";
   /**
    * Collect/Outliers uses full width — inset so content clears floating rails and the
@@ -4178,14 +4158,30 @@ export function AppShell() {
     paddingRight:
       sidebarOverlayLayout && readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0,
   };
-  /** Write column: keep the Collect/Write rail inset even when Research is hidden. */
-  const writeInsetStyle = { paddingLeft: WORKSPACE_SECTION_SWITCHER_WIDTH_PX };
+  /**
+   * Write column: keep the Collect/Write rail inset even when Research is hidden, split
+   * evenly so the text is centered in the window.
+   */
+  const writeSideInsetPx = WORKSPACE_SECTION_SWITCHER_WIDTH_PX / 2;
+  const writeInsetStyle = { paddingLeft: writeSideInsetPx, paddingRight: writeSideInsetPx };
+  /** EditorCanvas frame border + `sm:px-14` page padding, before the text starts. */
+  const writeTextPagePadPx = 57;
   const writeColumnLayout = editorColumnLayout({
     baseWidthPx: EDITOR_COLUMN_BASE_PX,
     lineExpansionPx: systemTypography.lineExpansionPx,
     windowWidthPx: windowInnerWidth,
-    leftReservePx: sidebarOverlayLayout && isWorkspaceSidebarOpen ? WORKSPACE_SIDEBAR_WIDTH_PX : 0,
-    rightReservePx: sidebarOverlayLayout && readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0,
+    // Column padding may tuck under the sidebars as long as the text stays ≥24px clear of them.
+    leftReservePx:
+      sidebarOverlayLayout && isWorkspaceSidebarOpen
+        ? WORKSPACE_SIDEBAR_WIDTH_PX +
+          WORKSPACE_SECTION_SWITCHER_WIDTH_PX +
+          24 -
+          (writeSideInsetPx + writeTextPagePadPx)
+        : 0,
+    rightReservePx:
+      sidebarOverlayLayout && readabilityPanelOpen
+        ? TOOLS_SIDEBAR_WIDTH_PX + 24 - (writeSideInsetPx + writeTextPagePadPx)
+        : 0,
   });
   const editorPanelPadStyle =
     !collectUsesFullWidth && sidebarOverlayLayout
@@ -4317,8 +4313,18 @@ export function AppShell() {
   );
 
   return (
+    <div className="flex h-full min-h-0 w-full flex-col bg-canvas">
+    {showWindowTitleStrip ? (
+      <div
+        className={`harvy-title-bar-drag h-[var(--harvy-window-title-strip-height)] w-full shrink-0 transition-colors duration-500 ease-in-out ${
+          hideTopBarWhileTyping ? "bg-stage" : "bg-mist"
+        }`}
+        data-harvy-window-drag
+        data-tauri-drag-region
+      />
+    ) : null}
     <div
-      className={`relative h-full min-h-0 w-full overflow-hidden bg-canvas${
+      className={`relative min-h-0 w-full flex-1 overflow-hidden bg-canvas${
         focusModeActive ? " harvy-focus-mode-shell" : ""
       }`}
     >
@@ -4328,7 +4334,6 @@ export function AppShell() {
           <div className="absolute inset-0 z-0 flex min-h-0 min-w-0 flex-col bg-canvas">
             {tabBarRow}
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-stage">
-              {documentHeaderRow}
               {editorPanelSection}
               {/* Readability: pinned overlay — top clears document header strip */}
               <div
@@ -4421,7 +4426,6 @@ export function AppShell() {
             {tabBarRow}
             <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden bg-stage">
               <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                {documentHeaderRow}
                 {editorPanelSection}
               </div>
               <div
@@ -4461,20 +4465,6 @@ export function AppShell() {
         />
       </div>
 
-      {focusModeActive ? (
-        <p className="harvy-focus-mode-hint absolute bottom-3 left-4 z-30">
-          press <kbd>[shift+esc]</kbd> to end focus mode
-        </p>
-      ) : (
-        <p
-          aria-hidden={!showChromeRevealHint}
-          className={`harvy-focus-mode-hint absolute bottom-3 left-4 z-30 transition-opacity duration-500 ease-in-out ${
-            showChromeRevealHint ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          press <kbd>[shift+esc]</kbd> to show {chromeRevealHintTarget}
-        </p>
-      )}
       {focusSessionEndsAt != null ? (
         <FocusModeTimer
           endsAt={focusSessionEndsAt}
@@ -4636,6 +4626,7 @@ export function AppShell() {
         workspaceRootPath={workspaceRootPath}
         onClose={() => setImagePreview(null)}
       />
+    </div>
     </div>
   );
 }

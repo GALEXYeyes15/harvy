@@ -10,6 +10,7 @@
   :root {
     /* macOS overlay title bar: room for native traffic lights (top chrome only; set on html in AppShell). */
     --harvy-traffic-light-inset: 0px;
+    --harvy-window-title-strip-height: 28px;
     --harvy-sidebar-content-inset: calc(0.5rem + (2rem - 17px) / 2);
     /* Tab strip + matching left-rail spacer / toggle band (was h-8 / 2rem). */
     --harvy-tab-bar-height: 2.25rem;
@@ -187,6 +188,11 @@
   /* Tauri macOS overlay title bar — tabs sit under native traffic lights. */
   html.harvy-macos-overlay-titlebar {
     --harvy-traffic-light-inset: 78px;
+  }
+
+  /* Windowed: traffic lights + native title live in a strip above the tabs, so tabs start flush left. */
+  html.harvy-macos-overlay-titlebar.harvy-window-title-strip {
+    --harvy-traffic-light-inset: 0px;
   }
 
   /*

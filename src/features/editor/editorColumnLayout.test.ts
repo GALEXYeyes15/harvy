@@ -41,7 +41,7 @@ describe("editorColumnLayout", () => {
     expect(layout.paddingRightPx).toBe(490);
   });
 
-  it("shifts off-center when a single sidebar would overlap a centered column", () => {
+  it("keeps the left edge and trims from the right when the right sidebar overlaps", () => {
     const layout = editorColumnLayout({
       baseWidthPx: EDITOR_COLUMN_BASE_PX,
       lineExpansionPx: 200,
@@ -49,8 +49,39 @@ describe("editorColumnLayout", () => {
       leftReservePx: 0,
       rightReservePx: 300,
     });
-    expect(layout.maxWidthPx).toBe(900);
+    expect(layout.paddingLeftPx).toBe(90);
+    expect(layout.maxWidthPx).toBe(810);
     expect(layout.paddingRightPx).toBe(300);
-    expect(layout.paddingLeftPx).toBe(0);
+  });
+
+  it("keeps the closed-sidebar left edge when both sidebars open and the column must narrow", () => {
+    const closed = editorColumnLayout({
+      baseWidthPx: EDITOR_COLUMN_BASE_PX,
+      lineExpansionPx: 200,
+      windowWidthPx: 1600,
+      leftReservePx: 0,
+      rightReservePx: 0,
+    });
+    const open = editorColumnLayout({
+      baseWidthPx: EDITOR_COLUMN_BASE_PX,
+      lineExpansionPx: 200,
+      windowWidthPx: 1600,
+      leftReservePx: 260,
+      rightReservePx: 300,
+    });
+    expect(open.paddingLeftPx).toBe(closed.paddingLeftPx);
+    expect(open.maxWidthPx).toBe(1600 - 290 - 300);
+  });
+
+  it("moves the left edge only when the left sidebar would cover it", () => {
+    const layout = editorColumnLayout({
+      baseWidthPx: EDITOR_COLUMN_BASE_PX,
+      lineExpansionPx: 200,
+      windowWidthPx: 1200,
+      leftReservePx: 260,
+      rightReservePx: 0,
+    });
+    expect(layout.paddingLeftPx).toBe(260);
+    expect(layout.maxWidthPx).toBe(940);
   });
 });

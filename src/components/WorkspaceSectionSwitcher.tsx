@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { Lightbulb, Pencil, type LucideIcon } from "lucide-react";
 import {
   workspaceSectionLabel,
   type WorkspaceSection,
@@ -7,6 +8,11 @@ import {
 /** Match workspace/readability sidebar rail timing (`duration-500 ease-in-out`). */
 const RAIL_MOTION_CLASS =
   "transition-[left,opacity,transform] duration-500 ease-in-out";
+
+const SECTION_ICONS: Record<WorkspaceSection, LucideIcon> = {
+  collect: Lightbulb,
+  write: Pencil,
+};
 
 type WorkspaceSectionSwitcherProps = {
   activeSection: WorkspaceSection;
@@ -53,15 +59,24 @@ export function WorkspaceSectionSwitcher({
       <div className="flex w-full flex-col items-stretch gap-1.5">
       {sections.map((section) => {
         const active = activeSection === section;
+        const label = workspaceSectionLabel(section, {
+          showOutliersView,
+          showCollectView,
+          showHeadlinesView,
+          showAvatarView,
+        });
+        const Icon = SECTION_ICONS[section];
         return (
           <button
             key={section}
             type="button"
             onClick={() => onSectionChange(section)}
             aria-current={active ? "page" : undefined}
-            className={`group relative flex w-full items-center justify-start py-1 pl-2 pr-1 text-left ${
+            aria-label={label}
+            title={label}
+            className={`group relative flex w-full items-center justify-center py-1.5 transition-colors ${
               chromeHidden ? "pointer-events-none" : "pointer-events-auto"
-            } ${active ? "text-ink" : "text-accent/60"}`}
+            } ${active ? "text-ink" : "text-accent/60 hover:text-ink/80"}`}
           >
             <span
               aria-hidden
@@ -69,18 +84,7 @@ export function WorkspaceSectionSwitcher({
                 active ? "bg-current" : "bg-transparent group-hover:bg-current"
               }`}
             />
-            <span
-              className={`text-[12px] font-semibold leading-snug tracking-wide transition-colors ${
-                active ? "text-ink" : ""
-              }`}
-            >
-              {workspaceSectionLabel(section, {
-                showOutliersView,
-                showCollectView,
-                showHeadlinesView,
-                showAvatarView,
-              })}
-            </span>
+            <Icon aria-hidden size={17} strokeWidth={active ? 2 : 1.75} />
           </button>
         );
       })}

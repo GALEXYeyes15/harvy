@@ -13,6 +13,8 @@ export type NativeAppMenuOptions = {
   showResearch?: boolean;
   /** When true, End Focus Mode is enabled. */
   focusModeActive?: boolean;
+  /** When true, typing has hidden the tabs and Show Tabs is enabled. */
+  tabsHidden?: boolean;
   publishEnabled?: boolean;
   podcastNotesEnabled?: boolean;
   podcastNotesRunning?: boolean;
@@ -29,6 +31,7 @@ export type NativeAppMenuOptions = {
 export async function setupNativeAppMenu(options: NativeAppMenuOptions = {}): Promise<void> {
   const showResearch = options.showResearch ?? true;
   const focusModeActive = options.focusModeActive ?? false;
+  const tabsHidden = options.tabsHidden ?? false;
   const publishEnabled = options.publishEnabled ?? false;
   const podcastNotesEnabled = options.podcastNotesEnabled ?? false;
   const podcastNotesRunning = options.podcastNotesRunning ?? false;
@@ -185,6 +188,18 @@ export async function setupNativeAppMenu(options: NativeAppMenuOptions = {}): Pr
         enabled: showResearch,
         action: () => {
           getViewMenuHandlers().openResearch();
+        },
+      }),
+      await PredefinedMenuItem.new({ item: "Separator" }),
+      // AppShell also handles Shift+Esc in the webview; both actions are idempotent.
+      await MenuItem.new({
+        id: "view-shift-esc",
+        text: focusModeActive ? "End Focus Mode" : "Show Tabs",
+        accelerator: "Shift+Escape",
+        enabled: focusModeActive || tabsHidden,
+        action: () => {
+          if (focusModeActive) getViewMenuHandlers().endFocusMode();
+          else getViewMenuHandlers().showTabs();
         },
       }),
     ],
