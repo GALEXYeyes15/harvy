@@ -217,7 +217,8 @@ export function EditorCanvas({
   }, []);
   const onEditorUpdateRef = useRef<() => void>(() => {});
   onEditorUpdateRef.current = () => {
-    onTypingActivityRef.current?.();
+    // Load-time normalization and async hydration also update the doc; only focused edits are typing.
+    if (liveEditorRef.current?.view.hasFocus()) onTypingActivityRef.current?.();
     if (markdownFlushTimerRef.current) window.clearTimeout(markdownFlushTimerRef.current);
     markdownFlushTimerRef.current = window.setTimeout(() => {
       markdownFlushTimerRef.current = 0;

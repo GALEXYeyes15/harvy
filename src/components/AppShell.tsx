@@ -883,6 +883,13 @@ export function AppShell() {
     (isTopChromeHidden && !focusVisibilityPrefs.keepDocumentTitleVisibleWhileTyping);
   /** Collect/Write rail: always hidden in Focus mode; otherwise follows typing chrome. */
   const hideWorkspaceSectionRail = focusModeActive || isTopChromeHidden;
+  const showChromeRevealHint =
+    !focusModeActive && isTopChromeHidden && !isWorkspaceSidebarOpen && !readabilityPanelOpen;
+  const chromeRevealHintTarget = hideTopBarWhileTyping
+    ? "tabs"
+    : hideDocumentTitleWhileTyping
+      ? "title"
+      : "menu";
   /**
    * When the tab bar collapses, keep its height inside the scroll surface so the page
    * doesn’t jump under the overlay titlebar. The filename row overlays the editor and
@@ -4458,7 +4465,16 @@ export function AppShell() {
         <p className="harvy-focus-mode-hint absolute bottom-3 left-4 z-30">
           press <kbd>[shift+esc]</kbd> to end focus mode
         </p>
-      ) : null}
+      ) : (
+        <p
+          aria-hidden={!showChromeRevealHint}
+          className={`harvy-focus-mode-hint absolute bottom-3 left-4 z-30 transition-opacity duration-500 ease-in-out ${
+            showChromeRevealHint ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          press <kbd>[shift+esc]</kbd> to show {chromeRevealHintTarget}
+        </p>
+      )}
       {focusSessionEndsAt != null ? (
         <FocusModeTimer
           endsAt={focusSessionEndsAt}
