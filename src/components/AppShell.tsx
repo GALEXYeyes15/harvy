@@ -28,6 +28,7 @@ import {
 } from "../features/editor/editorColumnLayout";
 import { AboutModal } from "./settings/AboutModal";
 import { SettingsModal } from "./settings/SettingsModal";
+import type { SettingsSectionId } from "./settings/sectionIds";
 import { EncouragementToast } from "./EncouragementToast";
 import { SidebarLeft } from "./SidebarLeft";
 import { ChromeSidebarToggleButton } from "./ChromeSidebarToggleButton";
@@ -43,6 +44,7 @@ import {
   exitFocusModeWindowLock,
 } from "../features/focus/focusModeWindowLock";
 import { EditorCanvas } from "./EditorCanvas";
+import { DocumentFindBar, type DocumentFindBarHandle } from "./DocumentFindBar";
 import { ImagePreviewModal, type ImagePreviewTarget } from "./ImagePreviewModal";
 import { PdfConvertPreviewModal } from "./PdfConvertPreviewModal";
 import { PodcastNotesPreviewModal } from "./PodcastNotesPreviewModal";
@@ -191,8 +193,8 @@ import {
 import { EMPTY_NOTION_ESSAY_FIELDS, type FileNode, type WorkspaceDocument } from "../features/workspace/types";
 import { searchWorkspaceMarkdown } from "../features/workspace/markdownSearch";
 import {
-  applyWorkspaceSearchHighlight,
   clearWorkspaceSearchHighlight,
+  findWorkspaceSearchPmRanges,
 } from "../features/editor/workspaceSearchHighlight";
 import {
   excerptFromMarkdown,
@@ -511,6 +513,7 @@ export function AppShell() {
   /** Resolved system volume name (desktop), or generic label on web. */
   const [workspaceVolumeLabel, setWorkspaceVolumeLabel] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("editor");
   const [notionConnected, setNotionConnected] = useState(false);
   const [notionSyncRunning, setNotionSyncRunning] = useState(false);
   const [notionEssayLink, setNotionEssayLink] = useState<NotionEssayLink | null>(null);
@@ -602,6 +605,9 @@ export function AppShell() {
     useEncouragementScheduler(encouragementPrefs);
 
   const [tiptapEditor, setTiptapEditor] = useState<Editor | null>(null);
+  const [documentFindOpen, setDocumentFindOpen] = useState(false);
+  const [documentFindSeed, setDocumentFindSeed] = useState("");
+  const documentFindRef = useRef<DocumentFindBarHandle>(null);
   const [selectedWordCount, setSelectedWordCount] = useState<number | null>(null);
   const [proofreadIssues, setProofreadIssues] = useState<ProofreadIssue[]>([]);
   const [aiCheckConfig, setAiCheckConfig] = useState<AiCheckConfigPublic | null>(null);
@@ -993,6 +999,56 @@ export function AppShell() {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [toggleLeftSidebar, toggleRightSidebar, toggleBothSidebars]);
+
+  useEffect(() => {
+    if (activeWorkspaceSection !== "write" || focusModeActive) {
+      setDocumentFindOpen(false);
+    }
+  }, [activeWorkspaceSection, focusModeActive]);
+
+  useEffect(() => {
+    setDocumentFindOpen(false);
+  }, [activeTabId]);
+
+  const openDocumentFind = useCallback(() => {
+    if (documentFindOpen) {
+      documentFindRef.current?.focusInput();
+      return;
+    }
+    setDocumentFindSeed("");
+    setDocumentFindOpen(true);
+  }, [documentFindOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod || event.altKey || event.shiftKey || event.key.toLowerCase() !== "f") return;
+      if (focusModeActive || activeWorkspaceSection !== "write") return;
+      const el = event.target as HTMLElement | null;
+      if (el?.closest('[role="dialog"]')) return;
+      if (el?.closest(".harvy-context-menu")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openDocumentFind();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [activeWorkspaceSection, focusModeActive, openDocumentFind]);
+
+  useEffect(() => {
+    if (!documentFindOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.shiftKey) return;
+      const el = event.target as HTMLElement | null;
+      if (el?.closest('[role="dialog"]')) return;
+      if (el?.closest("[data-harvy-document-find]")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setDocumentFindOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [documentFindOpen]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -2828,16 +2884,19 @@ export function AppShell() {
 
   const tryApplyPendingSearchReveal = useCallback((editor: Editor | null, tabId: string | null) => {
     const pending = pendingSearchRevealRef.current;
-    if (!pending || !editor || tabId !== pending.path) return;
-    if (applyWorkspaceSearchHighlight(editor, pending.query)) {
-      pendingSearchRevealRef.current = null;
-    }
+    if (!pending || !editor || editor.isDestroyed || tabId !== pending.path) return;
+    if (findWorkspaceSearchPmRanges(editor.state.doc, pending.query).length === 0) return;
+    pendingSearchRevealRef.current = null;
+    clearWorkspaceSearchHighlight(editor.view);
+    setDocumentFindSeed(pending.query);
+    setDocumentFindOpen(true);
   }, []);
 
   async function handleRevealSearchHit(node: FileNode) {
     const query = searchQuery.trim();
     if (!query || node.kind !== "file") return;
     pendingSearchRevealRef.current = { path: node.path, query };
+    if (activeWorkspaceSection !== "write") setActiveWorkspaceSection("write");
     await selectNode(node);
     tryApplyPendingSearchReveal(tiptapEditor, activeTabId === node.path ? node.path : null);
   }
@@ -4046,7 +4105,14 @@ export function AppShell() {
       onOpenFolder={openWorkspaceFolder}
       onBreadcrumbNavigate={navigateBreadcrumbDisplayIndex}
       onWorkspaceNavigateUp={closeWorkspaceOneLevel}
-      onOpenSettings={() => setIsSettingsOpen(true)}
+      onOpenVolumeSettings={() => {
+        setSettingsSection("sidebars");
+        setIsSettingsOpen(true);
+      }}
+      onOpenSettings={() => {
+        setSettingsSection("editor");
+        setIsSettingsOpen(true);
+      }}
       onOpenAbout={() => setIsAboutOpen(true)}
       folderRenamePath={folderRename?.path ?? null}
       folderRenameDraft={folderRename?.draft ?? ""}
@@ -4306,6 +4372,17 @@ export function AppShell() {
               isEditable={editorEditable}
               onApplyFormat={runEditorFormatCommand}
             />
+            {documentFindOpen ? (
+              <DocumentFindBar
+                editor={tiptapEditor}
+                initialQuery={documentFindSeed}
+                barRef={documentFindRef}
+                onClose={() => {
+                  setDocumentFindSeed("");
+                  setDocumentFindOpen(false);
+                }}
+              />
+            ) : null}
           </div>
         </div>
       </section>
@@ -4545,6 +4622,7 @@ export function AppShell() {
         onParametersPrefsChange={handleParametersPrefsChange}
         workspaceRootPath={workspaceRootPath}
         onChooseWorkspaceFolder={chooseWorkspaceFolder}
+        requestedSection={settingsSection}
       />
       <EncouragementToast phrase={encouragementPhrase} onDismiss={dismissEncouragement} />
       <SaveAsModal

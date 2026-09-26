@@ -77,6 +77,7 @@ import { HarvyOrderedList } from "../features/editor/harvyOrderedList";
 import { HarvyListKeyboard } from "../features/editor/harvyListKeyboard";
 import { LinkEditorSelectionHighlight } from "../features/editor/linkEditorSelectionHighlight";
 import { WorkspaceSearchHighlight } from "../features/editor/workspaceSearchHighlight";
+import { DocumentFindHighlight } from "../features/editor/documentFindHighlight";
 import { HarvyMarkdownShortcuts } from "../features/editor/harvyMarkdownShortcuts";
 import { PlainTextPaste } from "../features/editor/plainTextPaste";
 import { HarvyOutlineParagraph } from "../features/outline/harvyOutlineParagraph";
@@ -329,6 +330,7 @@ export function EditorCanvas({
         MechanicsUnderlineLayer,
         LinkEditorSelectionHighlight,
         WorkspaceSearchHighlight,
+        DocumentFindHighlight,
         HarvyMarkdownShortcuts,
         HarvyListKeyboard,
       ],

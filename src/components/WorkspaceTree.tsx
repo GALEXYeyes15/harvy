@@ -12,7 +12,7 @@ export const WORKSPACE_ROW_SHELL_UNSELECTED =
   "flex w-full min-w-0 items-center rounded-md px-2 py-[10px] text-[12px] text-muted/90 transition-colors duration-100 ease-out hover:bg-ink/[0.035] hover:text-ink";
 
 const WORKSPACE_ROW_SHELL_SELECTED =
-  "relative flex w-full min-w-0 items-center rounded-md bg-muted/[0.14] px-2 py-[5px] text-[12px] text-muted/90";
+  "relative flex w-full min-w-0 items-center rounded-md bg-muted/[0.14] px-2 py-[10px] text-[12px] text-muted/90";
 
 type WorkspaceTreeProps = {
   node: FileNode;
@@ -182,7 +182,7 @@ export function WorkspaceTree({
           </div>
         </div>
       ) : (
-        <div className={rowShell} style={{ paddingLeft }}>
+        <div className={`${rowShell} group`} style={{ paddingLeft }}>
           {isOpenDocumentTrail ? (
             <span
               className="pointer-events-none absolute inset-y-1 left-0 w-[2.5px] rounded-full bg-muted"
@@ -227,7 +227,7 @@ export function WorkspaceTree({
               type="button"
               data-harvy-search-hit
               aria-label={`Show ${node.searchHitCount} ${node.searchHitCount === 1 ? "match" : "matches"} in ${displayName}`}
-              className="shrink-0 text-[11px] leading-snug text-muted/55"
+              className="harvy-search-hit-count ml-1 shrink-0 cursor-pointer rounded-md px-1.5 py-0.5 text-[11px] font-bold leading-snug text-muted/55"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();

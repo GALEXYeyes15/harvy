@@ -189,6 +189,8 @@ type SettingsModalProps = {
   onParametersPrefsChange: (partial: Partial<ParametersPrefs>) => void;
   workspaceRootPath: string | null;
   onChooseWorkspaceFolder?: () => void | Promise<void>;
+  /** Section to show when Settings opens, or when this value changes while it is open. */
+  requestedSection?: SettingsSectionId;
 };
 
 export function SettingsModal({
@@ -245,8 +247,14 @@ export function SettingsModal({
   onParametersPrefsChange,
   workspaceRootPath,
   onChooseWorkspaceFolder,
+  requestedSection = "editor",
 }: SettingsModalProps) {
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>("editor");
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>(requestedSection);
+
+  useEffect(() => {
+    if (!open) return;
+    setActiveSection(requestedSection);
+  }, [open, requestedSection]);
 
   return (
     <CenteredOverlayModal

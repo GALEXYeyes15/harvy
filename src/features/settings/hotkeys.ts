@@ -63,6 +63,7 @@ export const HOTKEY_GROUPS: HotkeyGroup[] = [
       { id: "copy", action: "Copy", keys: ["Mod", "C"] },
       { id: "paste", action: "Paste", keys: ["Mod", "V"] },
       { id: "select-all", action: "Select All", keys: ["Mod", "A"] },
+      { id: "find-in-document", action: "Find in document", keys: ["Mod", "F"] },
     ],
   },
   {

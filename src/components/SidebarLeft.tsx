@@ -1,4 +1,5 @@
-import { Fragment } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { FolderOpen, Settings } from "lucide-react";
 import { APP_NAME } from "../lib/constants";
 import { posixSegmentToFinderName } from "../features/workspace/finderFileNames";
@@ -14,17 +15,154 @@ function getDisplayBreadcrumbs(volumeLabel: string, rootDisplay: string, folderS
   return [volumeLabel, "...", finderSegments[finderSegments.length - 1]!];
 }
 
+type PathFolder = {
+  label: string;
+  /** Passed to `onNavigate`: 0 is the workspace root, then one step per nested folder. */
+  depth: number;
+};
+
+function pathFolders(rootDisplay: string, folderSegments: string[]): PathFolder[] {
+  return [
+    { label: posixSegmentToFinderName(rootDisplay), depth: 0 },
+    ...folderSegments.map((segment, index) => ({
+      label: posixSegmentToFinderName(segment),
+      depth: index + 1,
+    })),
+  ];
+}
+
+/** Collapsed `...` in the path. Hover bolds the mark; click lists the hidden folders. */
+function BreadcrumbEllipsis({
+  rootDisplay,
+  folderSegments,
+  onNavigate,
+}: {
+  rootDisplay: string;
+  folderSegments: string[];
+  onNavigate: (displayIndex: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const folders = pathFolders(rootDisplay, folderSegments);
+  const pathKey = `${rootDisplay}\0${folderSegments.join("\0")}`;
+
+  const placeMenu = () => {
+    const button = buttonRef.current;
+    const menu = menuRef.current;
+    if (!button || !menu) return;
+    const rect = button.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.bottom + 4;
+    if (left + menuRect.width > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - menuRect.width - 8);
+    }
+    if (top + menuRect.height > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - menuRect.height - 4);
+    }
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
+  };
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathKey]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    placeMenu();
+  }, [open, pathKey]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    window.addEventListener("resize", placeMenu);
+    window.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      window.removeEventListener("resize", placeMenu);
+      window.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className="harvy-path-ellipsis relative inline cursor-pointer border-0 bg-transparent p-0 align-baseline font-[inherit] text-[length:inherit] leading-[inherit] text-inherit"
+        aria-label="Show folders in this path"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen((current) => !current);
+        }}
+      >
+        <span className="harvy-path-ellipsis__label">...</span>
+      </button>
+      {open
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="menu"
+              aria-label="Folder hierarchy"
+              className="harvy-context-menu max-h-64 overflow-y-auto"
+              style={{ position: "fixed" }}
+            >
+              {folders.map((folder) => {
+                const isCurrent = folder.depth === folders.length - 1;
+                return (
+                  <button
+                    key={`${folder.depth}-${folder.label}`}
+                    type="button"
+                    role="menuitem"
+                    className={`harvy-context-menu-item block w-full truncate text-left ${
+                      isCurrent ? "font-medium text-ink" : ""
+                    }`}
+                    aria-current={isCurrent ? "page" : undefined}
+                    title={folder.label}
+                    onClick={() => {
+                      if (!isCurrent) onNavigate(folder.depth);
+                      setOpen(false);
+                    }}
+                  >
+                    {folder.label}
+                  </button>
+                );
+              })}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
 /** Breadcrumb: drive root only, or `drive / folder`, or `drive / … / leaf`. Full path stays in `title`. */
 function ShortWorkspaceBreadcrumb({
   volumeLabel,
   rootDisplay,
   folderSegments,
   onNavigate,
+  onOpenVolumeSettings,
 }: {
   volumeLabel: string;
   rootDisplay: string;
   folderSegments: string[];
   onNavigate: (displayIndex: number) => void;
+  onOpenVolumeSettings?: () => void;
 }) {
   if (!volumeLabel.trim()) return null;
 
@@ -47,11 +185,24 @@ function ShortWorkspaceBreadcrumb({
           <Fragment key={`${displayIndex}-${segment}`}>
             {displayIndex > 0 ? sep(`sep-${displayIndex}`) : null}
             {isEllipsis ? (
-              <span className="shrink-0 text-muted/40" aria-hidden>
-                ...
-              </span>
+              <BreadcrumbEllipsis
+                rootDisplay={rootDisplay}
+                folderSegments={folderSegments}
+                onNavigate={onNavigate}
+              />
             ) : !isLast ? (
-              <button type="button" className={CRUMB_BTN} onClick={() => onNavigate(displayIndex)}>
+              <button
+                type="button"
+                className={CRUMB_BTN}
+                title={displayIndex === 0 ? "Change workspace folder" : undefined}
+                onClick={() => {
+                  if (displayIndex === 0) {
+                    onOpenVolumeSettings?.();
+                    return;
+                  }
+                  onNavigate(displayIndex);
+                }}
+              >
                 {segment}
               </button>
             ) : (
@@ -89,6 +240,8 @@ type SidebarLeftProps = {
   onOpenFolder: (node: FileNode) => void;
   onBreadcrumbNavigate: (segmentIndex: number) => void;
   onWorkspaceNavigateUp: () => void;
+  /** Volume crumb (Macintosh HD) opens Settings so the workspace folder can be changed. */
+  onOpenVolumeSettings?: () => void;
   onOpenSettings?: () => void;
   onOpenAbout?: () => void;
   folderRenamePath?: string | null;
@@ -120,6 +273,7 @@ export function SidebarLeft({
   onOpenFolder,
   onBreadcrumbNavigate,
   onWorkspaceNavigateUp,
+  onOpenVolumeSettings,
   onOpenSettings,
   onOpenAbout,
   folderRenamePath = null,
@@ -166,6 +320,7 @@ export function SidebarLeft({
                 rootDisplay={breadcrumbRootDisplayLabel}
                 folderSegments={breadcrumbFolderSegments}
                 onNavigate={onBreadcrumbNavigate}
+                onOpenVolumeSettings={onOpenVolumeSettings}
               />
             </nav>
           </div>

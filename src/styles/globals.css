@@ -1789,6 +1789,41 @@
     background-color: color-mix(in oklab, var(--color-ink) 22%, transparent);
   }
 
+  /* Find field matches the bar; a light stroke is the only edge. */
+  .harvy-document-find-input {
+    appearance: none;
+    border-radius: 6px;
+    border: 1px solid color-mix(in oklab, var(--color-ink) 32%, transparent);
+    background: transparent;
+    outline: none;
+    box-shadow: none;
+  }
+
+  .harvy-document-find-input:focus,
+  .harvy-document-find-input:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+
+  .ProseMirror-harvy .harvy-document-find-hit {
+    background-color: color-mix(in oklab, var(--color-ink) 16%, var(--color-page));
+    border-radius: 2px;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .ProseMirror-harvy .harvy-document-find-hit--active {
+    background-color: color-mix(in oklab, var(--color-ink) 38%, var(--color-page));
+  }
+
+  html.dark .ProseMirror-harvy .harvy-document-find-hit {
+    background-color: color-mix(in oklab, var(--color-ink) 22%, transparent);
+  }
+
+  html.dark .ProseMirror-harvy .harvy-document-find-hit--active {
+    background-color: color-mix(in oklab, var(--color-ink) 48%, transparent);
+  }
+
   /* Native webview spellcheck (Chromium/WebKit `::spelling-error`) — red wavy, minimal layout impact */
   .ProseMirror-harvy ::spelling-error {
     text-decoration-line: underline;
@@ -2020,6 +2055,59 @@
 
   html.dark .harvy-sidebar-run-btn:hover:not(:disabled) {
     background: color-mix(in oklab, var(--color-ink) 11%, var(--color-stage));
+  }
+
+  .harvy-search-hit-count {
+    background-color: transparent;
+    transition:
+      background-color 100ms ease-out,
+      color 100ms ease-out;
+  }
+
+  /* Bold is painted over the dots so the path beside them does not shift. */
+  .harvy-path-ellipsis::after {
+    content: "...";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    font-weight: 700;
+    line-height: inherit;
+    letter-spacing: inherit;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .harvy-path-ellipsis:hover .harvy-path-ellipsis__label,
+  .harvy-path-ellipsis:focus-visible .harvy-path-ellipsis__label {
+    visibility: hidden;
+  }
+
+  .harvy-path-ellipsis:hover::after,
+  .harvy-path-ellipsis:focus-visible::after {
+    opacity: 1;
+  }
+
+  /* Brighter than the sidebar run buttons so the count reads as a chip on hover. */
+  .group:hover > .harvy-search-hit-count,
+  .harvy-search-hit-count:focus-visible {
+    background: color-mix(in oklab, var(--color-ink) 28%, var(--color-stage));
+    color: var(--color-ink);
+  }
+
+  html.dark .group:hover > .harvy-search-hit-count,
+  html.dark .harvy-search-hit-count:focus-visible {
+    background: color-mix(in oklab, var(--color-ink) 16%, var(--color-stage));
+  }
+
+  /* Same fill as the search-count chip on hover. */
+  .harvy-document-find {
+    background: color-mix(in oklab, var(--color-ink) 28%, var(--color-stage));
+  }
+
+  html.dark .harvy-document-find {
+    background: color-mix(in oklab, var(--color-ink) 10%, var(--color-stage));
   }
 
   html.dark body {
