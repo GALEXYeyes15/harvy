@@ -1,14 +1,18 @@
 const STORAGE_TOP_BAR = "harvy:keep-top-bar-visible-while-typing";
 const STORAGE_DOCUMENT_TITLE = "harvy:keep-document-title-visible-while-typing";
+const STORAGE_FOCUS_EDIT = "harvy:keep-focus-edit-visible-while-typing";
 
 export type FocusVisibilityPrefs = {
   keepTopBarVisibleWhileTyping: boolean;
   keepDocumentTitleVisibleWhileTyping: boolean;
+  /** Clock and edit-mark buttons beside the tools panel. */
+  keepFocusEditVisibleWhileTyping: boolean;
 };
 
 const defaultPrefs: FocusVisibilityPrefs = {
   keepTopBarVisibleWhileTyping: false,
   keepDocumentTitleVisibleWhileTyping: false,
+  keepFocusEditVisibleWhileTyping: false,
 };
 
 export function readFocusVisibilityPrefs(): FocusVisibilityPrefs {
@@ -16,6 +20,7 @@ export function readFocusVisibilityPrefs(): FocusVisibilityPrefs {
   return {
     keepTopBarVisibleWhileTyping: localStorage.getItem(STORAGE_TOP_BAR) === "true",
     keepDocumentTitleVisibleWhileTyping: localStorage.getItem(STORAGE_DOCUMENT_TITLE) === "true",
+    keepFocusEditVisibleWhileTyping: localStorage.getItem(STORAGE_FOCUS_EDIT) === "true",
   };
 }
 
@@ -32,6 +37,12 @@ export function writeFocusVisibilityPrefs(
       localStorage.setItem(
         STORAGE_DOCUMENT_TITLE,
         next.keepDocumentTitleVisibleWhileTyping ? "true" : "false",
+      );
+    }
+    if (partial.keepFocusEditVisibleWhileTyping !== undefined) {
+      localStorage.setItem(
+        STORAGE_FOCUS_EDIT,
+        next.keepFocusEditVisibleWhileTyping ? "true" : "false",
       );
     }
   }

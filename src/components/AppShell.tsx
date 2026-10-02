@@ -32,6 +32,7 @@ import type { SettingsSectionId } from "./settings/sectionIds";
 import { EncouragementToast } from "./EncouragementToast";
 import { SidebarLeft } from "./SidebarLeft";
 import { ChromeSidebarToggleButton } from "./ChromeSidebarToggleButton";
+import { FocusEditChromeButtons } from "./FocusEditChromeButtons";
 import { SidebarRight } from "./SidebarRight";
 import { EditorToolbar } from "./EditorToolbar";
 import {
@@ -313,6 +314,8 @@ const SHOW_FORMATTING_TOOLBAR = false;
  * Narrower windows use flex “push” rails so the editor column shrinks instead of being covered.
  */
 const SIDEBAR_OVERLAY_LAYOUT_MIN_PX = 1400;
+/** Right tools panel starts below the tab bar, clear of the corner controls. */
+const TOOLS_PANEL_TOP = "2.125rem";
 
 function useSidebarOverlayLayoutMode(): boolean {
   const [overlay, setOverlay] = useState(() =>
@@ -485,6 +488,8 @@ export function AppShell() {
   const [isSearching, setIsSearching] = useState(false);
   const pendingSearchRevealRef = useRef<{ path: string; query: string } | null>(null);
   const [mode, setMode] = useState<SidebarToolsMode>("notes");
+  /** Edit highlights and underlines without opening the tools panel. */
+  const [editAnalysisOpen, setEditAnalysisOpen] = useState(false);
   const [activeWorkspaceSection, setActiveWorkspaceSection] = useState<WorkspaceSection>("write");
   /** After Research’s first paint, animate padding with sidebar toggles. */
   const [collectPaddingAnimated, setCollectPaddingAnimated] = useState(false);
@@ -889,6 +894,15 @@ export function AppShell() {
   const hideTopBarWhileTyping =
     focusModeActive ||
     (isTopChromeHidden && !focusVisibilityPrefs.keepTopBarVisibleWhileTyping);
+  /** Clock and edit-mark buttons: same writing-mode hide as the tab bar, with their own setting. */
+  const hideFocusEditButtons =
+    focusModeActive ||
+    (isTopChromeHidden && !focusVisibilityPrefs.keepFocusEditVisibleWhileTyping);
+  /**
+   * Tab bar hidden, these buttons kept: sit in the window’s top-right corner
+   * (the title strip when it is showing) instead of beside the tools toggle.
+   */
+  const focusEditPinnedToCorner = hideTopBarWhileTyping && !hideFocusEditButtons;
   /** Collect/Write rail: always hidden in Focus mode; otherwise follows typing chrome. */
   const hideWorkspaceSectionRail = focusModeActive || isTopChromeHidden;
   const tabsHiddenByTyping =
@@ -3302,12 +3316,18 @@ export function AppShell() {
     }
     return excerptFromMarkdown(editorText, RELATED_DRAFT_CHARS);
   }, [tiptapEditor, editorText]);
-  const showReadabilityHighlights = readabilityPanelOpen && mode === "edit";
+  /**
+   * Edit-tab marks, or the corner edit button, so highlights can stay on with the tools panel closed.
+   * Focus mode keeps the page clear.
+   */
+  const showEditMarks =
+    !focusModeActive && (editAnalysisOpen || (readabilityPanelOpen && mode === "edit"));
+  const showReadabilityHighlights = showEditMarks;
   const showMechanicsUnderlines =
-    readabilityPanelOpen && (mode === "edit" || (mode === "notes" && relatedProofreadIssues.length > 0));
-  /** Native misspelling underlines: same gate as grammar highlights (Edit tab + readability rail open + user pref). */
-  const showEditModeSpellcheck =
-    writingAssistancePrefs.spellcheck && readabilityPanelOpen && mode === "edit";
+    showEditMarks ||
+    (readabilityPanelOpen && mode === "notes" && relatedProofreadIssues.length > 0);
+  /** Native misspelling underlines: same gate as grammar highlights. */
+  const showEditModeSpellcheck = writingAssistancePrefs.spellcheck && showEditMarks;
 
   useEffect(() => {
     writingAssistanceViewRef.showReadabilityHighlights = showReadabilityHighlights;
@@ -3666,11 +3686,11 @@ export function AppShell() {
   }, [editorInstanceKey]);
 
   useEffect(() => {
-    proofreadDecorationsViewRef.relatedOnly = mode === "notes";
+    proofreadDecorationsViewRef.relatedOnly = mode === "notes" && !showEditMarks;
     if (!tiptapEditor) return;
     setMechanicsUnderlinesVisible(tiptapEditor.view, showMechanicsUnderlines);
     refreshMechanicsProofread();
-  }, [showMechanicsUnderlines, mode, tiptapEditor, refreshMechanicsProofread]);
+  }, [showMechanicsUnderlines, showEditMarks, mode, tiptapEditor, refreshMechanicsProofread]);
 
   useEffect(() => {
     syncSpellingContextMenuRef({
@@ -4229,7 +4249,15 @@ export function AppShell() {
    * evenly so the text is centered in the window.
    */
   const writeSideInsetPx = WORKSPACE_SECTION_SWITCHER_WIDTH_PX / 2;
-  const writeInsetStyle = { paddingLeft: writeSideInsetPx, paddingRight: writeSideInsetPx };
+  /**
+   * Overlay sidebar floats on the editor. Inset the scrollport by its width so
+   * the scrollbar stays on the sidebar’s left edge. In the flex layout the
+   * sidebar already ends the editor pane, so no extra inset is needed.
+   */
+  const scrollbarSidebarInsetPx =
+    sidebarOverlayLayout && readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0;
+  const writeInsetStyle =
+    scrollbarSidebarInsetPx > 0 ? { paddingRight: scrollbarSidebarInsetPx } : undefined;
   /** EditorCanvas frame border + `sm:px-14` page padding, before the text starts. */
   const writeTextPagePadPx = 57;
   const writeColumnLayout = editorColumnLayout({
@@ -4249,37 +4277,27 @@ export function AppShell() {
         ? TOOLS_SIDEBAR_WIDTH_PX + 24 - (writeSideInsetPx + writeTextPagePadPx)
         : 0,
   });
-  const editorPanelPadStyle =
-    !collectUsesFullWidth && sidebarOverlayLayout
-      ? {
-          paddingLeft: writeColumnLayout.paddingLeftPx,
-          paddingRight: writeColumnLayout.paddingRightPx,
-        }
-      : undefined;
-  const writeColumnStyle = collectUsesFullWidth
-    ? undefined
-    : {
-        maxWidth: sidebarOverlayLayout
-          ? writeColumnLayout.maxWidthPx
-          : EDITOR_COLUMN_BASE_PX + systemTypography.lineExpansionPx,
-      };
+  const columnMaxPx = EDITOR_COLUMN_BASE_PX + systemTypography.lineExpansionPx;
+  /**
+   * Scrollport is the editor pane (window edge, or the right sidebar’s left
+   * edge). The text column stays where the centered layout put it.
+   */
+  const flexPaneWidthPx = sidebarOverlayLayout
+    ? windowInnerWidth - scrollbarSidebarInsetPx
+    : windowInnerWidth -
+      (isWorkspaceSidebarOpen ? WORKSPACE_SIDEBAR_WIDTH_PX : 0) -
+      (readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0);
+  const textColumnWidthPx = sidebarOverlayLayout
+    ? writeColumnLayout.maxWidthPx
+    : Math.min(columnMaxPx, Math.max(0, flexPaneWidthPx));
+  const textColumnOffsetLeftPx = sidebarOverlayLayout
+    ? writeColumnLayout.paddingLeftPx
+    : Math.max(0, Math.round((flexPaneWidthPx - textColumnWidthPx) / 2));
 
   const editorPanelSection = (
-    <div
-      className={`flex min-h-0 w-full flex-1 justify-center overflow-hidden bg-stage ${
-        !collectUsesFullWidth && sidebarOverlayLayout
-          ? "transition-[padding] duration-500 ease-in-out"
-          : ""
-      }`}
-      style={editorPanelPadStyle}
-    >
+    <div className="flex min-h-0 w-full flex-1 justify-center overflow-hidden bg-stage">
       <section
-        className={`flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-stage ${
-          collectUsesFullWidth
-            ? "max-w-none"
-            : "mx-auto w-full transition-[max-width] duration-500 ease-in-out"
-        }`}
-        style={writeColumnStyle}
+        className="flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-stage"
         aria-label={collectUsesFullWidth ? "Research" : "Editor"}
         role="tabpanel"
         id="harvy-editor-panel"
@@ -4310,7 +4328,7 @@ export function AppShell() {
         <div
           className={
             activeWorkspaceSection === "write"
-              ? "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+              ? "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-[padding] duration-500 ease-in-out"
               : "hidden"
           }
           style={activeWorkspaceSection === "write" ? writeInsetStyle : undefined}
@@ -4339,14 +4357,21 @@ export function AppShell() {
               placeholder={editorPlaceholder}
               isEditable={editorEditable}
               spellcheckEnabled={showEditModeSpellcheck}
-              grammarChecksEnabled={
-                writingAssistancePrefs.grammarChecks && readabilityPanelOpen && mode === "edit"
-              }
+              grammarChecksEnabled={writingAssistancePrefs.grammarChecks && showEditMarks}
               showReadabilityHighlights={showReadabilityHighlights}
               showMechanicsUnderlines={showMechanicsUnderlines}
               blockBackspace={focusModeActive}
               focusModeActive={focusModeActive}
               chromeScrollPad={chromeScrollPad}
+              scrollTrackTopInset={
+                // 1px cancels the editor frame's top border so the track meets the sidebar.
+                sidebarOverlayLayout && !focusModeActive
+                  ? `calc(${TOOLS_PANEL_TOP} - 1px)`
+                  : "0px"
+              }
+              columnOffsetLeftPx={textColumnOffsetLeftPx}
+              columnWidthPx={textColumnWidthPx}
+              columnPadPx={writeSideInsetPx}
               workspaceRootPath={workspaceRootPath}
               pickLocalImage={pickLocalImage}
               loadImageAt={loadImageAtPos}
@@ -4389,8 +4414,22 @@ export function AppShell() {
     </div>
   );
 
+  const focusEditChromeStyle = focusEditPinnedToCorner
+    ? {
+        top: 0,
+        right: "0.5rem",
+        height: showWindowTitleStrip ? "var(--harvy-window-title-strip-height)" : "2.125rem",
+      }
+    : {
+        top: showWindowTitleStrip
+          ? "calc(var(--harvy-window-title-strip-height) + var(--harvy-tab-bar-height) + 0.25rem)"
+          : "calc(var(--harvy-tab-bar-height) + 0.25rem)",
+        right: "calc(0.5rem + 2rem)",
+        height: "2.125rem",
+      };
+
   return (
-    <div className="flex h-full min-h-0 w-full flex-col bg-canvas">
+    <div className="relative flex h-full min-h-0 w-full flex-col bg-canvas">
     {showWindowTitleStrip ? (
       <div
         className={`harvy-title-bar-drag h-[var(--harvy-window-title-strip-height)] w-full shrink-0 transition-colors duration-500 ease-in-out ${
@@ -4400,6 +4439,24 @@ export function AppShell() {
         data-tauri-drag-region
       />
     ) : null}
+    <div
+      className="pointer-events-none absolute z-40 flex items-center transition-[top,right,height] duration-500 ease-in-out"
+      style={focusEditChromeStyle}
+    >
+      <div
+        className={`flex items-center transition-opacity duration-500 ease-in-out ${
+          hideFocusEditButtons ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100"
+        }`}
+        aria-hidden={hideFocusEditButtons}
+        inert={hideFocusEditButtons}
+      >
+        <FocusEditChromeButtons
+          editMarksOn={editAnalysisOpen}
+          onStartFocus={startFocusMode}
+          onToggleEditMarks={() => setEditAnalysisOpen((open) => !open)}
+        />
+      </div>
+    </div>
     <div
       className={`relative min-h-0 w-full flex-1 overflow-hidden bg-canvas${
         focusModeActive ? " harvy-focus-mode-shell" : ""
@@ -4415,10 +4472,13 @@ export function AppShell() {
               {/* Readability: pinned overlay — top clears document header strip */}
               <div
                 aria-hidden={!readabilityPanelOpen}
-                className={`absolute bottom-0 right-0 top-[2.125rem] z-10 flex flex-col overflow-hidden bg-stage transition-[width] duration-500 ease-in-out [backdrop-filter:none] ${
+                className={`absolute bottom-0 right-0 z-10 flex flex-col overflow-hidden bg-stage transition-[width] duration-500 ease-in-out [backdrop-filter:none] ${
                   readabilityPanelOpen ? "" : "pointer-events-none"
                 }`}
-                style={{ width: readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0 }}
+                style={{
+                  top: TOOLS_PANEL_TOP,
+                  width: readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0,
+                }}
               >
                 <div
                   className={`flex h-full min-h-0 shrink-0 flex-col transition-opacity duration-500 ease-in-out ${
@@ -4551,12 +4611,16 @@ export function AppShell() {
 
       {/* Right tools-panel toggle — window-shell anchored so Notes / layout changes never shift it. */}
       <div
-        className={`pointer-events-none absolute right-2 z-30 flex h-[2.125rem] items-center transition-opacity duration-500 ease-in-out ${
-          hideTopBarWhileTyping || focusModeActive ? "opacity-0" : "opacity-100"
-        }`}
+        className="pointer-events-none absolute right-2 z-30 flex h-[2.125rem] items-center"
         style={{ top: "calc(var(--harvy-tab-bar-height) + 0.25rem)" }}
       >
-        <div className="pointer-events-auto shrink-0">
+        <div
+          className={`shrink-0 transition-opacity duration-500 ease-in-out ${
+            hideTopBarWhileTyping || focusModeActive
+              ? "pointer-events-none opacity-0"
+              : "pointer-events-auto opacity-100"
+          }`}
+        >
           <ChromeSidebarToggleButton
             icon={PanelRight}
             open={readabilityPanelOpen}

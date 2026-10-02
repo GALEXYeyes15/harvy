@@ -114,6 +114,17 @@ type EditorCanvasProps = {
    * Keeps the page in place while the clip expands to the window edge.
    */
   chromeScrollPad?: string;
+  /**
+   * Pulls the scroll track down so its top lines up with the right sidebar,
+   * instead of the bottom of the tab bar. Page padding shrinks by the same
+   * amount so the text stays put.
+   */
+  scrollTrackTopInset?: string;
+  /** Text column position inside the full-width scrollport. */
+  columnOffsetLeftPx?: number;
+  columnWidthPx?: number;
+  /** Horizontal pad inside the text column (section-rail balance). */
+  columnPadPx?: number;
   onChangeText: (value: string) => void;
   /** Fires when the TipTap instance is created or destroyed (null on unmount). */
   onEditorReady: (editor: Editor | null) => void;
@@ -164,6 +175,10 @@ export function EditorCanvas({
   blockBackspace = false,
   focusModeActive = false,
   chromeScrollPad = "0px",
+  scrollTrackTopInset = "0px",
+  columnOffsetLeftPx = 0,
+  columnWidthPx,
+  columnPadPx = 0,
   onChangeText,
   onEditorReady,
   onTypingActivity,
@@ -725,7 +740,8 @@ export function EditorCanvas({
 
   return (
     <div
-      className={`box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent border border-solid border-transparent ${editorVisuallyInactive ? "editor-is-inactive" : ""} ${focusModeActive ? "harvy-focus-mode" : ""}`}
+      className={`box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-y border-l border-solid border-transparent bg-transparent ${editorVisuallyInactive ? "editor-is-inactive" : ""} ${focusModeActive ? "harvy-focus-mode" : ""}`}
+      style={{ paddingTop: scrollTrackTopInset }}
     >
       <div
         ref={writingSurfaceRef}
@@ -746,15 +762,27 @@ export function EditorCanvas({
         onDrop={handleSurfaceDrop}
       >
         <div
+          className="flex min-h-full max-w-full flex-col transition-[margin-left,width] duration-500 ease-in-out"
+          style={{
+            marginLeft: columnOffsetLeftPx,
+            width: columnWidthPx && columnWidthPx > 0 ? columnWidthPx : "100%",
+            paddingLeft: columnPadPx,
+            paddingRight: columnPadPx,
+          }}
+        >
+        <div
           className={`flex min-h-full w-full flex-col px-10 sm:px-14 ${
             focusModeActive
               ? "harvy-typewriter-scrolling"
-              : "pb-52 pt-[calc(var(--harvy-chrome-scroll-pad,0px)+1.5rem)] transition-[padding-top] duration-500 ease-in-out sm:pb-9 sm:pt-[calc(var(--harvy-chrome-scroll-pad,0px)+2rem)]"
+              : "pb-52 pt-[max(0px,calc(var(--harvy-chrome-scroll-pad,0px)+1.5rem-var(--harvy-scroll-track-top,0px)))] transition-[padding-top] duration-500 ease-in-out sm:pb-9 sm:pt-[max(0px,calc(var(--harvy-chrome-scroll-pad,0px)+2rem-var(--harvy-scroll-track-top,0px)))]"
           }`}
           style={
             focusModeActive
               ? undefined
-              : { ["--harvy-chrome-scroll-pad" as string]: chromeScrollPad }
+              : {
+                  ["--harvy-chrome-scroll-pad" as string]: chromeScrollPad,
+                  ["--harvy-scroll-track-top" as string]: scrollTrackTopInset,
+                }
           }
         >
           {showPostTitle || showSubtitle ? (
@@ -850,6 +878,7 @@ export function EditorCanvas({
             editor={editor}
             className={`block min-h-full w-full flex-1 ${focusModeActive ? "" : "pb-52"}`}
           />
+        </div>
         </div>
         <HeadlineSuggestMenu
           open={headlineMenuOpen}
