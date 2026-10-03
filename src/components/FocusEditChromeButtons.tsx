@@ -1,5 +1,12 @@
 import { Clock } from "lucide-react";
-import { CHROME_SIDEBAR_TOGGLE_CLASS } from "./ChromeSidebarToggleButton";
+import { formatHotkeyChord } from "../features/settings/hotkeys";
+
+const ICON_BUTTON =
+  "pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-[background-color] hover:bg-accent/10";
+
+/** Dots are this letter’s own background, so they take its color in the same paint. */
+const EDIT_MARK =
+  "inline-block bg-[length:4px_3px] bg-bottom bg-repeat-x bg-[radial-gradient(circle,currentColor_1.15px,transparent_1.3px)] px-px pb-[3px] -mb-[3px] text-[15px] font-medium leading-none";
 
 type FocusEditChromeButtonsProps = {
   editMarksOn: boolean;
@@ -20,8 +27,8 @@ export function FocusEditChromeButtons({
         type="button"
         onClick={onStartFocus}
         aria-label="Start focus mode"
-        title="Start focus mode"
-        className={CHROME_SIDEBAR_TOGGLE_CLASS}
+        title={`Start focus mode (${formatHotkeyChord(["Option", "F"])})`}
+        className={`${ICON_BUTTON} text-accent hover:text-white`}
       >
         <Clock size={17} strokeWidth={1.5} aria-hidden />
       </button>
@@ -30,16 +37,12 @@ export function FocusEditChromeButtons({
         onClick={onToggleEditMarks}
         aria-pressed={editMarksOn}
         aria-label={editLabel}
-        title={editLabel}
-        className={`${CHROME_SIDEBAR_TOGGLE_CLASS} ${editMarksOn ? "bg-accent/15" : ""}`}
+        title={`${editLabel} (${formatHotkeyChord(["Mod", "E"])})`}
+        className={`${ICON_BUTTON} ${
+          editMarksOn ? "bg-accent/15 text-white" : "text-accent hover:text-white"
+        }`}
       >
-        <span className="relative inline-block px-px text-[15px] font-medium leading-none">
-          A
-          <span
-            aria-hidden
-            className="absolute -bottom-[5px] left-0 right-0 h-[3px] bg-[radial-gradient(circle,#e5484d_1.15px,transparent_1.3px)] bg-[length:4px_3px] bg-bottom bg-repeat-x"
-          />
-        </span>
+        <span className={EDIT_MARK}>A</span>
       </button>
     </>
   );

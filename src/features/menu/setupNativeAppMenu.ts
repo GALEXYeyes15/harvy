@@ -49,6 +49,15 @@ export async function setupNativeAppMenu(options: NativeAppMenuOptions = {}): Pr
       await PredefinedMenuItem.new({ item: "HideOthers" }),
       await PredefinedMenuItem.new({ item: "ShowAll" }),
       await PredefinedMenuItem.new({ item: "Separator" }),
+      await MenuItem.new({
+        id: "app-settings",
+        text: "Settings…",
+        accelerator: "CmdOrCtrl+,",
+        action: () => {
+          getViewMenuHandlers().openSettings();
+        },
+      }),
+      await PredefinedMenuItem.new({ item: "Separator" }),
       await PredefinedMenuItem.new({ item: "Quit" }),
     ],
   });
@@ -191,15 +200,13 @@ export async function setupNativeAppMenu(options: NativeAppMenuOptions = {}): Pr
         },
       }),
       await PredefinedMenuItem.new({ item: "Separator" }),
-      // AppShell also handles Shift+Esc in the webview; both actions are idempotent.
       await MenuItem.new({
-        id: "view-shift-esc",
-        text: focusModeActive ? "End Focus Mode" : "Show Tabs",
-        accelerator: "Shift+Escape",
-        enabled: focusModeActive || tabsHidden,
+        id: "view-show-tabs",
+        text: "Show Tabs",
+        accelerator: "Alt+Up",
+        enabled: tabsHidden && !focusModeActive,
         action: () => {
-          if (focusModeActive) getViewMenuHandlers().endFocusMode();
-          else getViewMenuHandlers().showTabs();
+          getViewMenuHandlers().showTabs();
         },
       }),
     ],
@@ -210,14 +217,17 @@ export async function setupNativeAppMenu(options: NativeAppMenuOptions = {}): Pr
     items: [
       await MenuItem.new({
         id: "focus-open",
-        text: "Focus Mode…",
+        text: "Focus Mode",
+        ...(focusModeActive ? {} : { accelerator: "Alt+F" }),
+        enabled: !focusModeActive,
         action: () => {
-          getViewMenuHandlers().openFocusMode();
+          getViewMenuHandlers().startFocusMode();
         },
       }),
       await MenuItem.new({
         id: "focus-end",
         text: "End Focus Mode",
+        ...(focusModeActive ? { accelerator: "Alt+F" } : {}),
         enabled: focusModeActive,
         action: () => {
           getViewMenuHandlers().endFocusMode();

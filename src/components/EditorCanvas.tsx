@@ -741,7 +741,10 @@ export function EditorCanvas({
   return (
     <div
       className={`box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-y border-l border-solid border-transparent bg-transparent ${editorVisuallyInactive ? "editor-is-inactive" : ""} ${focusModeActive ? "harvy-focus-mode" : ""}`}
-      style={{ paddingTop: scrollTrackTopInset }}
+      style={{
+        paddingTop: scrollTrackTopInset,
+        transition: "padding-top 500ms var(--harvy-chrome-ease)",
+      }}
     >
       <div
         ref={writingSurfaceRef}
@@ -774,7 +777,7 @@ export function EditorCanvas({
           className={`flex min-h-full w-full flex-col px-10 sm:px-14 ${
             focusModeActive
               ? "harvy-typewriter-scrolling"
-              : "pb-52 pt-[max(0px,calc(var(--harvy-chrome-scroll-pad,0px)+1.5rem-var(--harvy-scroll-track-top,0px)))] transition-[padding-top] duration-500 ease-in-out sm:pb-9 sm:pt-[max(0px,calc(var(--harvy-chrome-scroll-pad,0px)+2rem-var(--harvy-scroll-track-top,0px)))]"
+              : "pb-52 pt-[max(0px,calc(var(--harvy-chrome-scroll-pad,0px)+var(--harvy-editor-top-pad)-var(--harvy-scroll-track-top,0px)))] transition-[padding-top] duration-500 ease-in-out sm:pb-9"
           }`}
           style={
             focusModeActive

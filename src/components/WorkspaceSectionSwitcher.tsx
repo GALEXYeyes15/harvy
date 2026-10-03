@@ -44,7 +44,7 @@ export function WorkspaceSectionSwitcher({
   return (
     <nav
       className={[
-        "pointer-events-none flex w-[3.25rem] shrink-0 flex-col items-stretch justify-start bg-transparent pl-1 pr-2",
+        "pointer-events-none flex w-8 flex-col items-center bg-transparent",
         RAIL_MOTION_CLASS,
         chromeHidden
           ? "pointer-events-none -translate-y-2 opacity-0"
@@ -56,7 +56,7 @@ export function WorkspaceSectionSwitcher({
       style={style}
       aria-label="Workspace sections"
     >
-      <div className="flex w-full flex-col items-stretch gap-1.5">
+      <div className="flex w-8 flex-col items-center">
       {sections.map((section) => {
         const active = activeSection === section;
         const label = workspaceSectionLabel(section, {
@@ -74,17 +74,15 @@ export function WorkspaceSectionSwitcher({
             aria-current={active ? "page" : undefined}
             aria-label={label}
             title={label}
-            className={`group relative flex w-full items-center justify-center py-1.5 transition-colors ${
+            className={`flex h-8 w-8 items-center justify-center transition-colors ${
               chromeHidden ? "pointer-events-none" : "pointer-events-auto"
-            } ${active ? "text-ink" : "text-accent/60 hover:text-ink/80"}`}
+            } ${
+              active
+                ? "text-ink dark:text-white"
+                : "text-accent hover:text-ink dark:hover:text-white"
+            }`}
           >
-            <span
-              aria-hidden
-              className={`pointer-events-none absolute inset-y-0 left-0 w-[2px] rounded-full transition-colors duration-150 ${
-                active ? "bg-current" : "bg-transparent group-hover:bg-current"
-              }`}
-            />
-            <Icon aria-hidden size={17} strokeWidth={active ? 2 : 1.75} />
+            <Icon aria-hidden size={17} strokeWidth={1.5} />
           </button>
         );
       })}

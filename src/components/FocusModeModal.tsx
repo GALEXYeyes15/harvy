@@ -93,7 +93,7 @@ export function FocusModeModal({
             </li>
             <li className="flex gap-2">
               <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted/50" aria-hidden />
-              <span>Press Shift+Esc anytime to end Focus mode</span>
+              <span>Press Option+F anytime to end Focus mode</span>
             </li>
           </ul>
           <div className="flex items-center justify-end gap-2 pt-1">

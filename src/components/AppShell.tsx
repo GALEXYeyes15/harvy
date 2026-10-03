@@ -115,7 +115,15 @@ import { setViewMenuHandlers } from "../features/menu/viewMenuBridge";
 import { setupNativeAppMenu } from "../features/menu/setupNativeAppMenu";
 import { setupWindowDragRegions } from "../features/window/setupWindowDragRegions";
 import { isDocumentNameKeyboardTarget, isEditableKeyboardTarget } from "../lib/isEditableKeyboardTarget";
-import { formatHotkeyChord, matchSidebarToggleHotkey, matchViewHotkey } from "../features/settings/hotkeys";
+import {
+  formatHotkeyChord,
+  matchEditMarksHotkey,
+  matchFocusModeHotkey,
+  matchRevealChromeHotkey,
+  matchSettingsHotkey,
+  matchSidebarToggleHotkey,
+  matchViewHotkey,
+} from "../features/settings/hotkeys";
 import {
   emitNotesPopoutState,
   listenNotesPopoutRequest,
@@ -813,6 +821,13 @@ export function AppShell() {
     () => visibleWorkspaceSections(enableCollect),
     [enableCollect],
   );
+  /** Same left edge as the sidebar toggle button (`px-0.5` inside its tab-bar slot). */
+  const sectionRailCanvasInset = "0.625rem";
+  const sectionRailLeftCollapsed = isWindowFullscreen
+    ? sectionRailCanvasInset
+    : `calc(var(--harvy-traffic-light-inset, 0px) + ${sectionRailCanvasInset})`;
+  /** Research lines up with the right sidebar toggle (2.125rem slot, h-8 button). */
+  const sectionRailTop = "calc(var(--harvy-tab-bar-height) + 0.3125rem)";
 
   useEffect(() => {
     if (!enableCollect) {
@@ -894,9 +909,10 @@ export function AppShell() {
   const hideTopBarWhileTyping =
     focusModeActive ||
     (isTopChromeHidden && !focusVisibilityPrefs.keepTopBarVisibleWhileTyping);
-  /** Clock and edit-mark buttons: same writing-mode hide as the tab bar, with their own setting. */
+  /** Clock and edit-mark buttons: hidden in Research, and with writing-mode chrome unless kept. */
   const hideFocusEditButtons =
     focusModeActive ||
+    activeWorkspaceSection === "collect" ||
     (isTopChromeHidden && !focusVisibilityPrefs.keepFocusEditVisibleWhileTyping);
   /**
    * Tab bar hidden, these buttons kept: sit in the window’s top-right corner
@@ -909,10 +925,18 @@ export function AppShell() {
     !focusModeActive && isTopChromeHidden && !isWorkspaceSidebarOpen && !readabilityPanelOpen;
   /**
    * When the tab bar collapses, keep its height inside the scroll surface so the page
-   * doesn’t jump under the overlay titlebar. The filename row overlays the editor and
-   * does not reserve layout space.
+   * doesn’t jump. The title strip and scrollbar inset collapse too; their height is
+   * added here so the text stays put while the scrollport opens to the window edge.
    */
-  const chromeScrollPad = hideTopBarWhileTyping ? "var(--harvy-tab-bar-height)" : "0px";
+  const collapseWindowTitleStrip =
+    showWindowTitleStrip && hideTopBarWhileTyping && !focusModeActive;
+  const scrollTrackTopWhenChromeVisible =
+    sidebarOverlayLayout && !focusModeActive ? `calc(${TOOLS_PANEL_TOP} - 1px)` : "0px";
+  const chromeScrollPad = hideTopBarWhileTyping
+    ? `calc(var(--harvy-tab-bar-height) + ${
+        collapseWindowTitleStrip ? "var(--harvy-window-title-strip-height)" : "0px"
+      } + max(0px, ${scrollTrackTopWhenChromeVisible} - var(--harvy-editor-top-pad)))`
+    : "0px";
   const openTabIdsRef = useRef(openTabIds);
   const activeTabIdRef = useRef(activeTabId);
   const openDocumentsRef = useRef(openDocuments);
@@ -984,6 +1008,19 @@ export function AppShell() {
     if (focusModeActive) return;
     setReadabilityPanelOpen((open) => !open);
   }, [focusModeActive]);
+
+  const editAnalysisOpenRef = useRef(editAnalysisOpen);
+  editAnalysisOpenRef.current = editAnalysisOpen;
+  const workspaceSectionForEditRef = useRef(activeWorkspaceSection);
+  workspaceSectionForEditRef.current = activeWorkspaceSection;
+
+  useEffect(() => {
+    if (!readabilityPanelOpen) return;
+    if (editAnalysisOpenRef.current && workspaceSectionForEditRef.current === "write") {
+      setMode("edit");
+    }
+    setEditAnalysisOpen(false);
+  }, [readabilityPanelOpen]);
 
   /** Snap both rails to the same state — both on unless both already on, then both off. */
   const toggleBothSidebars = useCallback(() => {
@@ -1063,6 +1100,21 @@ export function AppShell() {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [documentFindOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!matchEditMarksHotkey(event)) return;
+      if (focusModeActive || activeWorkspaceSection !== "write") return;
+      const el = event.target instanceof Element ? event.target : null;
+      if (el?.closest('[role="dialog"]')) return;
+      if (el?.closest(".harvy-context-menu")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setEditAnalysisOpen((open) => !open);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [activeWorkspaceSection, focusModeActive]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1150,8 +1202,8 @@ export function AppShell() {
   }, [focusModeActive, isWorkspaceSidebarOpen, readabilityPanelOpen, isTopChromeHidden]);
 
   /**
-   * Shift+Esc ends Focus mode when no overlay dialog is open; plain Esc is swallowed so it can't
-   * reveal chrome mid-session. Block common leave shortcuts.
+   * Plain Esc is swallowed so it can't reveal chrome mid-session. Option+F ends the session.
+   * Block common leave shortcuts.
    */
   useEffect(() => {
     if (!focusModeActive) return;
@@ -1161,7 +1213,6 @@ export function AppShell() {
         if (isFocusModeOpen || isSettingsOpen || isAboutOpen || exportOverlayOpen) return;
         event.preventDefault();
         event.stopPropagation();
-        if (event.shiftKey) endFocusMode();
         return;
       }
 
@@ -1191,13 +1242,13 @@ export function AppShell() {
     }
   }, [bothSidebarsClosed, focusModeActive]);
 
-  /** Shift+Esc brings chrome back after typing hid it. Mouse movement does not. */
+  /** Option+Up brings chrome back after typing hid it. Mouse movement does not. */
   useEffect(() => {
     if (focusModeActive || !bothSidebarsClosed || !isTopChromeHidden) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !event.shiftKey) return;
+      if (!matchRevealChromeHotkey(event)) return;
       if (!isTopChromeHidden) return;
-      const el = event.target as HTMLElement | null;
+      const el = event.target instanceof Element ? event.target : null;
       if (el?.closest('[role="dialog"]')) return;
       if (el?.closest("[data-floating-text-menu]")) return;
       if (el?.closest(".harvy-context-menu")) return;
@@ -1209,6 +1260,53 @@ export function AppShell() {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [bothSidebarsClosed, focusModeActive, isTopChromeHidden]);
+
+  /** Option+F starts Focus mode, or ends it when a session is running. */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!matchFocusModeHotkey(event)) return;
+      if (isFocusModeOpen || isSettingsOpen || isAboutOpen || exportOverlayOpen) return;
+      const el = event.target instanceof Element ? event.target : null;
+      if (el?.closest('[role="dialog"]')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (focusModeActive) endFocusMode();
+      else if (activeWorkspaceSection === "write") startFocusMode();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [
+    activeWorkspaceSection,
+    endFocusMode,
+    exportOverlayOpen,
+    focusModeActive,
+    isAboutOpen,
+    isFocusModeOpen,
+    isSettingsOpen,
+    startFocusMode,
+  ]);
+
+  const settingsHotkeyLockRef = useRef(false);
+  const toggleSettings = useCallback(() => {
+    if (settingsHotkeyLockRef.current) return;
+    settingsHotkeyLockRef.current = true;
+    queueMicrotask(() => {
+      settingsHotkeyLockRef.current = false;
+    });
+    setIsSettingsOpen((open) => !open);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!matchSettingsHotkey(event)) return;
+      if (focusModeActive) return;
+      event.preventDefault();
+      event.stopPropagation();
+      toggleSettings();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [focusModeActive, toggleSettings]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -2508,13 +2606,15 @@ export function AppShell() {
       },
       setShowResearch: handleEnableCollectChange,
       openFocusMode: () => setIsFocusModeOpen(true),
+      startFocusMode: () => startFocusMode(),
       endFocusMode: () => {
         endFocusMode();
         setIsFocusModeOpen(false);
       },
       showTabs: () => setIsTopChromeHidden(false),
+      openSettings: () => toggleSettings(),
     });
-  }, [enableCollect, endFocusMode, handleEnableCollectChange, handleWorkspaceSectionChange]);
+  }, [enableCollect, endFocusMode, handleEnableCollectChange, handleWorkspaceSectionChange, startFocusMode, toggleSettings]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -4365,7 +4465,8 @@ export function AppShell() {
               chromeScrollPad={chromeScrollPad}
               scrollTrackTopInset={
                 // 1px cancels the editor frame's top border so the track meets the sidebar.
-                sidebarOverlayLayout && !focusModeActive
+                // Once the top chrome is gone, the scrollport runs to the window edge.
+                sidebarOverlayLayout && !focusModeActive && !hideTopBarWhileTyping
                   ? `calc(${TOOLS_PANEL_TOP} - 1px)`
                   : "0px"
               }
@@ -4432,11 +4533,16 @@ export function AppShell() {
     <div className="relative flex h-full min-h-0 w-full flex-col bg-canvas">
     {showWindowTitleStrip ? (
       <div
-        className={`harvy-title-bar-drag h-[var(--harvy-window-title-strip-height)] w-full shrink-0 transition-colors duration-500 ease-in-out ${
-          hideTopBarWhileTyping ? "bg-stage" : "bg-mist"
+        className={`harvy-title-bar-drag w-full shrink-0 overflow-hidden bg-mist ${
+          collapseWindowTitleStrip ? "pointer-events-none" : ""
         }`}
-        data-harvy-window-drag
-        data-tauri-drag-region
+        style={{
+          height: collapseWindowTitleStrip ? 0 : "var(--harvy-window-title-strip-height)",
+          minHeight: 0,
+          transition: "height 500ms var(--harvy-chrome-ease)",
+        }}
+        data-harvy-window-drag={collapseWindowTitleStrip ? undefined : true}
+        data-tauri-drag-region={collapseWindowTitleStrip ? undefined : true}
       />
     ) : null}
     <div
@@ -4472,7 +4578,7 @@ export function AppShell() {
               {/* Readability: pinned overlay — top clears document header strip */}
               <div
                 aria-hidden={!readabilityPanelOpen}
-                className={`absolute bottom-0 right-0 z-10 flex flex-col overflow-hidden bg-stage transition-[width] duration-500 ease-in-out [backdrop-filter:none] ${
+                className={`absolute bottom-0 right-0 z-10 flex flex-col overflow-hidden bg-sidebar transition-[width] duration-500 ease-in-out [backdrop-filter:none] ${
                   readabilityPanelOpen ? "" : "pointer-events-none"
                 }`}
                 style={{
@@ -4501,17 +4607,18 @@ export function AppShell() {
               showHeadlinesView={showHeadlinesView}
               showAvatarView={showAvatarView}
               chromeHidden={hideWorkspaceSectionRail}
-              className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
+              className="absolute z-20"
               style={{
+                top: sectionRailTop,
                 left: isWorkspaceSidebarOpen
-                  ? `${WORKSPACE_SIDEBAR_WIDTH_PX}px`
-                  : "var(--harvy-workspace-section-rail-left-collapsed)",
+                  ? `calc(${WORKSPACE_SIDEBAR_WIDTH_PX}px + ${sectionRailCanvasInset})`
+                  : sectionRailLeftCollapsed,
               }}
             />
           ) : null}
           <div
             aria-hidden={!isWorkspaceSidebarOpen}
-            className={`absolute inset-y-0 left-0 z-10 overflow-hidden bg-stage transition-[width] duration-500 ease-in-out ${
+            className={`absolute inset-y-0 left-0 z-10 overflow-hidden bg-sidebar transition-[width] duration-500 ease-in-out ${
               isWorkspaceSidebarOpen ? "w-[260px]" : "w-0"
             }`}
           >
@@ -4529,7 +4636,7 @@ export function AppShell() {
         <div className="absolute inset-0 z-0 flex min-h-0 min-w-0 flex-row bg-canvas">
           <div
             aria-hidden={!isWorkspaceSidebarOpen}
-            className={`shrink-0 overflow-hidden bg-stage transition-[width] duration-500 ease-in-out ${
+            className={`shrink-0 overflow-hidden bg-sidebar transition-[width] duration-500 ease-in-out ${
               isWorkspaceSidebarOpen ? "w-[260px]" : "pointer-events-none w-0"
             }`}
           >
@@ -4552,11 +4659,10 @@ export function AppShell() {
                 showHeadlinesView={showHeadlinesView}
                 showAvatarView={showAvatarView}
                 chromeHidden={hideWorkspaceSectionRail}
-                className="absolute top-[var(--harvy-workspace-section-rail-top)] z-20"
+                className="absolute z-20"
                 style={{
-                  left: isWorkspaceSidebarOpen
-                    ? 0
-                    : "var(--harvy-workspace-section-rail-left-collapsed)",
+                  top: sectionRailTop,
+                  left: isWorkspaceSidebarOpen ? sectionRailCanvasInset : sectionRailLeftCollapsed,
                 }}
               />
             ) : null}
@@ -4567,7 +4673,7 @@ export function AppShell() {
               </div>
               <div
                 aria-hidden={!readabilityPanelOpen}
-                className={`flex shrink-0 flex-col overflow-hidden bg-stage transition-[width] duration-500 ease-in-out [backdrop-filter:none] ${
+                className={`flex shrink-0 flex-col overflow-hidden bg-sidebar transition-[width] duration-500 ease-in-out [backdrop-filter:none] ${
                   readabilityPanelOpen ? "" : "pointer-events-none"
                 }`}
                 style={{ width: readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0 }}

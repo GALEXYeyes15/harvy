@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   formatHotkeyChord,
   formatHotkeyKeys,
+  matchEditMarksHotkey,
+  matchFocusModeHotkey,
+  matchRevealChromeHotkey,
+  matchSettingsHotkey,
   matchSidebarToggleHotkey,
   matchViewHotkey,
 } from "./hotkeys";
@@ -70,5 +74,93 @@ describe("matchViewHotkey", () => {
     expect(matchViewHotkey({ ...cmdN, altKey: true })).toBeNull();
     expect(matchViewHotkey({ ...cmdN, metaKey: false })).toBeNull();
     expect(matchViewHotkey({ ...cmdN, key: "s" })).toBeNull();
+  });
+});
+
+describe("matchEditMarksHotkey", () => {
+  const cmdE = {
+    key: "e",
+    altKey: false,
+    metaKey: true,
+    ctrlKey: false,
+    shiftKey: false,
+  };
+
+  it("matches command or control E", () => {
+    expect(matchEditMarksHotkey(cmdE)).toBe(true);
+    expect(matchEditMarksHotkey({ ...cmdE, key: "E", metaKey: false, ctrlKey: true })).toBe(true);
+  });
+
+  it("ignores repeats, extra modifiers, and other keys", () => {
+    expect(matchEditMarksHotkey({ ...cmdE, repeat: true })).toBe(false);
+    expect(matchEditMarksHotkey({ ...cmdE, shiftKey: true })).toBe(false);
+    expect(matchEditMarksHotkey({ ...cmdE, altKey: true })).toBe(false);
+    expect(matchEditMarksHotkey({ ...cmdE, metaKey: false })).toBe(false);
+    expect(matchEditMarksHotkey({ ...cmdE, key: "f" })).toBe(false);
+  });
+});
+
+describe("chrome hotkeys", () => {
+  it("matches option up, option f, and command comma", () => {
+    expect(
+      matchRevealChromeHotkey({
+        key: "ArrowUp",
+        altKey: true,
+        metaKey: false,
+        ctrlKey: false,
+        shiftKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      matchFocusModeHotkey({
+        key: "ƒ",
+        code: "KeyF",
+        altKey: true,
+        metaKey: false,
+        ctrlKey: false,
+        shiftKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      matchSettingsHotkey({
+        key: ",",
+        code: "Comma",
+        altKey: false,
+        metaKey: true,
+        ctrlKey: false,
+        shiftKey: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("ignores extra modifiers", () => {
+    expect(
+      matchRevealChromeHotkey({
+        key: "ArrowUp",
+        altKey: true,
+        metaKey: true,
+        ctrlKey: false,
+        shiftKey: false,
+      }),
+    ).toBe(false);
+    expect(
+      matchFocusModeHotkey({
+        key: "f",
+        code: "KeyF",
+        altKey: true,
+        metaKey: false,
+        ctrlKey: false,
+        shiftKey: true,
+      }),
+    ).toBe(false);
+    expect(
+      matchSettingsHotkey({
+        key: ",",
+        altKey: false,
+        metaKey: true,
+        ctrlKey: false,
+        shiftKey: true,
+      }),
+    ).toBe(false);
   });
 });

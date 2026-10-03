@@ -48,9 +48,15 @@ export const HOTKEY_GROUPS: HotkeyGroup[] = [
       {
         id: "reveal-chrome",
         action: "Show tabs and title",
-        keys: ["Shift", "Escape"],
+        keys: ["Option", "ArrowUp"],
         note: "After they hide while typing with both sidebars closed",
       },
+      {
+        id: "focus-mode",
+        action: "Start or end Focus mode",
+        keys: ["Option", "F"],
+      },
+      { id: "open-settings", action: "Open or close Settings", keys: ["Mod", ","] },
     ],
   },
   {
@@ -64,6 +70,7 @@ export const HOTKEY_GROUPS: HotkeyGroup[] = [
       { id: "paste", action: "Paste", keys: ["Mod", "V"] },
       { id: "select-all", action: "Select All", keys: ["Mod", "A"] },
       { id: "find-in-document", action: "Find in document", keys: ["Mod", "F"] },
+      { id: "toggle-edit-marks", action: "Toggle edit highlights", keys: ["Mod", "E"] },
     ],
   },
   {
@@ -225,6 +232,21 @@ export function matchViewHotkey(event: {
   return null;
 }
 
+/** Cmd/Ctrl + E toggles edit highlights. Ignores repeats and extra modifiers. */
+export function matchEditMarksHotkey(event: {
+  key: string;
+  altKey: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  repeat?: boolean;
+}): boolean {
+  if (event.repeat) return false;
+  if (event.altKey || event.shiftKey) return false;
+  if (!(event.metaKey || event.ctrlKey)) return false;
+  return event.key.toLowerCase() === "e";
+}
+
 export type SidebarToggleHotkey = "left" | "right" | "both";
 
 /** Option/Alt + arrow sidebar toggles. Ignores repeats and other modifiers. */
@@ -242,4 +264,36 @@ export function matchSidebarToggleHotkey(event: {
   if (event.key === "ArrowRight") return "right";
   if (event.key === "ArrowDown") return "both";
   return null;
+}
+
+type ModifierKeyEvent = {
+  key: string;
+  code?: string;
+  altKey: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  repeat?: boolean;
+};
+
+/** Option/Alt + Up brings typing chrome back. Ignores repeats and other modifiers. */
+export function matchRevealChromeHotkey(event: ModifierKeyEvent): boolean {
+  if (event.repeat) return false;
+  if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return false;
+  return event.key === "ArrowUp";
+}
+
+/** Option/Alt + F starts or ends Focus mode. Uses the physical key so macOS Option doesn’t turn it into ƒ. */
+export function matchFocusModeHotkey(event: ModifierKeyEvent): boolean {
+  if (event.repeat) return false;
+  if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return false;
+  return event.code === "KeyF" || event.key.toLowerCase() === "f" || event.key === "ƒ";
+}
+
+/** Cmd/Ctrl + Comma opens Settings. */
+export function matchSettingsHotkey(event: ModifierKeyEvent): boolean {
+  if (event.repeat) return false;
+  if (event.altKey || event.shiftKey) return false;
+  if (!(event.metaKey || event.ctrlKey)) return false;
+  return event.key === "," || event.code === "Comma";
 }

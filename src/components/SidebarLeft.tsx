@@ -291,7 +291,7 @@ export function SidebarLeft({
   const canStepUpWorkspace = !isWorkspaceRoot;
 
   return (
-    <aside className="flex h-full min-h-0 w-full flex-col self-stretch bg-stage">
+    <aside className="flex h-full min-h-0 w-full flex-col self-stretch bg-sidebar">
       {/* Same vertical band as the global sidebar toggle / tab strip; keeps header copy below the control */}
       <div
         className="h-[var(--harvy-tab-bar-height)] w-full shrink-0"

@@ -13,7 +13,7 @@ import type { FileNode } from "../features/workspace/types";
 import type { RelatedEssayItem } from "../features/related-essays/relatedEssays";
 
 const PANEL =
-  "relative flex h-full min-h-0 w-full flex-col bg-stage font-[system-ui,-apple-system,BlinkMacSystemFont,'Segoe_UI',sans-serif] text-ink antialiased [backdrop-filter:none]";
+  "relative flex h-full min-h-0 w-full flex-col bg-sidebar font-[system-ui,-apple-system,BlinkMacSystemFont,'Segoe_UI',sans-serif] text-ink antialiased [backdrop-filter:none]";
 
 const LABEL = "text-left text-[14px] font-normal leading-snug text-muted/80";
 
