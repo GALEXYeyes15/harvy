@@ -25,12 +25,12 @@ pub(crate) fn sanitize_share_file_name(name: &str) -> String {
     let with_pdf = if cleaned.to_ascii_lowercase().ends_with(".pdf") {
         cleaned.to_string()
     } else if cleaned.is_empty() {
-        "Podcast Notes.pdf".to_string()
+        "Presentation Notes.pdf".to_string()
     } else {
         format!("{cleaned}.pdf")
     };
     if with_pdf.trim_matches('.').is_empty() {
-        "Podcast Notes.pdf".to_string()
+        "Presentation Notes.pdf".to_string()
     } else {
         with_pdf
     }
@@ -132,7 +132,7 @@ pub fn share_markdown(
     anchor: Option<ShareAnchor>,
 ) -> Result<(), String> {
     let _ = title;
-    let pdf_path = temp_share_pdf_path(file_name.as_deref().unwrap_or("Podcast Notes.pdf"))?;
+    let pdf_path = temp_share_pdf_path(file_name.as_deref().unwrap_or("Presentation Notes.pdf"))?;
     let path_str = pdf_path.to_string_lossy().to_string();
     let workspace_root = read_workspace_root_config(&app)?.unwrap_or_else(std::env::temp_dir);
 
@@ -162,6 +162,6 @@ mod tests {
             sanitize_share_file_name("Notes.pdf"),
             "Notes.pdf"
         );
-        assert_eq!(sanitize_share_file_name("   "), "Podcast Notes.pdf");
+        assert_eq!(sanitize_share_file_name("   "), "Presentation Notes.pdf");
     }
 }

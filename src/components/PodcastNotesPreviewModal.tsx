@@ -1,6 +1,10 @@
-import { useMemo, type MouseEvent } from "react";
-import { markdownToEditorHtml } from "../features/editor/documentMarkdown";
+import { useLayoutEffect, useRef, useState, type MouseEvent } from "react";
+import { editorHtmlToMarkdown, markdownToEditorHtml } from "../features/editor/documentMarkdown";
 import { ensurePodcastNotesBullets } from "../features/aiCheck/podcastNotesMarkdown";
+import {
+  layoutPresentationNotesPages,
+  type NotesPageBreak,
+} from "../features/aiCheck/presentationNotesPages";
 import { CenteredOverlayModal } from "./overlay/CenteredOverlayModal";
 
 type PodcastNotesPreviewModalProps = {
@@ -10,19 +14,22 @@ type PodcastNotesPreviewModalProps = {
   error: string | null;
   onClose: () => void;
   onExport: () => void;
-  onPrint?: () => void;
   onShare?: (event: MouseEvent<HTMLButtonElement>) => void;
   onRetry?: () => void;
+  onMarkdownChange?: (markdown: string) => void;
 };
 
-const OPTION_LABEL =
-  "text-[12px] font-medium tracking-wide text-muted/70";
+const ACTION_BUTTON =
+  "h-10 rounded-lg bg-ink px-5 text-[13px] font-semibold text-canvas shadow-sm transition-opacity hover:opacity-92 active:opacity-88 disabled:cursor-not-allowed disabled:opacity-45";
 
-const OPTION_FIELD =
-  "flex h-11 w-full min-w-0 items-center rounded-[10px] border border-[#6f6f6f] bg-ink/[0.04] px-3.5 text-[14px] font-medium text-ink/92 dark:bg-ink/[0.07]";
+const EMPTY_PAGES: { pageCount: number; breaks: NotesPageBreak[] } = { pageCount: 0, breaks: [] };
 
-const OPTION_BUTTON =
-  "flex h-11 w-full min-w-0 items-center justify-center rounded-[10px] border border-[#6f6f6f] bg-ink/[0.04] px-3.5 text-[14px] font-medium text-ink/92 transition-colors hover:bg-ink/[0.07] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-ink/[0.07] dark:hover:bg-ink/[0.1]";
+function samePageBreaks(a: NotesPageBreak[], b: NotesPageBreak[]) {
+  return (
+    a.length === b.length &&
+    a.every((item, index) => item.page === b[index]?.page && Math.abs(item.top - b[index].top) < 0.5)
+  );
+}
 
 export function PodcastNotesPreviewModal({
   open,
@@ -31,14 +38,66 @@ export function PodcastNotesPreviewModal({
   error,
   onClose,
   onExport,
-  onPrint,
   onShare,
   onRetry,
+  onMarkdownChange,
 }: PodcastNotesPreviewModalProps) {
-  const previewHtml = useMemo(() => {
-    if (!markdown?.trim()) return "";
-    return markdownToEditorHtml(ensurePodcastNotesBullets(markdown));
-  }, [markdown]);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const columnRef = useRef<HTMLDivElement>(null);
+  /** Markdown last written into the sheet, so typing does not reset the caret. */
+  const appliedMarkdownRef = useRef<string | null>(null);
+  const [pages, setPages] = useState(EMPTY_PAGES);
+  const syncPagesRef = useRef(() => {});
+
+  syncPagesRef.current = () => {
+    const sheet = sheetRef.current;
+    const column = columnRef.current;
+    if (!open || !sheet || !column || generating || error) {
+      setPages((prev) => (prev.pageCount === 0 && prev.breaks.length === 0 ? prev : EMPTY_PAGES));
+      return;
+    }
+    const next = layoutPresentationNotesPages(sheet, column);
+    setPages((prev) =>
+      prev.pageCount === next.pageCount && samePageBreaks(prev.breaks, next.breaks) ? prev : next,
+    );
+  };
+
+  useLayoutEffect(() => {
+    if (!open) {
+      appliedMarkdownRef.current = null;
+      setPages(EMPTY_PAGES);
+      return;
+    }
+    const sheet = sheetRef.current;
+    if (!sheet || generating || error) {
+      setPages(EMPTY_PAGES);
+      return;
+    }
+    const normalized = markdown?.trim() ? ensurePodcastNotesBullets(markdown) : "";
+    if (appliedMarkdownRef.current !== normalized) {
+      sheet.innerHTML = normalized ? markdownToEditorHtml(normalized) : "";
+      appliedMarkdownRef.current = normalized;
+    }
+    syncPagesRef.current();
+  }, [open, markdown, generating, error]);
+
+  useLayoutEffect(() => {
+    const column = columnRef.current;
+    if (!open || !column) return;
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => syncPagesRef.current());
+    observer.observe(column);
+    return () => observer.disconnect();
+  }, [open, generating, error]);
+
+  const publishSheetMarkdown = () => {
+    const sheet = sheetRef.current;
+    if (!sheet || !onMarkdownChange) return;
+    const next = ensurePodcastNotesBullets(editorHtmlToMarkdown(sheet.innerHTML));
+    appliedMarkdownRef.current = next;
+    onMarkdownChange(next);
+    syncPagesRef.current();
+  };
 
   const canExport = Boolean(markdown?.trim()) && !generating && !error;
 
@@ -46,113 +105,128 @@ export function PodcastNotesPreviewModal({
     <CenteredOverlayModal
       open={open}
       onClose={onClose}
-      title="Podcast Notes"
+      title="Presentation Notes"
       titleId="harvy-podcast-notes-preview-title"
-      backdropLabel="Dismiss podcast notes preview"
-      closeLabel="Close podcast notes preview"
-      panelSizeClassName="h-[min(88vh,calc(100vh-1.5rem))] w-full max-w-[min(1180px,calc(100vw-1.5rem))]"
+      backdropLabel="Dismiss presentation notes preview"
+      closeLabel="Close presentation notes preview"
+      panelClassName="harvy-presentation-notes-modal"
+      panelSizeClassName="h-[min(88vh,calc(100vh-1.5rem))] w-full max-w-[min(920px,calc(100vw-1.5rem))]"
       autoFocusCloseButton={false}
       bodyClassName="flex min-h-0 flex-1 flex-col p-0"
     >
-      <div className="flex min-h-0 min-w-0 flex-1">
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-ink/[0.06] px-10 py-8 dark:bg-black/25">
-          <div className="mx-auto w-full max-w-[46rem]">
-            <article className="harvy-podcast-notes-sheet min-h-[36rem] rounded-[2px] bg-white px-14 py-16 shadow-[0_18px_48px_-28px_rgba(28,25,23,0.55)]">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-14 pb-24 pt-10">
+            <div ref={columnRef} className="relative mx-auto w-full max-w-[40rem]">
+              <article className="harvy-podcast-notes-sheet min-h-full">
               {generating ? (
                 <div
                   className="space-y-5"
                   aria-busy="true"
                   aria-live="polite"
-                  aria-label="Preparing podcast notes"
+                  aria-label="Preparing presentation notes"
                 >
-                  <div className="h-8 w-[62%] animate-pulse rounded bg-black/[0.08]" />
-                  <div className="h-5 w-[38%] animate-pulse rounded bg-black/[0.07]" />
+                  <div className="h-8 w-[62%] animate-pulse rounded bg-ink/10" />
+                  <div className="h-5 w-[38%] animate-pulse rounded bg-ink/[0.08]" />
                   <div className="space-y-2.5 pt-3">
-                    <div className="h-3.5 w-full animate-pulse rounded bg-black/[0.06]" />
-                    <div className="h-3.5 w-[94%] animate-pulse rounded bg-black/[0.06]" />
-                    <div className="h-3.5 w-[88%] animate-pulse rounded bg-black/[0.06]" />
-                    <div className="h-3.5 w-[72%] animate-pulse rounded bg-black/[0.06]" />
+                    <div className="h-3.5 w-full animate-pulse rounded bg-ink/[0.06]" />
+                    <div className="h-3.5 w-[94%] animate-pulse rounded bg-ink/[0.06]" />
+                    <div className="h-3.5 w-[88%] animate-pulse rounded bg-ink/[0.06]" />
+                    <div className="h-3.5 w-[72%] animate-pulse rounded bg-ink/[0.06]" />
                   </div>
-                  <div className="h-5 w-[44%] animate-pulse rounded bg-black/[0.07] pt-6" />
+                  <div className="h-5 w-[44%] animate-pulse rounded bg-ink/[0.08] pt-6" />
                   <div className="space-y-2.5 pt-3">
-                    <div className="h-3.5 w-[90%] animate-pulse rounded bg-black/[0.06]" />
-                    <div className="h-3.5 w-full animate-pulse rounded bg-black/[0.06]" />
-                    <div className="h-3.5 w-[64%] animate-pulse rounded bg-black/[0.06]" />
+                    <div className="h-3.5 w-[90%] animate-pulse rounded bg-ink/[0.06]" />
+                    <div className="h-3.5 w-full animate-pulse rounded bg-ink/[0.06]" />
+                    <div className="h-3.5 w-[64%] animate-pulse rounded bg-ink/[0.06]" />
                   </div>
                 </div>
               ) : error ? (
                 <div className="flex min-h-[16rem] flex-col items-start justify-center gap-4">
-                  <p className="text-[15px] leading-relaxed text-[#2a2622]">{error}</p>
+                  <p className="text-[15px] leading-relaxed text-ink">{error}</p>
                   {onRetry ? (
                     <button
                       type="button"
                       onClick={onRetry}
-                      className="h-10 rounded-lg px-3 text-[13px] font-medium text-[#6e6860] transition-colors hover:bg-black/[0.05] hover:text-[#2a2622]"
+                      className="h-10 rounded-lg px-3 text-[13px] font-medium text-muted transition-colors hover:bg-ink/[0.05] hover:text-ink"
                     >
                       Try again
                     </button>
                   ) : null}
                 </div>
-              ) : previewHtml ? (
-                <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
-              ) : null}
-            </article>
-          </div>
-        </div>
-
-        <aside className="flex w-[min(22.5rem,38%)] shrink-0 flex-col border-l border-[#6f6f6f]/45 px-5 py-5">
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-1.5">
-              <p className={OPTION_LABEL}>Format</p>
-              <div className={OPTION_FIELD}>PDF</div>
+              ) : (
+                <div
+                  ref={sheetRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  role="textbox"
+                  aria-multiline="true"
+                  aria-label="Edit presentation notes"
+                  spellCheck={false}
+                  className="outline-none caret-ink"
+                  onInput={publishSheetMarkdown}
+                  onPaste={(event) => {
+                    event.preventDefault();
+                    const text = event.clipboardData.getData("text/plain");
+                    document.execCommand("insertText", false, text);
+                    publishSheetMarkdown();
+                  }}
+                />
+              )}
+              </article>
+              {pages.breaks.map((pageBreak) => (
+                <div
+                  key={pageBreak.page}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 flex h-[3.25rem] items-center"
+                  style={{ top: pageBreak.top }}
+                >
+                  <div
+                    className="h-px flex-1"
+                    style={{ backgroundColor: "color-mix(in oklab, var(--color-ink) 22%, transparent)" }}
+                  />
+                  <span className="px-3 text-[11px] tabular-nums tracking-wide text-muted">
+                    Page {pageBreak.page}
+                  </span>
+                  <div
+                    className="h-px flex-1"
+                    style={{ backgroundColor: "color-mix(in oklab, var(--color-ink) 22%, transparent)" }}
+                  />
+                </div>
+              ))}
             </div>
-            {onPrint ? (
-              <div className="flex flex-col gap-1.5">
-                <p className={OPTION_LABEL}>Print</p>
-                <button
-                  type="button"
-                  onClick={onPrint}
-                  disabled={!canExport}
-                  className={OPTION_BUTTON}
-                >
-                  Print
-                </button>
-              </div>
-            ) : null}
-            {onShare ? (
-              <div className="flex flex-col gap-1.5">
-                <p className={OPTION_LABEL}>Share</p>
-                <button
-                  type="button"
-                  onClick={onShare}
-                  disabled={!canExport}
-                  className={OPTION_BUTTON}
-                >
-                  Share
-                </button>
-              </div>
-            ) : null}
           </div>
-
-          <div className="mt-auto flex items-center justify-end gap-3 pt-8">
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between px-8 pb-6 pt-14"
+            style={{
+              backgroundImage:
+                "linear-gradient(to top, var(--harvy-notes-surface) 0%, var(--harvy-notes-surface) 38%, transparent 100%)",
+            }}
+          >
+            <p className="pb-2.5 text-[12px] text-muted">
+              {pages.pageCount > 0
+                ? `${pages.pageCount} ${pages.pageCount === 1 ? "page" : "pages"}`
+                : ""}
+            </p>
+            <div className="pointer-events-auto flex gap-3">
             <button
               type="button"
-              onClick={onClose}
-              className="h-10 rounded-lg px-3 text-[13px] font-medium text-muted/88 transition-colors hover:bg-ink/[0.05] hover:text-ink"
+              onClick={onShare}
+              disabled={!canExport || !onShare}
+              className={ACTION_BUTTON}
             >
-              Cancel
+              Share
             </button>
             <button
               type="button"
               onClick={onExport}
               disabled={!canExport}
-              className="h-10 rounded-lg bg-white px-5 text-[13px] font-semibold text-ink shadow-sm transition-opacity hover:opacity-92 active:opacity-88 disabled:cursor-not-allowed disabled:opacity-45 dark:text-page"
+              className={ACTION_BUTTON}
             >
-              Export PDF
+              Save
             </button>
+            </div>
           </div>
-        </aside>
-      </div>
+        </div>
     </CenteredOverlayModal>
   );
 }

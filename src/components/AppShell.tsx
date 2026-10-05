@@ -137,7 +137,7 @@ import { calculateEditorStats } from "../features/editor/stats";
 import { pickAndImportWorkspaceImage } from "../features/editor/imageAssets";
 import { copyDocumentToClipboard } from "../features/editor/documentClipboard";
 import { openSafeExternalUrl } from "../features/editor/openExternalUrl";
-import { printDocumentFromEditor, printMarkdownDocument } from "../features/editor/documentPrint";
+import { printDocumentFromEditor } from "../features/editor/documentPrint";
 import { shareAnchorFromElement, shareMarkdownPdf } from "../features/editor/documentShare";
 import type { HarvyImageLoadAttrs } from "../features/editor/harvyImageAttribution";
 import {
@@ -1104,7 +1104,7 @@ export function AppShell() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!matchEditMarksHotkey(event)) return;
-      if (focusModeActive || activeWorkspaceSection !== "write") return;
+      if (focusModeActive || readabilityPanelOpen || activeWorkspaceSection !== "write") return;
       const el = event.target instanceof Element ? event.target : null;
       if (el?.closest('[role="dialog"]')) return;
       if (el?.closest(".harvy-context-menu")) return;
@@ -1114,7 +1114,7 @@ export function AppShell() {
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [activeWorkspaceSection, focusModeActive]);
+  }, [activeWorkspaceSection, focusModeActive, readabilityPanelOpen]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1887,7 +1887,7 @@ export function AppShell() {
           return false;
         }
         if (!showPodcastNotes) {
-          window.alert("Turn on Podcast Notes in Settings → Artificial Intelligence.");
+          window.alert("Turn on Presentation Notes in Settings → Artificial Intelligence.");
           return false;
         }
       }
@@ -2249,7 +2249,7 @@ export function AppShell() {
   const performExportPodcastNotesPdf = useCallback(async () => {
     if (podcastNotesRunning || saveAsSubmitting || podcastNotesPreviewOpen) return;
     if (!isTauriRuntime()) {
-      window.alert("Export Podcast Notes is only available in the Harvy desktop app.");
+      window.alert("Export Presentation Notes is only available in the Harvy desktop app.");
       return;
     }
     if (!hasWorkspaceFolder) {
@@ -2262,7 +2262,7 @@ export function AppShell() {
       return;
     }
     if (!showPodcastNotes) {
-      window.alert("Turn on Podcast Notes in Settings → Artificial Intelligence.");
+      window.alert("Turn on Presentation Notes in Settings → Artificial Intelligence.");
       return;
     }
     const { text } = tiptapEditor
@@ -4558,8 +4558,12 @@ export function AppShell() {
       >
         <FocusEditChromeButtons
           editMarksOn={editAnalysisOpen}
+          editMarksDisabled={readabilityPanelOpen}
           onStartFocus={startFocusMode}
-          onToggleEditMarks={() => setEditAnalysisOpen((open) => !open)}
+          onToggleEditMarks={() => {
+            if (readabilityPanelOpen) return;
+            setEditAnalysisOpen((open) => !open);
+          }}
         />
       </div>
     </div>
@@ -4816,19 +4820,10 @@ export function AppShell() {
         error={podcastNotesPreviewError}
         onClose={closePodcastNotesPreview}
         onExport={() => void confirmPodcastNotesExport()}
-        onPrint={() => {
-          if (!podcastNotesMarkdown?.trim()) return;
-          void printMarkdownDocument(
-            "Podcast Notes",
-            ensurePodcastNotesBullets(podcastNotesMarkdown),
-          ).catch((e) => {
-            window.alert(`Print failed: ${e instanceof Error ? e.message : String(e)}`);
-          });
-        }}
         onShare={(event) => {
           if (!podcastNotesMarkdown?.trim()) return;
           void shareMarkdownPdf(
-            "Podcast Notes",
+            "Presentation Notes",
             ensurePodcastNotesBullets(podcastNotesMarkdown),
             defaultPodcastNotesPdfFileName(editorTitleBase),
             shareAnchorFromElement(event.currentTarget),
@@ -4837,6 +4832,7 @@ export function AppShell() {
           });
         }}
         onRetry={retryPodcastNotesPreview}
+        onMarkdownChange={setPodcastNotesMarkdown}
       />
       <AboutModal open={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
       <FocusModeModal

@@ -85,7 +85,7 @@ export function defaultPdfFileName(documentTitle: string): string {
 export function defaultPodcastNotesPdfFileName(documentTitle: string): string {
   const trimmed = documentTitle.replace(/[/\\?%*:|"<>]/g, "-").trim() || "Untitled";
   const base = trimmed.replace(/\.[^.\\/]+$/, "") || "Untitled";
-  return `${base} Podcast Notes.pdf`;
+  return `${base} Presentation Notes.pdf`;
 }
 
 /** Force `.md` for Save / Save As targets (replaces any other extension). */

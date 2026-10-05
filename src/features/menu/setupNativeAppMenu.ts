@@ -84,7 +84,7 @@ export async function setupNativeAppMenu(options: NativeAppMenuOptions = {}): Pr
       }),
       await MenuItem.new({
         id: "file-podcast-notes",
-        text: podcastNotesRunning ? "Export Podcast Notes…" : "Export Podcast Notes",
+        text: podcastNotesRunning ? "Export Presentation Notes…" : "Export Presentation Notes",
         enabled: podcastNotesEnabled && !podcastNotesRunning,
         action: () => {
           void getFileMenuHandlers().podcastNotesPdf();

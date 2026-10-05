@@ -6,7 +6,7 @@ const STORAGE_SHOW_RELATED_ESSAYS = "harvy:show-related-essays";
 export type AiCheckSidebarSettings = {
   /** When on, AI check controls appear in the Edit sidebar (Write). */
   showAiCheck: boolean;
-  /** When on, Export Podcast Notes is available. */
+  /** When on, Export Presentation Notes is available. */
   showPodcastNotes: boolean;
   /** When on, two-finger click Title or Subtitle to suggest titles. */
   showTitleGeneration: boolean;

@@ -10,12 +10,15 @@ const EDIT_MARK =
 
 type FocusEditChromeButtonsProps = {
   editMarksOn: boolean;
+  /** Right sidebar owns edit highlights, so the corner control stays off. */
+  editMarksDisabled?: boolean;
   onStartFocus: () => void;
   onToggleEditMarks: () => void;
 };
 
 export function FocusEditChromeButtons({
   editMarksOn,
+  editMarksDisabled = false,
   onStartFocus,
   onToggleEditMarks,
 }: FocusEditChromeButtonsProps) {
@@ -35,12 +38,24 @@ export function FocusEditChromeButtons({
       <button
         type="button"
         onClick={onToggleEditMarks}
+        disabled={editMarksDisabled}
         aria-pressed={editMarksOn}
         aria-label={editLabel}
-        title={`${editLabel} (${formatHotkeyChord(["Mod", "E"])})`}
-        className={`${ICON_BUTTON} ${
-          editMarksOn ? "bg-accent/15 text-white" : "text-accent hover:text-white"
+        title={
+          editMarksDisabled
+            ? "Unavailable while the sidebar is open"
+            : `${editLabel} (${formatHotkeyChord(["Mod", "E"])})`
+        }
+        className={`${ICON_BUTTON} disabled:cursor-default disabled:bg-transparent disabled:text-accent disabled:opacity-100 disabled:hover:bg-transparent disabled:hover:text-accent ${
+          editMarksOn && !editMarksDisabled
+            ? "bg-accent/15 text-white"
+            : "text-accent hover:text-white"
         }`}
+        style={
+          editMarksDisabled
+            ? { color: "var(--color-accent)", WebkitTextFillColor: "var(--color-accent)" }
+            : undefined
+        }
       >
         <span className={EDIT_MARK}>A</span>
       </button>

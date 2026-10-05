@@ -37,4 +37,23 @@ describe("FocusEditChromeButtons", () => {
       "true",
     );
   });
+
+  it("does not toggle edit highlights while the control is disabled", async () => {
+    const user = userEvent.setup();
+    const onToggleEditMarks = vi.fn();
+
+    render(
+      <FocusEditChromeButtons
+        editMarksOn={false}
+        editMarksDisabled
+        onStartFocus={vi.fn()}
+        onToggleEditMarks={onToggleEditMarks}
+      />,
+    );
+
+    const editButton = screen.getByRole("button", { name: "Show edit highlights" });
+    expect(editButton).toBeDisabled();
+    await user.click(editButton);
+    expect(onToggleEditMarks).not.toHaveBeenCalled();
+  });
 });

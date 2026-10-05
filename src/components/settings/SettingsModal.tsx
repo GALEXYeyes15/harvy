@@ -2768,7 +2768,7 @@ function AiCheckExpandableSettings({
           />
           <ToggleRow
             id="enable-podcast-notes"
-            label="Podcast Notes"
+            label="Presentation Notes"
             checked={showPodcastNotes}
             onChange={onShowPodcastNotesChange}
             disabled={!aiReady}

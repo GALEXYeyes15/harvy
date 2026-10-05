@@ -224,7 +224,7 @@ export function SaveAsModal({
                   {folderPreviewContext.hasImages
                     ? " (unavailable with images)"
                     : forceFolderOrganize
-                      ? " (unavailable for podcast notes)"
+                      ? " (unavailable for presentation notes)"
                       : ""}
                 </span>
               </span>

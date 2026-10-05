@@ -3020,8 +3020,13 @@
   }
 }
 
+.harvy-presentation-notes-modal {
+  --harvy-notes-surface: color-mix(in oklab, white 3%, var(--color-canvas));
+  background-color: var(--harvy-notes-surface) !important;
+}
+
 .harvy-podcast-notes-sheet {
-  color: #1c1917;
+  color: var(--color-ink);
   font-family: var(--font-export);
   font-size: 16px;
   line-height: 1.7;
@@ -3070,6 +3075,10 @@
 
 .harvy-podcast-notes-sheet ol {
   list-style: decimal;
+}
+
+.harvy-podcast-notes-sheet [data-page-gap] {
+  margin-top: 3.25rem;
 }
 
 /*

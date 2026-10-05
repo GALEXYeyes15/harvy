@@ -8,8 +8,6 @@ describe("PodcastNotesPreviewModal", () => {
     const user = userEvent.setup();
     const onExport = vi.fn();
     const onClose = vi.fn();
-
-    const onPrint = vi.fn();
     const onShare = vi.fn();
 
     render(
@@ -20,23 +18,20 @@ describe("PodcastNotesPreviewModal", () => {
         markdown={"# Host notes\n\n## Opening\nThe host starts with the hook.\n"}
         onClose={onClose}
         onExport={onExport}
-        onPrint={onPrint}
         onShare={onShare}
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Podcast Notes" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Presentation Notes" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Host notes" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Opening" })).toBeInTheDocument();
     expect(screen.getByRole("listitem")).toHaveTextContent("The host starts with the hook.");
-
-    await user.click(screen.getByRole("button", { name: "Print" }));
-    expect(onPrint).toHaveBeenCalledOnce();
+    expect(screen.queryByText("Format")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Share" }));
     expect(onShare).toHaveBeenCalledOnce();
 
-    await user.click(screen.getByRole("button", { name: "Export PDF" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     expect(onExport).toHaveBeenCalledOnce();
   });
 
@@ -52,7 +47,34 @@ describe("PodcastNotesPreviewModal", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Export PDF" })).toBeDisabled();
-    expect(screen.getByLabelText("Preparing podcast notes")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Share" })).toBeDisabled();
+    expect(screen.getByLabelText("Preparing presentation notes")).toBeInTheDocument();
+  });
+
+  it("updates the notes when a bullet is edited", async () => {
+    const user = userEvent.setup();
+    const onMarkdownChange = vi.fn();
+
+    render(
+      <PodcastNotesPreviewModal
+        open
+        generating={false}
+        error={null}
+        markdown={"# Host notes\n\n## Opening\n- The host starts with the hook.\n"}
+        onClose={() => {}}
+        onExport={() => {}}
+        onMarkdownChange={onMarkdownChange}
+      />,
+    );
+
+    const sheet = screen.getByRole("textbox", { name: "Edit presentation notes" });
+    await user.click(screen.getByRole("listitem"));
+    await user.keyboard("{Control>}a{/Control}A revised point");
+
+    expect(onMarkdownChange).toHaveBeenCalled();
+    const last = onMarkdownChange.mock.calls.at(-1)?.[0] as string;
+    expect(last).toContain("A revised point");
+    expect(sheet).toHaveTextContent("A revised point");
   });
 });

@@ -32,7 +32,7 @@ export async function shareMarkdownPdf(
   await invoke("share_markdown", {
     markdown,
     title: title.trim() || "Untitled",
-    fileName: fileName.trim() || "Podcast Notes.pdf",
+    fileName: fileName.trim() || "Presentation Notes.pdf",
     anchor: anchor ?? null,
   });
 }

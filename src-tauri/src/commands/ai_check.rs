@@ -409,15 +409,16 @@ Rules:
 - type "grammar" for correctness; "suggestion" for style/clarity.
 - If nothing needs fixing, return {"issues":[]}."#;
 
-const PODCAST_NOTES_SYSTEM_PROMPT: &str = r#"You turn essays into clear podcast-host notes.
+const PODCAST_NOTES_SYSTEM_PROMPT: &str = r#"You turn essays into clear presentation notes.
 Return ONLY Markdown — no code fences, no preamble, no closing remarks.
 Structure requirements:
 1. Start with one H1 title for the notes (derived from the essay).
 2. Follow with several sections. Each section MUST begin with an H2 heading (`## Section Title`).
 3. Under every section, EVERY significant point MUST be a Markdown bullet (`- point`). Never write plain paragraphs for notes. Do not use numbered lists.
-4. Keep bullets concise and speakable for a podcast host.
-5. Do not invent facts that are not supported by the essay.
-6. Prefer about 4–8 sections depending on essay length."#;
+4. Match the essay's point of view in every bullet. If the essay is first person, write first person ("I" or "we"). If it is second person, keep "you". If it is third person, keep that person. Do not recast the notes as someone talking about the writer.
+5. Keep bullets concise and speakable, as if presenting the essay aloud.
+6. Do not invent facts that are not supported by the essay.
+7. Prefer about 4–8 sections depending on essay length."#;
 
 const HEADLINE_STYLE_PROMPT_DEFAULT: &str = r#"You write titles and subtitles (deks) for essays.
 Read the essay and propose exactly 5 distinct title+subtitle pairs.
@@ -1009,7 +1010,7 @@ fn run_openai_podcast_notes(
         "temperature": 0.3,
         "messages": [
             { "role": "system", "content": PODCAST_NOTES_SYSTEM_PROMPT },
-            { "role": "user", "content": format!("Essay to turn into podcast notes:\n\n{}", essay) }
+            { "role": "user", "content": format!("Essay to turn into presentation notes:\n\n{}", essay) }
         ]
     });
     let response = client
@@ -1017,16 +1018,16 @@ fn run_openai_podcast_notes(
         .bearer_auth(api_key.trim())
         .json(&body)
         .send()
-        .map_err(|e| format!("OpenAI podcast notes request failed: {}", e))?;
+        .map_err(|e| format!("OpenAI presentation notes request failed: {}", e))?;
     let status = response.status();
     let text = response
         .text()
-        .map_err(|e| format!("Could not read OpenAI podcast notes response: {}", e))?;
+        .map_err(|e| format!("Could not read OpenAI presentation notes response: {}", e))?;
     if !status.is_success() {
         return Err(format_api_error("OpenAI", status.as_u16(), &text));
     }
     let parsed: Value = serde_json::from_str(&text)
-        .map_err(|e| format!("Could not parse OpenAI podcast notes JSON: {}", e))?;
+        .map_err(|e| format!("Could not parse OpenAI presentation notes JSON: {}", e))?;
     let content = parsed
         .pointer("/choices/0/message/content")
         .and_then(|c| c.as_str())
@@ -1060,7 +1061,7 @@ fn run_anthropic_podcast_notes(
         "max_tokens": 8192,
         "system": PODCAST_NOTES_SYSTEM_PROMPT,
         "messages": [
-            { "role": "user", "content": format!("Essay to turn into podcast notes:\n\n{}", essay) }
+            { "role": "user", "content": format!("Essay to turn into presentation notes:\n\n{}", essay) }
         ]
     });
     let response = client
@@ -1070,16 +1071,16 @@ fn run_anthropic_podcast_notes(
         .header("content-type", "application/json")
         .json(&body)
         .send()
-        .map_err(|e| format!("Anthropic podcast notes request failed: {}", e))?;
+        .map_err(|e| format!("Anthropic presentation notes request failed: {}", e))?;
     let status = response.status();
     let text = response
         .text()
-        .map_err(|e| format!("Could not read Anthropic podcast notes response: {}", e))?;
+        .map_err(|e| format!("Could not read Anthropic presentation notes response: {}", e))?;
     if !status.is_success() {
         return Err(format_api_error("Anthropic", status.as_u16(), &text));
     }
     let parsed: Value = serde_json::from_str(&text)
-        .map_err(|e| format!("Could not parse Anthropic podcast notes JSON: {}", e))?;
+        .map_err(|e| format!("Could not parse Anthropic presentation notes JSON: {}", e))?;
     let content = parsed
         .get("content")
         .and_then(|c| c.as_array())
@@ -1121,7 +1122,7 @@ pub fn ai_check_podcast_notes(app: AppHandle, essay: String) -> Result<PodcastNo
     }
     if essay.chars().count() > MAX_ESSAY_CHARS {
         return Err(format!(
-            "Essay is too long for podcast notes (max {} characters).",
+            "Essay is too long for presentation notes (max {} characters).",
             MAX_ESSAY_CHARS
         ));
     }
@@ -1137,7 +1138,7 @@ pub fn ai_check_podcast_notes(app: AppHandle, essay: String) -> Result<PodcastNo
     };
     let markdown = strip_markdown_fences(&generated.text);
     if markdown.trim().is_empty() {
-        return Err("The model returned empty podcast notes.".to_string());
+        return Err("The model returned empty presentation notes.".to_string());
     }
     Ok(PodcastNotesResult {
         markdown,
