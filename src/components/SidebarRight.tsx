@@ -91,7 +91,7 @@ function SidebarToolsTab({
       aria-selected={active}
       id={`harvy-sidebar-tab-${tab}`}
       onClick={() => onSelect(tab)}
-      className="group flex min-w-0 flex-col items-stretch gap-1 py-0.5 text-center"
+      className="harvy-tools-tab group flex min-w-0 flex-col items-stretch gap-1 py-0.5 text-center"
     >
       <span
         className={`text-[12px] font-medium leading-normal tracking-wide transition-colors ${

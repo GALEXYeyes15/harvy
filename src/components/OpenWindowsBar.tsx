@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, type ReactNode } from "react";
 import { tabNavLeadingPadding } from "../features/chrome/tabNavChromeInsets";
 import { MAX_OPEN_PAGE_TABS, type PageTab } from "../features/tabs/pageTabs";
 
@@ -26,6 +26,10 @@ type OpenWindowsBarProps = {
   overlayWorkspaceRail?: boolean;
   /** Fullscreen vs windowed — affects tab nav inset when sidebar is collapsed (toggle is fixed separately). */
   isWindowFullscreen?: boolean;
+  /** Toolbar instead of a Mac window tab strip. */
+  iosLayout?: boolean;
+  leading?: ReactNode;
+  trailing?: ReactNode;
 };
 
 export function OpenWindowsBar({
@@ -38,6 +42,9 @@ export function OpenWindowsBar({
   workspaceSidebarOpen,
   overlayWorkspaceRail = true,
   isWindowFullscreen = false,
+  iosLayout = false,
+  leading,
+  trailing,
 }: OpenWindowsBarProps) {
   const leadingNavPadding = tabNavLeadingPadding(workspaceSidebarOpen, isWindowFullscreen);
 
@@ -64,6 +71,73 @@ export function OpenWindowsBar({
   }, [tabs, activeTabId, onSelectTab]);
 
   const tabNavDisabled = tabs.length === 0;
+
+  if (iosLayout) {
+    return (
+      <div
+        className={`flex h-full min-h-0 min-w-0 shrink-0 flex-col ${
+          chromeHidden ? "bg-stage" : "bg-transparent"
+        }`}
+      >
+        <header className="flex h-full w-full min-w-0 items-center gap-1 pl-1 pr-1">
+          {leading ? <div className="flex shrink-0 items-center">{leading}</div> : null}
+          <div className="h-full min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex h-full w-max min-w-0 items-center gap-1 pr-1" role="tablist" aria-label="Open pages">
+              {tabs.map((item) => {
+                const active = item.id === activeTabId;
+                return (
+                  <div
+                    key={item.id}
+                    className={`flex h-11 max-w-[11rem] shrink-0 items-center rounded-[12px] pl-1.5 ${
+                      active ? "bg-mist text-ink" : "text-muted"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      id={`harvy-tab-${item.id}`}
+                      onClick={() => onSelectTab(item.id)}
+                      className="flex min-w-0 items-center gap-1 px-1.5 text-left text-[15px] font-medium leading-tight"
+                    >
+                      <span className="min-w-0 truncate">{item.title}</span>
+                      {item.isDirty ? (
+                        <span className="shrink-0 text-muted" aria-label="Unsaved changes">
+                          •
+                        </span>
+                      ) : null}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Close ${item.title}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCloseTab(item.id);
+                      }}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted"
+                    >
+                      <X size={14} strokeWidth={2} aria-hidden />
+                    </button>
+                  </div>
+                );
+              })}
+              {tabs.length < MAX_OPEN_PAGE_TABS ? (
+                <button
+                  type="button"
+                  aria-label="Create new page"
+                  onClick={onCreateTab}
+                  className="harvy-chrome-icon-btn flex h-8 w-8 shrink-0 items-center justify-center text-accent"
+                >
+                  <Plus size={18} strokeWidth={1.75} aria-hidden />
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {trailing ? <div className="flex shrink-0 items-center">{trailing}</div> : null}
+        </header>
+      </div>
+    );
+  }
 
   return (
     <div

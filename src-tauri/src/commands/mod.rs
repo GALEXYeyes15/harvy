@@ -16,6 +16,7 @@ mod pdf_export;
 pub mod pdf_import;
 pub mod print;
 pub mod share;
+mod ios_folder;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -148,8 +149,22 @@ const USER_RULES_FILE_NAME: &str = "editorRules-user.json";
 const WORKSPACE_ROOT_FILE_NAME: &str = "workspace-root.txt";
 
 fn canonical(path: &Path) -> Result<PathBuf, String> {
-    path.canonicalize()
-        .map_err(|e| format!("Could not resolve path '{}': {}", path.display(), e))
+    match path.canonicalize() {
+        Ok(resolved) => Ok(resolved),
+        Err(error) => {
+            // Security-scoped iOS folders are readable after the document picker
+            // grants access, but realpath can still fail for them.
+            #[cfg(target_os = "ios")]
+            if path.exists() {
+                return Ok(path.to_path_buf());
+            }
+            Err(format!(
+                "Could not resolve path '{}': {}",
+                path.display(),
+                error
+            ))
+        }
+    }
 }
 
 pub(crate) fn app_config_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -163,6 +178,8 @@ pub(crate) fn app_config_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn read_workspace_root_config(app: &AppHandle) -> Result<Option<PathBuf>, String> {
+    #[cfg(target_os = "ios")]
+    ios_folder::restore_access();
     let path = app_config_dir(app)?.join(WORKSPACE_ROOT_FILE_NAME);
     if !path.exists() {
         return Ok(None);
@@ -209,6 +226,44 @@ fn ensure_within_workspace_root(app: &AppHandle, requested: &Path) -> Result<Pat
 
 fn user_rules_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app_config_dir(app)?.join(USER_RULES_FILE_NAME))
+}
+
+#[tauri::command]
+pub fn client_platform() -> &'static str {
+    if cfg!(target_os = "ios") {
+        "ios"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "other"
+    }
+}
+
+/// iPad and iPhone folder picker. Desktop keeps using the dialog plugin.
+///
+/// This has to be async. A sync command runs on the iOS IPC thread, which is
+/// the main thread, and waiting there for the picker blocks the run loop.
+#[tauri::command]
+pub async fn pick_folder(
+    app: AppHandle,
+    default_path: Option<String>,
+) -> Result<Option<String>, String> {
+    #[cfg(target_os = "ios")]
+    {
+        let receiver = ios_folder::open_picker(&app, default_path)?;
+        return tauri::async_runtime::spawn_blocking(move || {
+            receiver.recv().unwrap_or_else(|_| {
+                Err("Could not open the folder picker.".to_string())
+            })
+        })
+        .await
+        .map_err(|error| format!("Could not open the folder picker. {error}"))?;
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = (app, default_path);
+        Err("The system folder picker is only used on iPad and iPhone.".to_string())
+    }
 }
 
 #[tauri::command]

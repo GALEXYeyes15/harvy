@@ -27,6 +27,9 @@ export function setupWindowDragRegions(): () => void {
   let doubleClickY = 0;
 
   const onMouseDown = (event: MouseEvent) => {
+    // iPad taps synthesize mousedown. Dragging the window from chrome would
+    // cancel those taps, and there is no desktop title bar to drag.
+    if (typeof navigator !== "undefined" && navigator.maxTouchPoints > 1) return;
     if (event.button !== 0) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -57,6 +60,7 @@ export function setupWindowDragRegions(): () => void {
   };
 
   const onMouseUp = (event: MouseEvent) => {
+    if (typeof navigator !== "undefined" && navigator.maxTouchPoints > 1) return;
     if (!isMacPlatform() || event.button !== 0 || event.detail !== 2) return;
     const target = event.target;
     if (!(target instanceof Element)) return;

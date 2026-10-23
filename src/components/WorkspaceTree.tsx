@@ -9,10 +9,10 @@ import type { FileNode } from "../features/workspace/types";
 
 /** Unselected row chrome — reused by `SidebarLeft` folder title row for matching hover/padding. */
 export const WORKSPACE_ROW_SHELL_UNSELECTED =
-  "flex w-full min-w-0 items-center rounded-md px-2 py-[10px] text-[12px] text-muted/90 transition-colors duration-100 ease-out hover:bg-ink/[0.035] hover:text-ink";
+  "harvy-workspace-row flex w-full min-w-0 items-center rounded-md px-2 py-[10px] text-[12px] text-muted/90 transition-colors duration-100 ease-out hover:bg-ink/[0.035] hover:text-ink";
 
 const WORKSPACE_ROW_SHELL_SELECTED =
-  "relative flex w-full min-w-0 items-center rounded-md bg-muted/[0.14] px-2 py-[10px] text-[12px] text-muted/90";
+  "harvy-workspace-row relative flex w-full min-w-0 items-center rounded-md bg-muted/[0.14] px-2 py-[10px] text-[12px] text-muted/90";
 
 type WorkspaceTreeProps = {
   node: FileNode;
@@ -27,6 +27,8 @@ type WorkspaceTreeProps = {
   onRevealSearchHit?: (node: FileNode) => void;
   /** Navigate into this folder (sidebar); folders only. Double-click, like Finder. */
   onOpenFolder?: (node: FileNode) => void;
+  /** iPad opens a folder on tap. Desktop keeps Finder’s double-click. */
+  openFoldersOnTap?: boolean;
   /** Inline folder rename (path matches this directory row). */
   renamingPath?: string | null;
   renameDraft?: string;
@@ -56,7 +58,7 @@ function WorkspaceFolderDisclosure({
       type="button"
       aria-label={isExpanded ? `Collapse ${name}` : `Expand ${name}`}
       aria-expanded={isExpanded}
-      className="-ml-3.5 inline-flex w-3.5 shrink-0 items-center justify-center self-stretch text-muted/55 hover:text-muted"
+      className="harvy-folder-disclosure -ml-3.5 inline-flex w-3.5 shrink-0 items-center justify-center self-stretch text-muted/55 hover:text-muted"
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -82,6 +84,7 @@ export function WorkspaceTree({
   onSelectNode,
   onRevealSearchHit,
   onOpenFolder,
+  openFoldersOnTap = false,
   renamingPath = null,
   renameDraft = "",
   onRenameDraftChange = () => {},
@@ -204,6 +207,10 @@ export function WorkspaceTree({
               armSidebarImagePointerDrag(event.nativeEvent, node.path, node.name);
             }}
             onClick={() => {
+              if (isDirectory && openFoldersOnTap && onOpenFolder) {
+                onOpenFolder(node);
+                return;
+              }
               onSelectNode(node);
             }}
             onDoubleClick={(event) => {
@@ -260,6 +267,7 @@ export function WorkspaceTree({
                   onSelectNode={onSelectNode}
                   onRevealSearchHit={onRevealSearchHit}
                   onOpenFolder={onOpenFolder}
+                  openFoldersOnTap={openFoldersOnTap}
                   renamingPath={renamingPath}
                   renameDraft={renameDraft}
                   onRenameDraftChange={onRenameDraftChange}

@@ -37,6 +37,14 @@ export function focusEditorAtClientCoords(
 }
 
 /**
+ * iPad WKWebView only opens the keyboard for a tap it is allowed to finish.
+ * Cancelling that tap focuses the caret and then swallows the keyboard.
+ */
+export function editorFocusShouldKeepNativeGesture(): boolean {
+  return typeof navigator !== "undefined" && navigator.maxTouchPoints > 1;
+}
+
+/**
  * Focus the editor from a pointer event when ProseMirror would otherwise ignore the click
  * (padding below content, empty canvas, whitespace beside the writing column).
  * Returns true when the event was handled.

@@ -27,6 +27,18 @@ regex = "1"
 time = { version = "0.3", features = ["formatting"] }
 image = { version = "0.24", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp", "tiff"] }
 
+# Xcode 27's Swift package manager compiles iOS targets against the Mac SDK
+# unless swift-rs passes an explicit triple. That fix is on swift-rs master,
+# ahead of the 1.0.7 release Tauri currently pulls in.
+[patch.crates-io]
+swift-rs = { git = "https://github.com/Brendonovich/swift-rs", rev = "fd82965ee1a55b2777122a9ac42a581c613327ac" }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSData", "NSDictionary", "NSError", "NSFileManager", "NSObject", "NSPathUtilities", "NSSet", "NSString", "NSURL"] }
+objc2-ui-kit = { version = "0.3", features = ["UIApplication", "UIDocumentPickerViewController", "UIResponder", "UIScene", "UIViewController", "UIWindow", "UIWindowScene", "block2", "objc2-uniform-type-identifiers"] }
+objc2-uniform-type-identifiers = { version = "0.3", features = ["UTType"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSAttributedString", "NSDictionary", "NSRange", "NSValue", "NSArray"] }

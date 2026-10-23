@@ -1,6 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { confirm, open, save } from "@tauri-apps/plugin-dialog";
+import { confirm, save } from "@tauri-apps/plugin-dialog";
+import { useIosClient } from "../features/platform/useIosClient";
+import { useIosChromeGestures } from "../features/platform/iosChromeGestures";
+import { useIosKeyboardInset } from "../features/platform/useIosKeyboardInset";
+import { pickDirectory } from "../features/workspace/pickDirectory";
 import type { Editor } from "@tiptap/core";
 import { PanelLeft, PanelRight } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -318,12 +322,18 @@ import { ensureUserRulesFile, loadEditorRules } from "../features/writing-assist
 const SHOW_FORMATTING_TOOLBAR = false;
 
 /**
- * At this viewport width and above, workspace + readability rails float over the editor (fixed max-width).
- * Narrower windows use flex “push” rails so the editor column shrinks instead of being covered.
+ * At this viewport width and above, desktop rails float in the margins around a fixed max-width editor.
+ * Narrower desktop windows use flex “push” rails so the editor column shrinks.
+ * The iPad app ignores this. Its sidebars are floating cards over the writing.
  */
 const SIDEBAR_OVERLAY_LAYOUT_MIN_PX = 1400;
 /** Right tools panel starts below the tab bar, clear of the corner controls. */
 const TOOLS_PANEL_TOP = "2.125rem";
+/**
+ * Flex rails begin at the top of the stage, where the focus and edit buttons
+ * also sit. This inset is that row: 0.25rem below the tab bar, then 2.125rem tall.
+ */
+const TOOLS_PANEL_CHROME_INSET = `calc(0.25rem + ${TOOLS_PANEL_TOP})`;
 
 function useSidebarOverlayLayoutMode(): boolean {
   const [overlay, setOverlay] = useState(() =>
@@ -468,11 +478,20 @@ function getFolderSegmentsRelativeToRoot(rootPath: string, targetPath: string): 
 }
 
 export function AppShell() {
-  const sidebarOverlayLayout = useSidebarOverlayLayoutMode();
+  const wideSidebarOverlay = useSidebarOverlayLayoutMode();
+  const iosClient = useIosClient();
+  /**
+   * iPad sidebars slide over the page and leave the writing column where it is.
+   * Desktop overlay still reserves space so the text stays clear of the rails.
+   */
+  const sidebarsCoverWriting = iosClient;
+  const sidebarOverlayLayout = wideSidebarOverlay || sidebarsCoverWriting;
   const windowInnerWidth = useWindowInnerWidth();
   const isWindowFullscreen = useWindowFullscreen();
   /** Windowed macOS: the native title (document name) and traffic lights get their own strip above the tabs. */
-  const showWindowTitleStrip = isTauriRuntime() && isMacOSPlatform() && !isWindowFullscreen;
+  const showWindowTitleStrip =
+    isTauriRuntime() && isMacOSPlatform() && !isWindowFullscreen && !iosClient;
+  useIosKeyboardInset(iosClient);
   const workspaceSidebarToggleLeft = isWindowFullscreen
     ? "0.5rem"
     : "calc(var(--harvy-traffic-light-inset, 0px) + 0.5rem)";
@@ -657,13 +676,14 @@ export function AppShell() {
     folderRenameRef.current = folderRename;
   }, [folderRename]);
 
-  useEffect(() => {
-    if (!isTauriRuntime() || !isMacOSPlatform()) return;
-    document.documentElement.classList.add("harvy-macos-overlay-titlebar");
-    return () => {
-      document.documentElement.classList.remove("harvy-macos-overlay-titlebar");
-    };
-  }, []);
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("harvy-ios", iosClient);
+    root.classList.toggle(
+      "harvy-macos-overlay-titlebar",
+      isTauriRuntime() && isMacOSPlatform() && !iosClient,
+    );
+  }, [iosClient]);
 
   useLayoutEffect(() => {
     document.documentElement.classList.toggle("harvy-window-title-strip", showWindowTitleStrip);
@@ -931,7 +951,9 @@ export function AppShell() {
   const collapseWindowTitleStrip =
     showWindowTitleStrip && hideTopBarWhileTyping && !focusModeActive;
   const scrollTrackTopWhenChromeVisible =
-    sidebarOverlayLayout && !focusModeActive ? `calc(${TOOLS_PANEL_TOP} - 1px)` : "0px";
+    sidebarOverlayLayout && !sidebarsCoverWriting && !focusModeActive
+      ? `calc(${TOOLS_PANEL_TOP} - 1px)`
+      : "0px";
   const chromeScrollPad = hideTopBarWhileTyping
     ? `calc(var(--harvy-tab-bar-height) + ${
         collapseWindowTitleStrip ? "var(--harvy-window-title-strip-height)" : "0px"
@@ -1008,6 +1030,23 @@ export function AppShell() {
     if (focusModeActive) return;
     setReadabilityPanelOpen((open) => !open);
   }, [focusModeActive]);
+
+  const closeCoveringSidebars = useCallback(() => {
+    setIsWorkspaceSidebarOpen(false);
+    setReadabilityPanelOpen(false);
+  }, []);
+
+  useIosChromeGestures({
+    enabled: iosClient && !focusModeActive,
+    chromeHidden: isTopChromeHidden,
+    leftSidebarOpen: isWorkspaceSidebarOpen,
+    rightSidebarOpen: readabilityPanelOpen,
+    onRevealTopBar: () => setIsTopChromeHidden(false),
+    onOpenLeftSidebar: () => setIsWorkspaceSidebarOpen(true),
+    onOpenRightSidebar: () => setReadabilityPanelOpen(true),
+    onCloseLeftSidebar: () => setIsWorkspaceSidebarOpen(false),
+    onCloseRightSidebar: () => setReadabilityPanelOpen(false),
+  });
 
   const editAnalysisOpenRef = useRef(editAnalysisOpen);
   editAnalysisOpenRef.current = editAnalysisOpen;
@@ -1242,7 +1281,7 @@ export function AppShell() {
     }
   }, [bothSidebarsClosed, focusModeActive]);
 
-  /** Option+Up brings chrome back after typing hid it. Mouse movement does not. */
+  /** Option+Up brings chrome back after typing hid it. On iPad, swipe down from the top. Mouse movement does not. */
   useEffect(() => {
     if (focusModeActive || !bothSidebarsClosed || !isTopChromeHidden) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1374,13 +1413,11 @@ export function AppShell() {
       return;
     }
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
+      const selected = await pickDirectory({
         title: "Choose workspace folder",
         defaultPath: workspaceRootPath ?? undefined,
       });
-      if (typeof selected !== "string") return;
+      if (!selected) return;
       const root = await invoke<string>("set_workspace_root", { path: selected });
       setWorkspaceRootPath(root);
       setWorkspaceBrowsePath(null);
@@ -1961,13 +1998,11 @@ export function AppShell() {
       return;
     }
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
+      const selected = await pickDirectory({
         title: "Choose folder",
         defaultPath: saveAsDestinationPath ?? workspaceBrowsePath ?? supportedTree?.path ?? undefined,
       });
-      if (typeof selected !== "string") return;
+      if (!selected) return;
       if (!isPathUnderWorkspaceRoot(workspaceRootPath, selected)) {
         window.alert("Please choose a folder inside your workspace.");
         return;
@@ -4239,6 +4274,8 @@ export function AppShell() {
       onFolderRenameDraftChange={updateFolderRenameDraft}
       onFolderRenameCommit={() => void commitFolderRename()}
       onFolderRenameCancel={cancelFolderRename}
+      omitTabBarSpacer={sidebarsCoverWriting}
+      iosLayout={iosClient}
     />
   );
 
@@ -4267,12 +4304,16 @@ export function AppShell() {
       onNotesChange={updateActiveDocumentNotes}
       criteria={activeCriteria}
       onCriteriaChange={updateActiveDocumentCriteria}
-      onToggleNotesPopout={() => {
-        void toggleNotesPopoutWindow().catch((err) => {
-          console.error("Notes pop-out failed:", err);
-          window.alert(err instanceof Error ? err.message : String(err));
-        });
-      }}
+      onToggleNotesPopout={
+        iosClient
+          ? undefined
+          : () => {
+              void toggleNotesPopoutWindow().catch((err) => {
+                console.error("Notes pop-out failed:", err);
+                window.alert(err instanceof Error ? err.message : String(err));
+              });
+            }
+      }
       proofreadIssues={proofreadIssues}
       workspaceSection={activeWorkspaceSection}
       showQuickLinks={showQuickLinks}
@@ -4301,17 +4342,70 @@ export function AppShell() {
     />
   );
 
+  const iosToolbarLeading = iosClient ? (
+    <>
+      <ChromeSidebarToggleButton
+        icon={PanelLeft}
+        open={isWorkspaceSidebarOpen}
+        onClick={toggleLeftSidebar}
+        ariaLabelOpen="Hide sidebar"
+        ariaLabelClosed="Show sidebar"
+      />
+      {showWorkspaceNavigation ? (
+        <WorkspaceSectionSwitcher
+          variant="segmented"
+          activeSection={activeWorkspaceSection}
+          onSectionChange={handleWorkspaceSectionChange}
+          sections={workspaceSections}
+          showOutliersView={showOutliersView}
+          showCollectView={showCollectView}
+          showHeadlinesView={showHeadlinesView}
+          showAvatarView={showAvatarView}
+        />
+      ) : null}
+    </>
+  ) : null;
+
+  const iosToolbarTrailing = iosClient ? (
+    <>
+      {hideFocusEditButtons ? null : (
+        <FocusEditChromeButtons
+          editMarksOn={editAnalysisOpen}
+          editMarksDisabled={readabilityPanelOpen}
+          showShortcutHints={false}
+          onStartFocus={startFocusMode}
+          onToggleEditMarks={() => {
+            if (readabilityPanelOpen) return;
+            setEditAnalysisOpen((open) => !open);
+          }}
+        />
+      )}
+      <ChromeSidebarToggleButton
+        icon={PanelRight}
+        open={readabilityPanelOpen}
+        onClick={toggleRightSidebar}
+        ariaLabelOpen="Hide tools panel"
+        ariaLabelClosed="Show tools panel"
+      />
+    </>
+  ) : null;
+
   const tabBarRow = (
     <div
-      className={`harvy-title-bar-drag overflow-hidden transition-[height,background-color,border-color,box-shadow] duration-500 ease-in-out ${
+      className={`shrink-0 overflow-hidden transition-[height,background-color,border-color,box-shadow] duration-500 ease-in-out ${
+        iosClient ? "" : "harvy-title-bar-drag"
+      } ${
         hideTopBarWhileTyping
           ? "h-0 border-transparent bg-stage shadow-none"
-          : "h-[var(--harvy-tab-bar-height)] bg-mist"
+          : iosClient
+            ? "h-[var(--harvy-tab-bar-height)] bg-canvas shadow-[inset_0_-0.5px_0_var(--color-line)]"
+            : "h-[var(--harvy-tab-bar-height)] bg-mist"
       }`}
-      data-harvy-window-drag
+      data-harvy-window-drag={iosClient ? undefined : true}
+      inert={iosClient && hideTopBarWhileTyping ? true : undefined}
     >
       <div
-        className={`transition-[opacity,transform] duration-500 ease-in-out ${
+        className={`h-full transition-[opacity,transform] duration-500 ease-in-out ${
           hideTopBarWhileTyping ? "pointer-events-none -translate-y-2 opacity-0" : "translate-y-0 opacity-100"
         }`}
       >
@@ -4323,8 +4417,11 @@ export function AppShell() {
           onCreateTab={createUntitledTab}
           chromeHidden={hideTopBarWhileTyping}
           workspaceSidebarOpen={isWorkspaceSidebarOpen}
-          overlayWorkspaceRail={sidebarOverlayLayout}
+          overlayWorkspaceRail={sidebarOverlayLayout && !sidebarsCoverWriting}
           isWindowFullscreen={isWindowFullscreen}
+          iosLayout={iosClient}
+          leading={iosToolbarLeading}
+          trailing={iosToolbarTrailing}
         />
       </div>
     </div>
@@ -4339,23 +4436,28 @@ export function AppShell() {
    */
   const collectInsetStyle = {
     paddingLeft:
-      (sidebarOverlayLayout && isWorkspaceSidebarOpen ? WORKSPACE_SIDEBAR_WIDTH_PX : 0) +
-      (showWorkspaceNavigation ? WORKSPACE_SECTION_SWITCHER_WIDTH_PX : 0),
+      (sidebarOverlayLayout && !sidebarsCoverWriting && isWorkspaceSidebarOpen
+        ? WORKSPACE_SIDEBAR_WIDTH_PX
+        : 0) + (showWorkspaceNavigation && !iosClient ? WORKSPACE_SECTION_SWITCHER_WIDTH_PX : 0),
     paddingRight:
-      sidebarOverlayLayout && readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0,
+      sidebarOverlayLayout && !sidebarsCoverWriting && readabilityPanelOpen
+        ? TOOLS_SIDEBAR_WIDTH_PX
+        : 0,
   };
   /**
    * Write column: keep the Collect/Write rail inset even when Research is hidden, split
    * evenly so the text is centered in the window.
    */
-  const writeSideInsetPx = WORKSPACE_SECTION_SWITCHER_WIDTH_PX / 2;
+  const writeSideInsetPx = iosClient ? 0 : WORKSPACE_SECTION_SWITCHER_WIDTH_PX / 2;
   /**
    * Overlay sidebar floats on the editor. Inset the scrollport by its width so
    * the scrollbar stays on the sidebar’s left edge. In the flex layout the
    * sidebar already ends the editor pane, so no extra inset is needed.
    */
   const scrollbarSidebarInsetPx =
-    sidebarOverlayLayout && readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0;
+    sidebarOverlayLayout && !sidebarsCoverWriting && readabilityPanelOpen
+      ? TOOLS_SIDEBAR_WIDTH_PX
+      : 0;
   const writeInsetStyle =
     scrollbarSidebarInsetPx > 0 ? { paddingRight: scrollbarSidebarInsetPx } : undefined;
   /** EditorCanvas frame border + `sm:px-14` page padding, before the text starts. */
@@ -4366,14 +4468,14 @@ export function AppShell() {
     windowWidthPx: windowInnerWidth,
     // Column padding may tuck under the sidebars as long as the text stays ≥24px clear of them.
     leftReservePx:
-      sidebarOverlayLayout && isWorkspaceSidebarOpen
+      sidebarOverlayLayout && !sidebarsCoverWriting && isWorkspaceSidebarOpen
         ? WORKSPACE_SIDEBAR_WIDTH_PX +
           WORKSPACE_SECTION_SWITCHER_WIDTH_PX +
           24 -
           (writeSideInsetPx + writeTextPagePadPx)
         : 0,
     rightReservePx:
-      sidebarOverlayLayout && readabilityPanelOpen
+      sidebarOverlayLayout && !sidebarsCoverWriting && readabilityPanelOpen
         ? TOOLS_SIDEBAR_WIDTH_PX + 24 - (writeSideInsetPx + writeTextPagePadPx)
         : 0,
   });
@@ -4466,7 +4568,10 @@ export function AppShell() {
               scrollTrackTopInset={
                 // 1px cancels the editor frame's top border so the track meets the sidebar.
                 // Once the top chrome is gone, the scrollport runs to the window edge.
-                sidebarOverlayLayout && !focusModeActive && !hideTopBarWhileTyping
+                sidebarOverlayLayout &&
+                !sidebarsCoverWriting &&
+                !focusModeActive &&
+                !hideTopBarWhileTyping
                   ? `calc(${TOOLS_PANEL_TOP} - 1px)`
                   : "0px"
               }
@@ -4519,7 +4624,7 @@ export function AppShell() {
     ? {
         top: 0,
         right: "0.5rem",
-        height: showWindowTitleStrip ? "var(--harvy-window-title-strip-height)" : "2.125rem",
+        height: showWindowTitleStrip ? "var(--harvy-window-title-strip-height)" : iosClient ? "2.75rem" : "2.125rem",
       }
     : {
         top: showWindowTitleStrip
@@ -4530,7 +4635,7 @@ export function AppShell() {
       };
 
   return (
-    <div className="relative flex h-full min-h-0 w-full flex-col bg-canvas">
+    <div className="harvy-app-shell relative flex h-full min-h-0 w-full flex-col bg-canvas">
     {showWindowTitleStrip ? (
       <div
         className={`harvy-title-bar-drag w-full shrink-0 overflow-hidden bg-mist ${
@@ -4545,6 +4650,7 @@ export function AppShell() {
         data-tauri-drag-region={collapseWindowTitleStrip ? undefined : true}
       />
     ) : null}
+    {!iosClient || focusEditPinnedToCorner ? (
     <div
       className="pointer-events-none absolute z-40 flex items-center transition-[top,right,height] duration-500 ease-in-out"
       style={focusEditChromeStyle}
@@ -4559,6 +4665,7 @@ export function AppShell() {
         <FocusEditChromeButtons
           editMarksOn={editAnalysisOpen}
           editMarksDisabled={readabilityPanelOpen}
+          showShortcutHints={!iosClient}
           onStartFocus={startFocusMode}
           onToggleEditMarks={() => {
             if (readabilityPanelOpen) return;
@@ -4567,6 +4674,7 @@ export function AppShell() {
         />
       </div>
     </div>
+    ) : null}
     <div
       className={`relative min-h-0 w-full flex-1 overflow-hidden bg-canvas${
         focusModeActive ? " harvy-focus-mode-shell" : ""
@@ -4574,34 +4682,68 @@ export function AppShell() {
     >
       {sidebarOverlayLayout ? (
         <>
-          {/* Wide viewport: rails float over a fixed max-width editor (unchanged). */}
-          <div className="absolute inset-0 z-0 flex min-h-0 min-w-0 flex-col bg-canvas">
+          {/* Rails float over the editor. Desktop keeps the text clear of them; iPad covers it. */}
+          <div className="absolute inset-0 z-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-canvas">
             {tabBarRow}
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-stage">
               {editorPanelSection}
-              {/* Readability: pinned overlay — top clears document header strip */}
+              {sidebarsCoverWriting ? (
+                <button
+                  type="button"
+                  className={`absolute inset-0 z-[15] cursor-default border-0 bg-black/30 transition-opacity duration-300 ${
+                    isWorkspaceSidebarOpen || readabilityPanelOpen
+                      ? "opacity-100"
+                      : "pointer-events-none opacity-0"
+                  }`}
+                  aria-hidden={!(isWorkspaceSidebarOpen || readabilityPanelOpen)}
+                  aria-label="Close sidebars"
+                  tabIndex={isWorkspaceSidebarOpen || readabilityPanelOpen ? 0 : -1}
+                  onClick={closeCoveringSidebars}
+                />
+              ) : null}
+              {/* Readability: pinned overlay — top clears the focus and edit buttons */}
               <div
                 aria-hidden={!readabilityPanelOpen}
-                className={`absolute bottom-0 right-0 z-10 flex flex-col overflow-hidden bg-sidebar transition-[width] duration-500 ease-in-out [backdrop-filter:none] ${
-                  readabilityPanelOpen ? "" : "pointer-events-none"
-                }`}
-                style={{
-                  top: TOOLS_PANEL_TOP,
-                  width: readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0,
-                }}
+                inert={!readabilityPanelOpen}
+                data-harvy-sidebar="tools"
+                className={
+                  iosClient
+                    ? `harvy-ios-sidebar absolute z-20 flex flex-col overflow-hidden bg-sidebar [backdrop-filter:none] ${
+                        readabilityPanelOpen ? "" : "pointer-events-none"
+                      }`
+                    : `absolute bottom-0 right-0 z-10 flex flex-col overflow-hidden bg-sidebar transition-[width] duration-500 ease-in-out [backdrop-filter:none] ${
+                        readabilityPanelOpen ? "" : "pointer-events-none"
+                      }`
+                }
+                style={
+                  iosClient
+                    ? {
+                        top: "0.5rem",
+                        right: "0.5rem",
+                        bottom: "0.5rem",
+                        width: "min(300px, calc(100% - 1rem))",
+                        transform: readabilityPanelOpen
+                          ? "translateX(0)"
+                          : "translateX(calc(100% + 0.75rem))",
+                      }
+                    : {
+                        top: TOOLS_PANEL_TOP,
+                        width: readabilityPanelOpen ? TOOLS_SIDEBAR_WIDTH_PX : 0,
+                      }
+                }
               >
                 <div
                   className={`flex h-full min-h-0 shrink-0 flex-col transition-opacity duration-500 ease-in-out ${
-                    readabilityPanelOpen ? "opacity-100 delay-0" : "opacity-0 delay-0"
-                  }`}
-                  style={{ width: TOOLS_SIDEBAR_WIDTH_PX }}
+                    iosClient ? "w-full" : ""
+                  } ${readabilityPanelOpen ? "opacity-100 delay-0" : "opacity-0 delay-0"}`}
+                  style={iosClient ? undefined : { width: TOOLS_SIDEBAR_WIDTH_PX }}
                 >
                   {readabilitySidebarPanel}
                 </div>
               </div>
             </div>
           </div>
-          {showWorkspaceNavigation ? (
+          {showWorkspaceNavigation && !iosClient ? (
             <WorkspaceSectionSwitcher
               activeSection={activeWorkspaceSection}
               onSectionChange={handleWorkspaceSectionChange}
@@ -4622,14 +4764,37 @@ export function AppShell() {
           ) : null}
           <div
             aria-hidden={!isWorkspaceSidebarOpen}
-            className={`absolute inset-y-0 left-0 z-10 overflow-hidden bg-sidebar transition-[width] duration-500 ease-in-out ${
-              isWorkspaceSidebarOpen ? "w-[260px]" : "w-0"
-            }`}
+            inert={!isWorkspaceSidebarOpen}
+            data-harvy-sidebar="files"
+            className={
+              iosClient
+                ? `harvy-ios-sidebar absolute z-20 overflow-hidden bg-sidebar ${
+                    isWorkspaceSidebarOpen ? "" : "pointer-events-none"
+                  }`
+                : `absolute left-0 z-10 overflow-hidden bg-sidebar transition-[width] duration-500 ease-in-out inset-y-0 ${
+                    isWorkspaceSidebarOpen ? "w-[260px]" : "pointer-events-none w-0"
+                  }`
+            }
+            style={
+              iosClient
+                ? {
+                    top: hideTopBarWhileTyping
+                      ? "0.5rem"
+                      : "calc(var(--harvy-tab-bar-height) + 0.5rem)",
+                    left: "0.5rem",
+                    bottom: "0.5rem",
+                    width: "min(20rem, calc(100% - 1rem))",
+                    transform: isWorkspaceSidebarOpen
+                      ? "translateX(0)"
+                      : "translateX(calc(-100% - 0.75rem))",
+                  }
+                : undefined
+            }
           >
             <div
-              className={`flex h-full min-h-0 w-[260px] flex-col transition-opacity duration-500 ease-in-out ${
-                isWorkspaceSidebarOpen ? "opacity-100 delay-0" : "opacity-0 delay-0"
-              }`}
+              className={`flex h-full min-h-0 flex-col transition-opacity duration-500 ease-in-out ${
+                iosClient ? "w-full" : "w-[260px]"
+              } ${isWorkspaceSidebarOpen ? "opacity-100 delay-0" : "opacity-0 delay-0"}`}
             >
               {workspaceSidebarPanel}
             </div>
@@ -4686,7 +4851,10 @@ export function AppShell() {
                   className={`flex h-full min-h-0 shrink-0 flex-col transition-opacity duration-500 ease-in-out ${
                     readabilityPanelOpen ? "opacity-100 delay-0" : "opacity-0 delay-0"
                   }`}
-                  style={{ width: TOOLS_SIDEBAR_WIDTH_PX }}
+                  style={{
+                    width: TOOLS_SIDEBAR_WIDTH_PX,
+                    paddingTop: TOOLS_PANEL_CHROME_INSET,
+                  }}
                 >
                   {readabilitySidebarPanel}
                 </div>
@@ -4696,6 +4864,7 @@ export function AppShell() {
         </div>
       )}
 
+      {iosClient ? null : (
       <div
         className={`pointer-events-none absolute top-0 z-30 flex h-[var(--harvy-tab-bar-height)] items-center rounded-md px-0.5 transition-[opacity,background-color,left] duration-500 ease-in-out ${
           hideTopBarWhileTyping || focusModeActive ? "bg-stage opacity-0" : "bg-mist/55 opacity-100"
@@ -4711,6 +4880,7 @@ export function AppShell() {
           shortcutHint={formatHotkeyChord(["Option", "ArrowLeft"])}
         />
       </div>
+      )}
 
       {focusSessionEndsAt != null ? (
         <FocusModeTimer
@@ -4720,6 +4890,7 @@ export function AppShell() {
       ) : null}
 
       {/* Right tools-panel toggle — window-shell anchored so Notes / layout changes never shift it. */}
+      {iosClient ? null : (
       <div
         className="pointer-events-none absolute right-2 z-30 flex h-[2.125rem] items-center"
         style={{ top: "calc(var(--harvy-tab-bar-height) + 0.25rem)" }}
@@ -4741,6 +4912,7 @@ export function AppShell() {
           />
         </div>
       </div>
+      )}
 
       <SettingsModal
         open={isSettingsOpen}

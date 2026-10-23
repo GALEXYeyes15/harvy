@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 
 /** Matches workspace (left) panel control in AppShell — reuse for any mirrored chrome toggle. */
 export const CHROME_SIDEBAR_TOGGLE_CLASS =
-  "pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-accent transition-colors hover:bg-accent/10 hover:text-accent";
+  "harvy-chrome-icon-btn pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-accent transition-colors hover:bg-accent/10 hover:text-accent";
 
 type ChromeSidebarToggleButtonProps = {
   icon: LucideIcon;

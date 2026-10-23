@@ -25,6 +25,8 @@ type WorkspaceSectionSwitcherProps = {
   showAvatarView?: boolean;
   /** Shared with top chrome (tabs, header, ambient controls) during distraction-free writing. */
   chromeHidden?: boolean;
+  /** Vertical icon rail on the desktop. Horizontal icon control in the iPad toolbar. */
+  variant?: "rail" | "segmented";
   className?: string;
   style?: CSSProperties;
 };
@@ -38,9 +40,53 @@ export function WorkspaceSectionSwitcher({
   showHeadlinesView = true,
   showAvatarView = true,
   chromeHidden = false,
+  variant = "rail",
   className,
   style,
 }: WorkspaceSectionSwitcherProps) {
+  if (variant === "segmented") {
+    return (
+      <div
+        className={[
+          "flex h-11 shrink-0 items-center rounded-[12px] bg-mist p-0.5",
+          chromeHidden ? "pointer-events-none opacity-0" : "",
+          className,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        style={style}
+        role="tablist"
+        aria-label="Workspace sections"
+      >
+        {sections.map((section) => {
+          const active = activeSection === section;
+          const label = workspaceSectionLabel(section, {
+            showOutliersView,
+            showCollectView,
+            showHeadlinesView,
+            showAvatarView,
+          });
+          const Icon = SECTION_ICONS[section];
+          return (
+            <button
+              key={section}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              aria-label={label}
+              onClick={() => onSectionChange(section)}
+              className={`flex h-10 w-10 items-center justify-center rounded-[10px] transition-colors ${
+                chromeHidden ? "pointer-events-none" : ""
+              } ${active ? "bg-canvas text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-muted"}`}
+            >
+              <Icon aria-hidden size={20} strokeWidth={1.5} />
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <nav
       className={[

@@ -42,6 +42,7 @@ import {
 } from "../features/proofread/mechanicsUnderlineLayer";
 import {
   type EditorCanvasFocusControl,
+  editorFocusShouldKeepNativeGesture,
   handleEditorCanvasFocusPointerDown,
   handleEditorWritingSurfacePointerDown,
   rejectEditorFocusIfSuppressed,
@@ -78,6 +79,7 @@ import { HarvyListKeyboard } from "../features/editor/harvyListKeyboard";
 import { LinkEditorSelectionHighlight } from "../features/editor/linkEditorSelectionHighlight";
 import { WorkspaceSearchHighlight } from "../features/editor/workspaceSearchHighlight";
 import { DocumentFindHighlight } from "../features/editor/documentFindHighlight";
+import { ForeignDomRecovery } from "../features/editor/foreignDomRecovery";
 import { HarvyMarkdownShortcuts } from "../features/editor/harvyMarkdownShortcuts";
 import { PlainTextPaste } from "../features/editor/plainTextPaste";
 import { HarvyOutlineParagraph } from "../features/outline/harvyOutlineParagraph";
@@ -346,6 +348,7 @@ export function EditorCanvas({
         LinkEditorSelectionHighlight,
         WorkspaceSearchHighlight,
         DocumentFindHighlight,
+        ForeignDomRecovery,
         HarvyMarkdownShortcuts,
         HarvyListKeyboard,
       ],
@@ -358,6 +361,10 @@ export function EditorCanvas({
           role: "textbox",
           "aria-multiline": "true",
           spellcheck: spellcheckEnabled ? "true" : "false",
+          "data-gramm": "false",
+          "data-gramm_editor": "false",
+          "data-enable-grammarly": "false",
+          "data-lt-active": "false",
           class:
             "editor-content ProseMirror-harvy block min-h-full w-full max-w-none resize-none bg-transparent pb-10 pt-1 font-normal text-ink caret-muted outline-none focus:outline-none placeholder:text-ink/45 sm:pb-11 sm:pt-1.5 " +
             (isEditable ? "cursor-text" : "cursor-default select-text opacity-75"),
@@ -567,7 +574,9 @@ export function EditorCanvas({
               isEditableRef.current &&
               handleEditorCanvasFocusPointerDown(view, event as MouseEvent, editorFocusControl)
             ) {
-              return true;
+              // ProseMirror cancels a handled mousedown. On iPad that also
+              // cancels the keyboard, so let the tap finish after focusing.
+              return editorFocusShouldKeepNativeGesture() ? false : true;
             }
             return prior.mousedown?.(view, event) ?? false;
           },
@@ -704,7 +713,7 @@ export function EditorCanvas({
     if (target instanceof Element && target.closest(".harvy-context-menu")) return;
     handleEditorWritingSurfacePointerDown(event.nativeEvent, editorFocusControl);
     if (handleEditorCanvasFocusPointerDown(editor.view, event.nativeEvent, editorFocusControl)) {
-      event.preventDefault();
+      if (!editorFocusShouldKeepNativeGesture()) event.preventDefault();
     }
   };
 
@@ -748,6 +757,7 @@ export function EditorCanvas({
     >
       <div
         ref={writingSurfaceRef}
+        data-harvy-writing-scroller=""
         className={`relative min-h-0 flex-1 overflow-x-hidden overscroll-y-contain ${
           focusModeActive
             ? "harvy-focus-mode-scroller cursor-none overflow-y-hidden"

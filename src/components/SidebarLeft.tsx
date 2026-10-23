@@ -249,6 +249,13 @@ type SidebarLeftProps = {
   onFolderRenameDraftChange?: (value: string) => void;
   onFolderRenameCommit?: () => void;
   onFolderRenameCancel?: () => void;
+  /**
+   * The desktop rail is full height and leaves a blank band beside the tab bar.
+   * The iPad rail starts below the tab bar, so that band would be a second gap.
+   */
+  omitTabBarSpacer?: boolean;
+  /** Larger rows, tap-to-open folders, and a visible Back control. */
+  iosLayout?: boolean;
 };
 
 export function SidebarLeft({
@@ -281,6 +288,8 @@ export function SidebarLeft({
   onFolderRenameDraftChange = () => {},
   onFolderRenameCommit = () => {},
   onFolderRenameCancel = () => {},
+  omitTabBarSpacer = false,
+  iosLayout = false,
 }: SidebarLeftProps) {
   const isWorkspaceRoot = breadcrumbFolderSegments.length === 0;
   const currentFolderTitle = isWorkspaceRoot
@@ -293,14 +302,22 @@ export function SidebarLeft({
   return (
     <aside className="flex h-full min-h-0 w-full flex-col self-stretch bg-sidebar">
       {/* Same vertical band as the global sidebar toggle / tab strip; keeps header copy below the control */}
-      <div
-        className="h-[var(--harvy-tab-bar-height)] w-full shrink-0"
-        data-harvy-window-drag
-        aria-hidden
-      />
+      {omitTabBarSpacer ? null : (
+        <div
+          className="h-[var(--harvy-tab-bar-height)] w-full shrink-0"
+          data-harvy-window-drag
+          aria-hidden
+        />
+      )}
 
-      <div className="flex shrink-0 flex-col items-stretch pb-4 pl-[var(--harvy-sidebar-content-inset)] pr-2.5 pt-1">
-        <p className="harvy-app-wordmark truncate text-[21px] font-semibold tracking-tight text-ink">{APP_NAME} Editor</p>
+      <div
+        className={`flex shrink-0 flex-col items-stretch pb-4 pl-[var(--harvy-sidebar-content-inset)] pr-2.5 ${
+          iosLayout ? "pt-4" : "pt-1"
+        }`}
+      >
+        <p className="harvy-app-wordmark truncate text-[21px] font-semibold tracking-tight text-ink">
+          {iosLayout ? APP_NAME : `${APP_NAME} Editor`}
+        </p>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -340,19 +357,23 @@ export function SidebarLeft({
             >
               {displayFolderTitle}
             </h2>
-            <div className="flex h-6 w-10 shrink-0 items-center justify-end">
+            <div className={`flex shrink-0 items-center justify-end ${iosLayout ? "min-h-11" : "h-6"}`}>
               {canStepUpWorkspace ? (
                 <button
                   type="button"
-                  className="pointer-events-none rounded px-1.5 py-0.5 text-[10px] font-medium text-muted/70 opacity-0 transition-opacity duration-150 ease-out hover:bg-ink/[0.06] hover:text-ink group-hover/title:pointer-events-auto group-hover/title:opacity-100 group-focus-within/title:pointer-events-auto group-focus-within/title:opacity-100"
+                  className={
+                    iosLayout
+                      ? "min-h-11 rounded-md px-3 text-[15px] font-medium text-ink"
+                      : "pointer-events-none rounded px-1.5 py-0.5 text-[10px] font-medium text-muted/70 opacity-0 transition-opacity duration-150 ease-out hover:bg-ink/[0.06] hover:text-ink group-hover/title:pointer-events-auto group-hover/title:opacity-100 group-focus-within/title:pointer-events-auto group-focus-within/title:opacity-100"
+                  }
                   onClick={(e) => {
                     e.preventDefault();
                     onWorkspaceNavigateUp();
                   }}
                 >
-                  Close
+                  {iosLayout ? "Back" : "Close"}
                 </button>
-              ) : (
+              ) : iosLayout ? null : (
                 <span
                   className="rounded px-1.5 py-0.5 text-[10px] font-medium text-muted/70"
                   aria-hidden
@@ -411,6 +432,7 @@ export function SidebarLeft({
                     onSelectNode={onSelectNode}
                     onRevealSearchHit={onRevealSearchHit}
                     onOpenFolder={onOpenFolder}
+                    openFoldersOnTap={iosLayout}
                     renamingPath={folderRenamePath}
                     renameDraft={folderRenameDraft}
                     onRenameDraftChange={onFolderRenameDraftChange}
