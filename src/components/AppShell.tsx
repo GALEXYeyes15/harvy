@@ -4,6 +4,7 @@ import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { useIosClient } from "../features/platform/useIosClient";
 import { useIosChromeGestures } from "../features/platform/iosChromeGestures";
 import { useIosKeyboardInset } from "../features/platform/useIosKeyboardInset";
+import { useIosStatusBar } from "../features/platform/useIosStatusBar";
 import { pickDirectory } from "../features/workspace/pickDirectory";
 import type { Editor } from "@tiptap/core";
 import { PanelLeft, PanelRight } from "lucide-react";
@@ -939,6 +940,7 @@ export function AppShell() {
    * (the title strip when it is showing) instead of beside the tools toggle.
    */
   const focusEditPinnedToCorner = hideTopBarWhileTyping && !hideFocusEditButtons;
+  useIosStatusBar(iosClient, hideTopBarWhileTyping);
   /** Collect/Write rail: always hidden in Focus mode; otherwise follows typing chrome. */
   const hideWorkspaceSectionRail = focusModeActive || isTopChromeHidden;
   const tabsHiddenByTyping =
@@ -954,11 +956,12 @@ export function AppShell() {
     sidebarOverlayLayout && !sidebarsCoverWriting && !focusModeActive
       ? `calc(${TOOLS_PANEL_TOP} - 1px)`
       : "0px";
+  // iPad: while the status bar is hidden its height sits here too (see useIosStatusBar).
   const chromeScrollPad = hideTopBarWhileTyping
     ? `calc(var(--harvy-tab-bar-height) + ${
         collapseWindowTitleStrip ? "var(--harvy-window-title-strip-height)" : "0px"
-      } + max(0px, ${scrollTrackTopWhenChromeVisible} - var(--harvy-editor-top-pad)))`
-    : "0px";
+      } + max(0px, ${scrollTrackTopWhenChromeVisible} - var(--harvy-editor-top-pad)) + var(--harvy-status-bar-pad, 0px))`
+    : "var(--harvy-status-bar-pad, 0px)";
   const openTabIdsRef = useRef(openTabIds);
   const activeTabIdRef = useRef(activeTabId);
   const openDocumentsRef = useRef(openDocuments);

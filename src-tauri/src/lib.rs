@@ -77,6 +77,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::client_platform,
+            commands::set_status_bar_hidden,
             commands::pick_folder,
             commands::get_workspace_root,
             commands::set_workspace_root,

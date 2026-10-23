@@ -3150,6 +3150,11 @@ html.harvy-ios .harvy-app-shell {
   overflow: hidden;
 }
 
+/* The status bar's height moving between the shell and the page pad lands in one frame. */
+html.harvy-status-bar-swap [data-harvy-writing-scroller] * {
+  transition: none !important;
+}
+
 /* The writing column is the only scroller. Toolbar and sidebars stay put. */
 html.harvy-ios [data-harvy-writing-scroller] {
   height: 0;

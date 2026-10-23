@@ -17,6 +17,7 @@ pub mod pdf_import;
 pub mod print;
 pub mod share;
 mod ios_folder;
+mod ios_status_bar;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -236,6 +237,18 @@ pub fn client_platform() -> &'static str {
         "macos"
     } else {
         "other"
+    }
+}
+
+/// Hide the iPad status bar with the writing chrome. Does nothing on desktop.
+#[tauri::command]
+pub fn set_status_bar_hidden(app: AppHandle, hidden: bool) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    return ios_status_bar::set_hidden(&app, hidden);
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = (app, hidden);
+        Ok(())
     }
 }
 
