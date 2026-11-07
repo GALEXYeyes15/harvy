@@ -27,6 +27,8 @@ export const CLASSIC_STYLE_ID = "classic";
 /** @deprecated Prefer `CLASSIC_STYLE_ID` — kept for call sites that meant “default style”. */
 export const DEFAULT_STYLE_ID = CLASSIC_STYLE_ID;
 export const CYBER_STYLE_ID = "cyber";
+/** Warm paper by day, amber/sepia at night. Follows the resolved light/dark theme. */
+export const EINK_STYLE_ID = "eink";
 
 export type AppearanceStyleId = string;
 
@@ -191,6 +193,37 @@ export const CYBER_DARK_PALETTE: StylePalette = {
   focusRing: "#7dfdfe",
 };
 
+/** Light E-ink. Surfaces share one paper so chrome doesn’t stripe. Accent is the icon/caret color. */
+export const EINK_LIGHT_PALETTE: StylePalette = {
+  canvas: "#F4F1EA",
+  panel: "#F4F1EA",
+  stage: "#F4F1EA",
+  mist: "#F4F1EA",
+  page: "#F4F1EA",
+  ink: "#2B2B2B",
+  muted: "#6B6B6B",
+  accent: "#2B2B2B",
+  line: "#D8D3C8",
+  focusRing: "#2B2B2B",
+};
+
+/**
+ * Night E-ink. Icons use the warm text color: charcoal on this ground fails contrast.
+ * No pure black or white.
+ */
+export const EINK_DARK_PALETTE: StylePalette = {
+  canvas: "#1E1A14",
+  panel: "#1E1A14",
+  stage: "#1E1A14",
+  mist: "#1E1A14",
+  page: "#1E1A14",
+  ink: "#D9C9A8",
+  muted: "#9C8F76",
+  accent: "#D9C9A8",
+  line: "#3A3328",
+  focusRing: "#D9C9A8",
+};
+
 export function builtInCyberAppearanceStyle(): CustomAppearanceStyle {
   const seeds: StyleBasics = {
     canvas: CYBER_DARK_PALETTE.canvas,
@@ -205,6 +238,16 @@ export function builtInCyberAppearanceStyle(): CustomAppearanceStyle {
     light: { ...CYBER_LIGHT_PALETTE },
     dark: { ...CYBER_DARK_PALETTE },
     bodyFont: CYBER_BODY_FONT_ID,
+  };
+}
+
+export function builtInEinkAppearanceStyle(): CustomAppearanceStyle {
+  return {
+    id: EINK_STYLE_ID,
+    name: "E-ink",
+    light: { ...EINK_LIGHT_PALETTE },
+    dark: { ...EINK_DARK_PALETTE },
+    bodyFont: DEFAULT_BODY_FONT_ID,
   };
 }
 
@@ -412,6 +455,7 @@ export function readStoredAppearanceStyleId(): AppearanceStyleId {
     // Legacy id from before Classic was named.
     if (!raw || raw === "default" || raw === CLASSIC_STYLE_ID) return CLASSIC_STYLE_ID;
     if (raw === CYBER_STYLE_ID) return CYBER_STYLE_ID;
+    if (raw === EINK_STYLE_ID) return EINK_STYLE_ID;
     const customs = readCustomAppearanceStyles();
     if (customs.some((s) => s.id === raw)) return raw;
     return CLASSIC_STYLE_ID;
@@ -614,6 +658,18 @@ export function setLiveAppearancePreview(
   }
 }
 
+function isFixedAppearanceStyle(id: string): boolean {
+  return id === CLASSIC_STYLE_ID || id === CYBER_STYLE_ID || id === EINK_STYLE_ID;
+}
+
+function markAppearanceStyle(root: HTMLElement, id: string) {
+  root.dataset.style = id;
+  root.classList.toggle("cyber", id === CYBER_STYLE_ID);
+  root.classList.toggle("eink", id === EINK_STYLE_ID);
+  root.classList.toggle("harvy-custom-style", !isFixedAppearanceStyle(id));
+  root.classList.remove("harvy-mono-content");
+}
+
 function paintAppearanceStyle(style: CustomAppearanceStyle, resolvedTheme: ResolvedTheme) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
@@ -621,28 +677,28 @@ function paintAppearanceStyle(style: CustomAppearanceStyle, resolvedTheme: Resol
   const bodyFont = resolveStyleBodyFont(style);
   ensureAppearanceBodyFontLoaded(bodyFont);
 
-  root.dataset.style = id;
-  root.classList.toggle("cyber", id === CYBER_STYLE_ID);
-  root.classList.toggle(
-    "harvy-custom-style",
-    id !== CLASSIC_STYLE_ID && id !== CYBER_STYLE_ID,
-  );
-  root.classList.remove("harvy-mono-content");
+  markAppearanceStyle(root, id);
 
-  if (id === CLASSIC_STYLE_ID) {
+  if (id === CLASSIC_STYLE_ID || id === EINK_STYLE_ID) {
     clearInlineStyleTokens(root);
-    applyInlineTypography(root, resolveStyleTypography(style));
+    applyInlineTypography(
+      root,
+      id === CLASSIC_STYLE_ID ? resolveStyleTypography(style) : { ...DEFAULT_STYLE_TYPOGRAPHY },
+    );
+    syncNativeWindowBackground(resolvedTheme, id);
     return;
   }
 
   // Draft / custom / edited cyber: always paint the in-memory palette + body font.
   const palette = resolvedTheme === "dark" ? style.dark : style.light;
   applyInlinePalette(root, palette, bodyFont, resolveStyleTypography(style));
+  syncNativeWindowBackground(resolvedTheme, id);
 }
 
 /**
  * Apply an appearance style on top of the resolved light/dark theme.
  * Classic uses CSS theme tokens. Cyber uses `.cyber` plus optional saved overrides.
+ * E-ink uses `.eink` CSS tokens (light, or night when `.dark` is set).
  * Custom styles set CSS variables inline.
  * If a live preview draft is active, that wins until cleared.
  */
@@ -657,18 +713,23 @@ export function applyAppearanceStyle(styleId: AppearanceStyleId, resolvedTheme: 
   const root = document.documentElement;
   const id = styleId || CLASSIC_STYLE_ID;
 
-  root.dataset.style = id;
-  root.classList.toggle("cyber", id === CYBER_STYLE_ID);
+  markAppearanceStyle(root, id);
 
   if (id === CLASSIC_STYLE_ID) {
-    root.classList.remove("harvy-custom-style", "harvy-mono-content");
     clearInlineStyleTokens(root);
     applyInlineTypography(root, readClassicTypography());
+    syncNativeWindowBackground(resolvedTheme, id);
+    return;
+  }
+
+  if (id === EINK_STYLE_ID) {
+    clearInlineStyleTokens(root);
+    applyInlineTypography(root, { ...DEFAULT_STYLE_TYPOGRAPHY });
+    syncNativeWindowBackground(resolvedTheme, id);
     return;
   }
 
   if (id === CYBER_STYLE_ID) {
-    root.classList.remove("harvy-custom-style", "harvy-mono-content");
     const cyber = readCyberAppearanceStyle();
     const bodyFont = resolveStyleBodyFont(cyber);
     ensureAppearanceBodyFontLoaded(bodyFont);
@@ -679,23 +740,23 @@ export function applyAppearanceStyle(styleId: AppearanceStyleId, resolvedTheme: 
       clearInlineStyleTokens(root);
       root.style.setProperty("--font-content", appearanceBodyFontStack(bodyFont));
     }
+    syncNativeWindowBackground(resolvedTheme, id);
     return;
   }
 
   const custom = readCustomAppearanceStyles().find((s) => s.id === id);
   if (!custom) {
     clearInlineStyleTokens(root);
-    root.dataset.style = CLASSIC_STYLE_ID;
-    root.classList.remove("harvy-custom-style", "harvy-mono-content", "cyber");
+    markAppearanceStyle(root, CLASSIC_STYLE_ID);
+    syncNativeWindowBackground(resolvedTheme, CLASSIC_STYLE_ID);
     return;
   }
 
-  root.classList.add("harvy-custom-style");
-  root.classList.remove("harvy-mono-content");
   const bodyFont = resolveStyleBodyFont(custom);
   ensureAppearanceBodyFontLoaded(bodyFont);
   const palette = resolvedTheme === "dark" ? custom.dark : custom.light;
   applyInlinePalette(root, palette, bodyFont, resolveStyleTypography(custom));
+  syncNativeWindowBackground(resolvedTheme, id);
 }
 
 /** Stage RGB for native Notes window chrome. */
@@ -708,6 +769,10 @@ export function stageBackgroundRgb(
     const hex = resolvedTheme === "dark" ? cyber.dark.stage : cyber.light.stage;
     return hexToRgb(hex) ?? (resolvedTheme === "dark" ? [0, 7, 7] : [242, 251, 251]);
   }
+  if (styleId === EINK_STYLE_ID) {
+    const hex = resolvedTheme === "dark" ? EINK_DARK_PALETTE.stage : EINK_LIGHT_PALETTE.stage;
+    return hexToRgb(hex) ?? (resolvedTheme === "dark" ? [30, 26, 20] : [244, 241, 234]);
+  }
   if (styleId !== CLASSIC_STYLE_ID) {
     const custom = readCustomAppearanceStyles().find((s) => s.id === styleId);
     if (custom) {
@@ -717,6 +782,30 @@ export function stageBackgroundRgb(
     }
   }
   return resolvedTheme === "dark" ? [25, 25, 25] : [250, 247, 242];
+}
+
+/** True after E-ink has painted the native window, so leaving it can restore the other theme. */
+let nativeWindowFollowsTheme = false;
+
+/**
+ * E-ink paints the Tauri window the same color as the page so the title-bar gap matches.
+ * Other styles are left on the default window fill until E-ink has been used; then the
+ * active style’s stage color is restored so the sepia fill doesn’t stick.
+ */
+function syncNativeWindowBackground(resolvedTheme: ResolvedTheme, styleId: AppearanceStyleId) {
+  if (typeof window === "undefined") return;
+  if (!("__TAURI_INTERNALS__" in window)) return;
+  const eink = styleId === EINK_STYLE_ID;
+  if (!eink && !nativeWindowFollowsTheme) return;
+  nativeWindowFollowsTheme = eink;
+  const [red, green, blue] = stageBackgroundRgb(resolvedTheme, styleId);
+  void import("@tauri-apps/api/window")
+    .then(({ getCurrentWindow }) => {
+      void getCurrentWindow().setBackgroundColor([red, green, blue, 255]);
+    })
+    .catch(() => {
+      // Browser preview has no native window handle.
+    });
 }
 
 function hexToRgb(hex: string): [number, number, number] | null {

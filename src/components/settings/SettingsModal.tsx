@@ -36,10 +36,12 @@ import {
   applyAppearanceStyle,
   CYBER_STYLE_ID,
   CLASSIC_STYLE_ID,
+  EINK_STYLE_ID,
   duplicateAppearanceStyle,
   deleteCustomAppearanceStyle,
   hasCyberAppearanceOverrides,
   builtInClassicAppearanceStyle,
+  builtInEinkAppearanceStyle,
   readCyberAppearanceStyle,
   readCustomAppearanceStyles,
   resetClassicTypography,
@@ -1027,6 +1029,7 @@ function AppearancePanel({
   function currentAppearanceStyle(): CustomAppearanceStyle {
     if (editor) return editor;
     if (appearanceStyleId === CYBER_STYLE_ID) return cyberStyle;
+    if (appearanceStyleId === EINK_STYLE_ID) return builtInEinkAppearanceStyle();
     if (appearanceStyleId === CLASSIC_STYLE_ID) return builtInClassicAppearanceStyle();
     return (
       customStyles.find((style) => style.id === appearanceStyleId) ??
@@ -1144,6 +1147,8 @@ function AppearancePanel({
   const cyberPreviewSource = editor?.id === CYBER_STYLE_ID ? editor : cyberStyle;
   const cyberPreview =
     resolvedTheme === "dark" ? cyberPreviewSource.dark : cyberPreviewSource.light;
+  const einkStyle = builtInEinkAppearanceStyle();
+  const einkPreview = resolvedTheme === "dark" ? einkStyle.dark : einkStyle.light;
 
   return (
     <div className="space-y-5">
@@ -1226,6 +1231,17 @@ function AppearancePanel({
             }}
             onSelect={() => selectStyle(CYBER_STYLE_ID)}
             onEdit={openEditCyber}
+          />
+          <StylePreviewCard
+            label="E-ink"
+            subtitle={resolvedTheme === "dark" ? "Night" : "Light"}
+            selected={appearanceStyleId === EINK_STYLE_ID}
+            bodyFontId={resolveStyleBodyFont(einkStyle)}
+            previewStyle={{
+              backgroundColor: einkPreview.page,
+              color: einkPreview.ink,
+            }}
+            onSelect={() => selectStyle(EINK_STYLE_ID)}
           />
           {customStyles.map((style) => {
             const previewSource = editor?.id === style.id ? editor : style;

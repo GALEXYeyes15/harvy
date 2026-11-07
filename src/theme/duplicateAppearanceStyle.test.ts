@@ -3,8 +3,11 @@ import { CYBER_BODY_FONT_ID } from "./appearanceFonts";
 import {
   builtInClassicAppearanceStyle,
   builtInCyberAppearanceStyle,
+  builtInEinkAppearanceStyle,
   DEFAULT_DARK_PALETTE,
   DEFAULT_LIGHT_PALETTE,
+  EINK_DARK_PALETTE,
+  EINK_LIGHT_PALETTE,
   duplicateAppearanceStyle,
   styleWithSeeds,
   type CustomAppearanceStyle,
@@ -64,5 +67,16 @@ describe("duplicateAppearanceStyle", () => {
     expect(copy.bodyFont).toBe(CYBER_BODY_FONT_ID);
     expect(copy.light.canvas).toBe(cyber.dark.canvas);
     expect(copy.dark.accent).toBe(cyber.dark.accent);
+  });
+
+  it("keeps the E-ink night palette when duplicating E-ink in dark mode", () => {
+    const eink = builtInEinkAppearanceStyle();
+    expect(eink.light).toEqual(EINK_LIGHT_PALETTE);
+    expect(eink.dark).toEqual(EINK_DARK_PALETTE);
+    const copy = duplicateAppearanceStyle(eink, "dark");
+    expect(copy.light.canvas).toBe(EINK_DARK_PALETTE.canvas);
+    expect(copy.light.ink).toBe(EINK_DARK_PALETTE.ink);
+    expect(copy.dark.canvas).toBe(EINK_DARK_PALETTE.canvas);
+    expect(copy.dark.accent).toBe(EINK_DARK_PALETTE.accent);
   });
 });
