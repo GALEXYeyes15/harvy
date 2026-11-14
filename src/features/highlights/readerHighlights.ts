@@ -6,6 +6,17 @@
 
 export type ReaderHighlightColor = "yellow" | "green" | "blue" | "rose";
 
+/**
+ * CSS class that sets `--harvy-highlight-color`. Written out in full so Tailwind's
+ * content scan keeps these rules (it drops class names built at runtime).
+ */
+export const HIGHLIGHT_COLOR_CLASS: Record<ReaderHighlightColor, string> = {
+  yellow: "harvy-highlight-color--yellow",
+  green: "harvy-highlight-color--green",
+  blue: "harvy-highlight-color--blue",
+  rose: "harvy-highlight-color--rose",
+};
+
 export type ReaderHighlightSourceKind = "epub" | "pdf" | "md" | "docx" | "article";
 
 export type ReaderHighlightSource = {
@@ -16,6 +27,10 @@ export type ReaderHighlightSource = {
   site: string;
   published: string;
   year: number | null;
+  /** Cover image path relative to the Harvy Reader folder, or "" when there is none. */
+  cover: string;
+  /** Remote cover image (https only), e.g. a Kindle book's Amazon cover, or "". */
+  coverUrl: string;
 };
 
 export type ReaderHighlight = {
@@ -61,6 +76,45 @@ function year(value: unknown): number | null {
   return typeof n === "number" && Number.isInteger(n) && n > 0 ? n : null;
 }
 
+const COVER_EXTENSION = /\.(jpe?g|png|webp|gif)$/i;
+
+/** Accept only a plain relative image path inside Reader's folder. */
+export function coverPath(value: unknown): string {
+  const path = str(value).replace(/\\/g, "/");
+  if (!path || path.startsWith("/") || /^[a-z]:/i.test(path)) return "";
+  const parts = path.split("/");
+  if (parts.some((part) => part === "" || part === "." || part === "..")) return "";
+  return COVER_EXTENSION.test(path) ? path : "";
+}
+
+export function httpsUrl(value: unknown): string {
+  const raw = str(value);
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Amazon cover links carry a size token (e.g. `._SY160.`); ask for one sharp enough
+ * for a book card. Other URLs pass through unchanged.
+ */
+export function sharperCoverUrl(url: string): string {
+  if (!/(^|\.)media-amazon\.com$|(^|\.)images-amazon\.com$/.test(safeHost(url))) return url;
+  return url.replace(/\._[A-Z]{2}\d+_?\.(jpe?g|png)$/i, "._SY480_.$1");
+}
+
+function safeHost(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+}
+
 function normalizeSource(value: unknown): ReaderHighlightSource {
   const raw = isRecord(value) ? value : {};
   const kind = str(raw.kind).toLowerCase() as ReaderHighlightSourceKind;
@@ -72,6 +126,8 @@ function normalizeSource(value: unknown): ReaderHighlightSource {
     site: str(raw.site),
     published: str(raw.published),
     year: year(raw.year),
+    cover: coverPath(raw.cover),
+    coverUrl: httpsUrl(raw.coverUrl),
   };
 }
 
@@ -148,6 +204,56 @@ export function formatHighlightForNotes(highlight: ReaderHighlight): string {
   if (highlight.source.url) lines.push(highlight.source.url);
   if (highlight.note) lines.push(`Note: ${highlight.note}`);
   return lines.join("\n");
+}
+
+export type ReaderHighlightGroup = {
+  key: string;
+  title: string;
+  author: string;
+  /** First cover found among the group's highlights, relative to Reader's folder. */
+  cover: string;
+  /** First remote cover URL among the group's highlights. */
+  coverUrl: string;
+  highlights: ReaderHighlight[];
+};
+
+/**
+ * Group highlights by the book or article they came from. Books with the most recent
+ * highlight come first; inside a book, highlights run oldest first, close to reading order.
+ */
+export function groupHighlightsBySource(highlights: ReaderHighlight[]): ReaderHighlightGroup[] {
+  const groups = new Map<string, ReaderHighlightGroup & { latest: number }>();
+  for (const highlight of highlights) {
+    const { title, author, site, url } = highlight.source;
+    const name = title || site || url;
+    const key = `${name.toLowerCase()}\u0000${author.toLowerCase()}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        key,
+        title: name || "Untitled",
+        author,
+        cover: "",
+        coverUrl: "",
+        highlights: [],
+        latest: -Infinity,
+      };
+      groups.set(key, group);
+    }
+    group.highlights.push(highlight);
+    if (!group.cover) group.cover = highlight.source.cover;
+    if (!group.coverUrl) group.coverUrl = highlight.source.coverUrl;
+    group.latest = Math.max(group.latest, highlight.created ?? -Infinity);
+  }
+
+  return [...groups.values()]
+    .sort((a, b) => b.latest - a.latest || a.title.localeCompare(b.title))
+    .map(({ latest: _latest, ...group }) => ({
+      ...group,
+      highlights: [...group.highlights].sort(
+        (a, b) => (a.created ?? Infinity) - (b.created ?? Infinity),
+      ),
+    }));
 }
 
 export function highlightMatchesQuery(highlight: ReaderHighlight, query: string): boolean {

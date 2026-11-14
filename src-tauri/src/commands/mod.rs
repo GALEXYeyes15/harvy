@@ -1316,6 +1316,59 @@ pub fn read_workspace_text_file(app: AppHandle, path: String) -> Result<String, 
 /// Harvy Reader's shared, read-only highlights index, relative to the user's Documents folder.
 const READER_HIGHLIGHTS_RELATIVE: [&str; 2] = ["Harvy Reader", "highlights.json"];
 
+/// Largest cover image Writer will load from Harvy Reader's folder.
+const READER_COVER_MAX_BYTES: u64 = 8 * 1024 * 1024;
+
+fn reader_root(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .document_dir()
+        .map(|documents| documents.join(READER_HIGHLIGHTS_RELATIVE[0]))
+        .map_err(|e| format!("Could not locate the Documents folder: {}", e))
+}
+
+/// Read one cover image named in Harvy Reader's highlights index (`source.cover`).
+/// Read-only and confined to the Harvy Reader folder: the path must be relative, may not
+/// climb out with `..` or a symlink, and must be a jpg/jpeg/png/webp/gif image.
+#[tauri::command]
+pub fn read_reader_cover(app: AppHandle, path: String) -> Result<tauri::ipc::Response, String> {
+    let relative = Path::new(&path);
+    let is_plain_relative = !path.is_empty()
+        && relative
+            .components()
+            .all(|c| matches!(c, std::path::Component::Normal(_)));
+    if !is_plain_relative {
+        return Err("Cover path must stay inside the Harvy Reader folder.".to_string());
+    }
+    let extension = relative
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    if !matches!(extension.as_str(), "jpg" | "jpeg" | "png" | "webp" | "gif") {
+        return Err("Cover must be a jpg, png, webp, or gif image.".to_string());
+    }
+
+    let root = reader_root(&app)?
+        .canonicalize()
+        .map_err(|e| format!("Harvy Reader folder not found: {}", e))?;
+    let full = root
+        .join(relative)
+        .canonicalize()
+        .map_err(|e| format!("Cover not found: {}", e))?;
+    if !full.starts_with(&root) {
+        return Err("Cover path must stay inside the Harvy Reader folder.".to_string());
+    }
+
+    let size = fs::metadata(&full)
+        .map_err(|e| format!("Could not read cover: {}", e))?
+        .len();
+    if size > READER_COVER_MAX_BYTES {
+        return Err("Cover image is too large.".to_string());
+    }
+    let bytes = fs::read(&full).map_err(|e| format!("Could not read cover: {}", e))?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 /// Read Harvy Reader's `highlights.json`. Fixed path, read-only: Writer never writes to
 /// Reader's folder. Returns `None` when Reader hasn't produced the file yet.
 #[tauri::command]

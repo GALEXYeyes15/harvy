@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  coverPath,
+  httpsUrl,
+  sharperCoverUrl,
   formatHighlightForNotes,
+  groupHighlightsBySource,
   highlightMatchesQuery,
   parseReaderHighlights,
 } from "./readerHighlights";
@@ -69,6 +73,50 @@ describe("parseReaderHighlights", () => {
   });
 });
 
+describe("coverPath", () => {
+  it("keeps plain relative image paths and rejects anything else", () => {
+    expect(coverPath("books/wolf-brother/cover.jpg")).toBe("books/wolf-brother/cover.jpg");
+    expect(coverPath("books\\a\\cover.PNG")).toBe("books/a/cover.PNG");
+    expect(coverPath("../secret.jpg")).toBe("");
+    expect(coverPath("books/../../x.jpg")).toBe("");
+    expect(coverPath("/Users/me/cover.jpg")).toBe("");
+    expect(coverPath("C:/cover.jpg")).toBe("");
+    expect(coverPath("books/a/meta.json")).toBe("");
+    expect(coverPath(42)).toBe("");
+  });
+
+  it("gives a book group the first cover among its highlights", () => {
+    const raw = JSON.stringify({
+      highlights: [
+        { id: "1", text: "a", source: { title: "Book", author: "A" } },
+        { id: "2", text: "b", source: { title: "Book", author: "A", cover: "books/book/cover.jpg" } },
+      ],
+    });
+    const [group] = groupHighlightsBySource(parseReaderHighlights(raw).highlights);
+    expect(group!.cover).toBe("books/book/cover.jpg");
+  });
+});
+
+describe("cover URLs", () => {
+  it("keeps https cover URLs only", () => {
+    expect(httpsUrl("https://m.media-amazon.com/images/I/91MOOoO1stL._SY160.jpg")).toBe(
+      "https://m.media-amazon.com/images/I/91MOOoO1stL._SY160.jpg",
+    );
+    expect(httpsUrl("http://example.com/a.jpg")).toBe("");
+    expect(httpsUrl("javascript:alert(1)")).toBe("");
+    expect(httpsUrl("not a url")).toBe("");
+  });
+
+  it("asks Amazon for a sharper cover and leaves other hosts alone", () => {
+    expect(sharperCoverUrl("https://m.media-amazon.com/images/I/91MOOoO1stL._SY160.jpg")).toBe(
+      "https://m.media-amazon.com/images/I/91MOOoO1stL._SY480_.jpg",
+    );
+    expect(sharperCoverUrl("https://example.com/cover._SY160.jpg")).toBe(
+      "https://example.com/cover._SY160.jpg",
+    );
+  });
+});
+
 describe("formatHighlightForNotes", () => {
   it("includes the quote, attribution, link, and note", () => {
     const [newest, older] = parseReaderHighlights(sample).highlights;
@@ -76,6 +124,25 @@ describe("formatHighlightForNotes", () => {
       "“The quote.”\n— An Essay · Chapter 3\nhttps://example.com/a\nNote: What I thought.",
     );
     expect(formatHighlightForNotes(older!)).toBe("“Older quote.”\n— Cal Newport, Deep Work · p. 12");
+  });
+});
+
+describe("groupHighlightsBySource", () => {
+  it("groups by book, newest book first, oldest highlight first inside a book", () => {
+    const raw = JSON.stringify({
+      highlights: [
+        { id: "a1", text: "A early", created: "2026-11-01T00:00:00Z", source: { title: "Book A", author: "X" } },
+        { id: "b1", text: "B", created: "2026-11-05T00:00:00Z", source: { title: "Book B" } },
+        { id: "a2", text: "A late", created: "2026-11-10T00:00:00Z", source: { title: "book a", author: "x" } },
+        { id: "s1", text: "Site only", created: "2026-10-01T00:00:00Z", source: { site: "Example" } },
+      ],
+    });
+    const groups = groupHighlightsBySource(parseReaderHighlights(raw).highlights);
+    expect(groups.map((g) => [g.title, g.highlights.map((h) => h.id)])).toEqual([
+      ["book a", ["a1", "a2"]],
+      ["Book B", ["b1"]],
+      ["Example", ["s1"]],
+    ]);
   });
 });
 

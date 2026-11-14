@@ -4,13 +4,19 @@ import { openSafeExternalUrl } from "../features/editor/openExternalUrl";
 import {
   formatHighlightForNotes,
   formatHighlightSourceLine,
+  groupHighlightsBySource,
+  HIGHLIGHT_COLOR_CLASS,
+  sharperCoverUrl,
   highlightMatchesQuery,
   type ReaderHighlight,
   type ReaderHighlightColor,
+  type ReaderHighlightGroup,
 } from "../features/highlights/readerHighlights";
+import { useReaderCover } from "../features/highlights/useReaderCover";
 import { useReaderHighlights } from "../features/highlights/useReaderHighlights";
 import { formatFetchedAgo } from "../features/outliers/outlierPosts";
 import { useOutlierColumnCount } from "../features/outliers/useOutlierColumnCount";
+import { HighlightsBookModal } from "./HighlightsBookModal";
 
 const COLOR_ORDER: ReaderHighlightColor[] = ["yellow", "green", "blue", "rose"];
 
@@ -20,6 +26,31 @@ const COLOR_LABEL: Record<ReaderHighlightColor, string> = {
   blue: "Blue",
   rose: "Rose",
 };
+
+type HighlightsSort = "newest" | "book";
+
+const SORT_STORAGE_KEY = "harvy:highlights-sort";
+
+const SORT_LABEL: Record<HighlightsSort, string> = {
+  newest: "Newest",
+  book: "By book",
+};
+
+function readSort(): HighlightsSort {
+  try {
+    return localStorage.getItem(SORT_STORAGE_KEY) === "book" ? "book" : "newest";
+  } catch {
+    return "newest";
+  }
+}
+
+function writeSort(sort: HighlightsSort) {
+  try {
+    localStorage.setItem(SORT_STORAGE_KEY, sort);
+  } catch {
+    // Not persisted; the choice still applies for this session.
+  }
+}
 
 const BAR_ACTION =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-accent/65 transition-colors hover:bg-ink/[0.05] hover:text-accent disabled:opacity-40 dark:hover:bg-white/[0.06]";
@@ -44,6 +75,46 @@ function distributeHighlights(highlights: ReaderHighlight[], columnCount: number
   return columns;
 }
 
+function HighlightMasonry({
+  highlights,
+  columnCount,
+  isReflowing,
+  addedIds,
+  onAdd,
+  className = "mt-5",
+}: {
+  highlights: ReaderHighlight[];
+  columnCount: number;
+  isReflowing: boolean;
+  addedIds: Set<string>;
+  onAdd?: (highlight: ReaderHighlight) => void;
+  className?: string;
+}) {
+  const columns = useMemo(
+    () => distributeHighlights(highlights, columnCount),
+    [highlights, columnCount],
+  );
+  return (
+    <div
+      className={`harvy-outlier-masonry ${className} flex gap-4`}
+      data-reflowing={isReflowing ? "true" : undefined}
+    >
+      {columns.map((column, columnIndex) => (
+        <div key={columnIndex} className="harvy-outlier-masonry-col flex min-w-0 flex-1 flex-col gap-4">
+          {column.map((highlight) => (
+            <HighlightCard
+              key={highlight.id}
+              highlight={highlight}
+              added={addedIds.has(highlight.id)}
+              onAdd={onAdd ? () => onAdd(highlight) : undefined}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function HighlightCard({
   highlight,
   added,
@@ -58,7 +129,7 @@ function HighlightCard({
 
   return (
     <article
-      className={`harvy-outlier-card harvy-highlight-card harvy-highlight-card--${highlight.color} flex min-w-0 flex-col px-4 py-4`}
+      className={`harvy-outlier-card harvy-highlight-card ${HIGHLIGHT_COLOR_CLASS[highlight.color]} flex min-w-0 flex-col px-4 py-4`}
     >
       <div className="flex items-start justify-between gap-3">
         <p className="min-w-0 flex-1 break-words whitespace-pre-wrap text-[13px] leading-relaxed text-ink [overflow-wrap:anywhere]">
@@ -118,6 +189,87 @@ function HighlightCard({
   );
 }
 
+/** Muted cover tones for books, picked from the title so a book keeps its color. */
+const COVER_TONES = [
+  "#3d4a5c",
+  "#5b4636",
+  "#44564a",
+  "#5a3f4a",
+  "#4b4763",
+  "#6a5a3a",
+  "#3f5658",
+  "#5e4a3a",
+];
+
+function coverTone(title: string): string {
+  let hash = 0;
+  for (let i = 0; i < title.length; i += 1) hash = (hash * 31 + title.charCodeAt(i)) | 0;
+  return COVER_TONES[Math.abs(hash) % COVER_TONES.length]!;
+}
+
+function HighlightBookCard({
+  group,
+  onOpen,
+}: {
+  group: ReaderHighlightGroup;
+  onOpen: () => void;
+}) {
+  const count = group.highlights.length;
+  const localCover = useReaderCover(group.cover);
+  const [remoteFailed, setRemoteFailed] = useState(false);
+  const coverUrl =
+    localCover ?? (group.coverUrl && !remoteFailed ? sharperCoverUrl(group.coverUrl) : null);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="harvy-outlier-card harvy-highlight-book flex min-w-0 flex-col overflow-hidden text-left"
+      aria-label={`${group.title}, ${count} ${count === 1 ? "highlight" : "highlights"}`}
+    >
+      <div className="harvy-highlight-book-shelf flex h-44 w-full items-center justify-center">
+        {coverUrl ? (
+          <img
+            src={coverUrl}
+            alt=""
+            className="harvy-highlight-book-cover h-36 max-w-[7.5rem] object-cover"
+            draggable={false}
+            referrerPolicy="no-referrer"
+            onError={() => setRemoteFailed(true)}
+          />
+        ) : (
+          <div
+            className="harvy-highlight-book-cover flex h-36 w-24 flex-col justify-between px-2.5 py-3"
+            style={{ backgroundColor: coverTone(group.title) }}
+            aria-hidden
+          >
+            <span className="harvy-highlight-quote line-clamp-4 text-[11px] font-semibold leading-tight text-white/92">
+              {group.title}
+            </span>
+            {group.author ? (
+              <span className="line-clamp-2 text-[8px] uppercase tracking-[0.08em] text-white/65">
+                {group.author}
+              </span>
+            ) : null}
+          </div>
+        )}
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col px-4 pb-4 pt-3.5">
+        <p className="harvy-highlight-quote line-clamp-3 text-[17px] font-semibold leading-snug text-ink">
+          {group.title}
+        </p>
+        {group.author ? (
+          <p className="harvy-highlight-quote mt-2 truncate text-[14px] text-ink/80 dark:text-white/75">
+            {group.author}
+          </p>
+        ) : null}
+        <p className="mt-auto pt-3 text-[12px] tabular-nums text-muted/60 dark:text-white/40">
+          {count} {count === 1 ? "highlight" : "highlights"}
+        </p>
+      </div>
+    </button>
+  );
+}
+
 export function HighlightsView({
   onAddToNotes,
   workspaceSidebarOpen = true,
@@ -132,6 +284,8 @@ export function HighlightsView({
   const [color, setColor] = useState<ReaderHighlightColor | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [sort, setSort] = useState<HighlightsSort>(readSort);
+  const [openBookKey, setOpenBookKey] = useState<string | null>(null);
 
   const { columnCount, isReflowing } = useOutlierColumnCount({
     workspaceSidebarOpen,
@@ -151,7 +305,21 @@ export function HighlightsView({
     [index.highlights, color, searchQuery],
   );
 
-  const columns = useMemo(() => distributeHighlights(filtered, columnCount), [filtered, columnCount]);
+  const groups = useMemo(
+    () => (sort === "book" ? groupHighlightsBySource(filtered) : []),
+    [filtered, sort],
+  );
+
+  /** Looked up by key so the open popup follows reloads and searches. */
+  const openBook = useMemo(
+    () => groups.find((group) => group.key === openBookKey) ?? null,
+    [groups, openBookKey],
+  );
+
+  const changeSort = (next: HighlightsSort) => {
+    setSort(next);
+    writeSort(next);
+  };
 
   const addToNotes = (highlight: ReaderHighlight) => {
     onAddToNotes?.(formatHighlightForNotes(highlight));
@@ -200,7 +368,7 @@ export function HighlightsView({
                   onClick={() => setColor((current) => (current === c ? null : c))}
                 >
                   <span
-                    className={`harvy-highlight-swatch harvy-highlight-swatch--${c} ${
+                    className={`harvy-highlight-swatch ${HIGHLIGHT_COLOR_CLASS[c]} ${
                       color === c ? "is-active" : ""
                     }`}
                     aria-hidden
@@ -227,7 +395,29 @@ export function HighlightsView({
       </div>
 
       {status ? (
-        <p className="mt-3 text-[12px] text-muted/65 dark:text-white/45">{status}</p>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[12px] text-muted/65 dark:text-white/45">
+          <p className="min-w-0">{status}</p>
+          {index.highlights.length > 0 ? (
+            <div className="flex items-center gap-3" role="radiogroup" aria-label="Sort highlights">
+              {(["newest", "book"] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  role="radio"
+                  aria-checked={sort === option}
+                  onClick={() => changeSort(option)}
+                  className={`border-0 bg-transparent p-0 font-medium transition-colors ${
+                    sort === option
+                      ? "text-ink dark:text-white/85"
+                      : "hover:text-ink dark:hover:text-white/70"
+                  }`}
+                >
+                  {SORT_LABEL[option]}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {error ? <p className="mt-5 text-[13px] text-muted/75">{error}</p> : null}
@@ -244,23 +434,36 @@ export function HighlightsView({
         </p>
       ) : null}
 
-      <div
-        className="harvy-outlier-masonry mt-5 flex gap-4"
-        data-reflowing={isReflowing ? "true" : undefined}
-      >
-        {columns.map((column, columnIndex) => (
-          <div key={columnIndex} className="harvy-outlier-masonry-col flex min-w-0 flex-1 flex-col gap-4">
-            {column.map((highlight) => (
-              <HighlightCard
-                key={highlight.id}
-                highlight={highlight}
-                added={addedIds.has(highlight.id)}
-                onAdd={onAddToNotes ? () => addToNotes(highlight) : undefined}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
+      {sort === "book" ? (
+        <div
+          className="harvy-idea-gallery mt-5"
+          data-reflowing={isReflowing ? "true" : undefined}
+          style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
+        >
+          {groups.map((group) => (
+            <HighlightBookCard
+              key={group.key}
+              group={group}
+              onOpen={() => setOpenBookKey(group.key)}
+            />
+          ))}
+        </div>
+      ) : (
+        <HighlightMasonry
+          highlights={filtered}
+          columnCount={columnCount}
+          isReflowing={isReflowing}
+          addedIds={addedIds}
+          onAdd={onAddToNotes ? addToNotes : undefined}
+        />
+      )}
+
+      <HighlightsBookModal
+        group={sort === "book" ? openBook : null}
+        addedIds={addedIds}
+        onAdd={onAddToNotes ? addToNotes : undefined}
+        onClose={() => setOpenBookKey(null)}
+      />
     </div>
   );
 }

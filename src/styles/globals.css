@@ -2785,29 +2785,71 @@
     border-color: color-mix(in oklab, var(--color-line) 55%, transparent);
   }
 
-  /* Harvy Reader highlights: the card's left edge carries the highlight color. */
-  .harvy-highlight-card {
+  /* Harvy Reader highlight colors. The modifier classes set the color for cards,
+     popup boxes and filter swatches alike. */
+  .harvy-highlight-card,
+  .harvy-highlight-box,
+  .harvy-highlight-swatch {
     --harvy-highlight-color: #e8c547;
-    border-left: 3px solid var(--harvy-highlight-color);
   }
-  .harvy-highlight-card--green,
-  .harvy-highlight-swatch--green {
+  .harvy-highlight-color--green {
     --harvy-highlight-color: #7fb77e;
   }
-  .harvy-highlight-card--blue,
-  .harvy-highlight-swatch--blue {
+  .harvy-highlight-color--blue {
     --harvy-highlight-color: #6fa3d8;
   }
-  .harvy-highlight-card--rose,
-  .harvy-highlight-swatch--rose {
+  .harvy-highlight-color--rose {
     --harvy-highlight-color: #e08a9b;
+  }
+
+  /* Harvy Reader highlights: the card's left edge carries the highlight color. */
+  .harvy-highlight-card {
+    border-left: 3px solid var(--harvy-highlight-color);
   }
   html.dark .harvy-highlight-card {
     border-left-color: color-mix(in oklab, var(--harvy-highlight-color) 75%, transparent);
   }
 
+  .harvy-highlight-quote {
+    font-family: "New York", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  }
+
+  .harvy-highlight-box {
+    font-size: 16px;
+    line-height: 1.65;
+    background: var(--color-mist);
+    border: 1px solid color-mix(in oklab, var(--color-line) 20%, transparent);
+    border-left: 3px solid var(--harvy-highlight-color);
+  }
+  html.dark .harvy-highlight-box {
+    border-color: color-mix(in oklab, var(--color-line) 55%, transparent);
+    border-left-color: color-mix(in oklab, var(--harvy-highlight-color) 75%, transparent);
+  }
+
+  .harvy-highlight-book {
+    cursor: pointer;
+    transition: background-color 140ms ease;
+  }
+  .harvy-highlight-book:hover {
+    background: color-mix(in oklab, var(--color-ink) 3.5%, var(--color-mist));
+  }
+  html.dark .harvy-highlight-book:hover {
+    background: color-mix(in oklab, var(--color-ink) 8%, var(--color-mist));
+  }
+  .harvy-highlight-book-shelf {
+    border-bottom: 1px solid color-mix(in oklab, var(--color-line) 18%, transparent);
+  }
+  html.dark .harvy-highlight-book-shelf {
+    border-bottom-color: color-mix(in oklab, var(--color-line) 50%, transparent);
+  }
+  .harvy-highlight-book-cover {
+    border-radius: 2px 4px 4px 2px;
+    box-shadow:
+      inset 3px 0 0 rgba(0, 0, 0, 0.18),
+      0 6px 14px rgba(0, 0, 0, 0.22);
+  }
+
   .harvy-highlight-swatch {
-    --harvy-highlight-color: #e8c547;
     display: block;
     width: 0.6rem;
     height: 0.6rem;
