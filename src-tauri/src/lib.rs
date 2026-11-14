@@ -85,6 +85,7 @@ pub fn run() {
             commands::search_workspace_markdown,
             commands::get_volume_display_name_for_path,
             commands::read_workspace_text_file,
+            commands::read_reader_highlights,
             commands::import_workspace_image,
             commands::import_headline_screenshot,
             commands::write_headline_screenshot,

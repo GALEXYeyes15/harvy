@@ -11,6 +11,7 @@ const allOn = {
   showOutliersView: true,
   showCollectView: true,
   showHeadlinesView: true,
+  showHighlightsView: true,
   showAvatarView: true,
 };
 
@@ -26,6 +27,7 @@ describe("normalizeCollectViewOrder", () => {
       "outliers",
       "collect",
       "headlines",
+      "highlights",
     ]);
   });
 
@@ -34,6 +36,7 @@ describe("normalizeCollectViewOrder", () => {
       "headlines",
       "outliers",
       "collect",
+      "highlights",
       "avatar",
     ]);
   });
@@ -45,13 +48,15 @@ describe("moveCollectView", () => {
       "collect",
       "headlines",
       "outliers",
+      "highlights",
       "avatar",
     ]);
-    expect(moveCollectView(COLLECT_SUB_VIEWS, 3, 0)).toEqual([
+    expect(moveCollectView(COLLECT_SUB_VIEWS, 4, 0)).toEqual([
       "avatar",
       "outliers",
       "collect",
       "headlines",
+      "highlights",
     ]);
   });
 
@@ -68,7 +73,7 @@ describe("enabledCollectViews", () => {
         { ...allOn, showCollectView: false },
         ["avatar", "collect", "outliers", "headlines"],
       ),
-    ).toEqual(["avatar", "outliers", "headlines"]);
+    ).toEqual(["avatar", "outliers", "headlines", "highlights"]);
   });
 });
 

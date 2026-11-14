@@ -23,6 +23,7 @@ import { isTauriRuntime } from "../features/save/saveRuntime";
 import { AvatarView } from "./AvatarView";
 import { CollectItemModal } from "./CollectItemModal";
 import { HeadlinesView } from "./HeadlinesView";
+import { HighlightsView } from "./HighlightsView";
 import { OutliersView } from "./OutliersView";
 import { WorkspaceSectionMainContent } from "./WorkspaceSectionMainContent";
 
@@ -69,6 +70,7 @@ function CollectSubViewTabs({
     showOutliersView: boolean;
     showCollectView: boolean;
     showHeadlinesView: boolean;
+    showHighlightsView: boolean;
     showAvatarView: boolean;
   };
   collectViewOrder: CollectSubView[];
@@ -97,6 +99,7 @@ function soleCollectViewTitle(views: {
   showOutliersView: boolean;
   showCollectView: boolean;
   showHeadlinesView: boolean;
+  showHighlightsView: boolean;
   showAvatarView: boolean;
 }): string {
   const labels = enabledCollectViews(views).map((view) => COLLECT_SUB_VIEW_LABELS[view]);
@@ -111,6 +114,7 @@ type CollectPanelProps = {
   showOutliersView?: boolean;
   showCollectView?: boolean;
   showHeadlinesView?: boolean;
+  showHighlightsView?: boolean;
   showAvatarView?: boolean;
   collectViewOrder?: CollectSubView[];
   workspaceSidebarOpen?: boolean;
@@ -125,16 +129,24 @@ export function CollectPanel({
   showOutliersView = true,
   showCollectView = true,
   showHeadlinesView = true,
+  showHighlightsView = true,
   showAvatarView = true,
   collectViewOrder,
   workspaceSidebarOpen = true,
   toolsSidebarOpen = true,
 }: CollectPanelProps) {
-  const views = { showOutliersView, showCollectView, showHeadlinesView, showAvatarView };
+  const views = {
+    showOutliersView,
+    showCollectView,
+    showHeadlinesView,
+    showHighlightsView,
+    showAvatarView,
+  };
   const enabledCount =
     Number(showOutliersView) +
     Number(showCollectView) +
     Number(showHeadlinesView) +
+    Number(showHighlightsView) +
     Number(showAvatarView);
 
   const [activeCollectView, setActiveCollectView] = useState<CollectSubView>(() =>
@@ -154,7 +166,7 @@ export function CollectPanel({
     if (!isCollectViewEnabled(activeCollectView, views)) {
       setActiveCollectView(firstEnabledCollectView(views, collectViewOrder));
     }
-  }, [activeCollectView, collectViewOrder, showOutliersView, showCollectView, showHeadlinesView, showAvatarView]);
+  }, [activeCollectView, collectViewOrder, showOutliersView, showCollectView, showHeadlinesView, showHighlightsView, showAvatarView]);
 
   const syncFromNotion = useCallback(async () => {
     if (!isTauriRuntime()) return;
@@ -255,6 +267,12 @@ export function CollectPanel({
 
         {activeCollectView === "avatar" && showAvatarView ? (
           <AvatarView />
+        ) : activeCollectView === "highlights" && showHighlightsView ? (
+          <HighlightsView
+            onAddToNotes={onAddPreviewToNotes}
+            workspaceSidebarOpen={workspaceSidebarOpen}
+            toolsSidebarOpen={toolsSidebarOpen}
+          />
         ) : activeCollectView === "headlines" && showHeadlinesView ? (
           <HeadlinesView
             workspaceSidebarOpen={workspaceSidebarOpen}
@@ -329,6 +347,12 @@ export function CollectPanel({
           />
         ) : showHeadlinesView ? (
           <HeadlinesView
+            workspaceSidebarOpen={workspaceSidebarOpen}
+            toolsSidebarOpen={toolsSidebarOpen}
+          />
+        ) : showHighlightsView ? (
+          <HighlightsView
+            onAddToNotes={onAddPreviewToNotes}
             workspaceSidebarOpen={workspaceSidebarOpen}
             toolsSidebarOpen={toolsSidebarOpen}
           />

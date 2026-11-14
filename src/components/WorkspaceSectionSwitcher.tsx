@@ -22,6 +22,7 @@ type WorkspaceSectionSwitcherProps = {
   showOutliersView?: boolean;
   showCollectView?: boolean;
   showHeadlinesView?: boolean;
+  showHighlightsView?: boolean;
   showAvatarView?: boolean;
   /** Shared with top chrome (tabs, header, ambient controls) during distraction-free writing. */
   chromeHidden?: boolean;
@@ -38,6 +39,7 @@ export function WorkspaceSectionSwitcher({
   showOutliersView = true,
   showCollectView = true,
   showHeadlinesView = true,
+  showHighlightsView = true,
   showAvatarView = true,
   chromeHidden = false,
   variant = "rail",
@@ -64,6 +66,7 @@ export function WorkspaceSectionSwitcher({
             showOutliersView,
             showCollectView,
             showHeadlinesView,
+            showHighlightsView,
             showAvatarView,
           });
           const Icon = SECTION_ICONS[section];
@@ -109,6 +112,7 @@ export function WorkspaceSectionSwitcher({
           showOutliersView,
           showCollectView,
           showHeadlinesView,
+          showHighlightsView,
           showAvatarView,
         });
         const Icon = SECTION_ICONS[section];

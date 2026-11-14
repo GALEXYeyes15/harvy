@@ -1313,6 +1313,28 @@ pub fn read_workspace_text_file(app: AppHandle, path: String) -> Result<String, 
     }
 }
 
+/// Harvy Reader's shared, read-only highlights index, relative to the user's Documents folder.
+const READER_HIGHLIGHTS_RELATIVE: [&str; 2] = ["Harvy Reader", "highlights.json"];
+
+/// Read Harvy Reader's `highlights.json`. Fixed path, read-only: Writer never writes to
+/// Reader's folder. Returns `None` when Reader hasn't produced the file yet.
+#[tauri::command]
+pub fn read_reader_highlights(app: AppHandle) -> Result<Option<String>, String> {
+    let documents = app
+        .path()
+        .document_dir()
+        .map_err(|e| format!("Could not locate the Documents folder: {}", e))?;
+    let path = READER_HIGHLIGHTS_RELATIVE
+        .iter()
+        .fold(documents, |acc, part| acc.join(part));
+
+    match fs::read(&path) {
+        Ok(bytes) => Ok(Some(String::from_utf8_lossy(&bytes).into_owned())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("Could not read Harvy Reader highlights: {}", e)),
+    }
+}
+
 /// Export Markdown content to a PDF at an absolute path (after Save dialog).
 #[tauri::command]
 pub fn export_markdown_pdf(app: AppHandle, path: String, markdown: String) -> Result<(), String> {

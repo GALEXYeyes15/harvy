@@ -534,6 +534,9 @@ export function AppShell() {
   const [showHeadlinesView, setShowHeadlinesView] = useState(
     () => readWorkspaceSettings().showHeadlinesView,
   );
+  const [showHighlightsView, setShowHighlightsView] = useState(
+    () => readWorkspaceSettings().showHighlightsView,
+  );
   const [collectViewOrder, setCollectViewOrder] = useState<CollectSubView[]>(
     () => readWorkspaceSettings().collectViewOrder,
   );
@@ -750,11 +753,13 @@ export function AppShell() {
     showOutliersView: boolean;
     showCollectView: boolean;
     showHeadlinesView: boolean;
+    showHighlightsView: boolean;
     showAvatarView: boolean;
   }) => {
     setShowOutliersView(next.showOutliersView);
     setShowCollectView(next.showCollectView);
     setShowHeadlinesView(next.showHeadlinesView);
+    setShowHighlightsView(next.showHighlightsView);
     setShowAvatarView(next.showAvatarView);
   }, []);
 
@@ -782,6 +787,13 @@ export function AppShell() {
   const handleShowHeadlinesViewChange = useCallback(
     (enabled: boolean) => {
       applyCollectViewVisibility(writeWorkspaceSettings({ showHeadlinesView: enabled }));
+    },
+    [applyCollectViewVisibility],
+  );
+
+  const handleShowHighlightsViewChange = useCallback(
+    (enabled: boolean) => {
+      applyCollectViewVisibility(writeWorkspaceSettings({ showHighlightsView: enabled }));
     },
     [applyCollectViewVisibility],
   );
@@ -4363,6 +4375,7 @@ export function AppShell() {
           showOutliersView={showOutliersView}
           showCollectView={showCollectView}
           showHeadlinesView={showHeadlinesView}
+          showHighlightsView={showHighlightsView}
           showAvatarView={showAvatarView}
         />
       ) : null}
@@ -4523,6 +4536,7 @@ export function AppShell() {
               showOutliersView={showOutliersView}
               showCollectView={showCollectView}
               showHeadlinesView={showHeadlinesView}
+              showHighlightsView={showHighlightsView}
               showAvatarView={showAvatarView}
               collectViewOrder={collectViewOrder}
               workspaceSidebarOpen={isWorkspaceSidebarOpen}
@@ -4754,6 +4768,7 @@ export function AppShell() {
               showOutliersView={showOutliersView}
               showCollectView={showCollectView}
               showHeadlinesView={showHeadlinesView}
+              showHighlightsView={showHighlightsView}
               showAvatarView={showAvatarView}
               chromeHidden={hideWorkspaceSectionRail}
               className="absolute z-20"
@@ -4829,6 +4844,7 @@ export function AppShell() {
                 showOutliersView={showOutliersView}
                 showCollectView={showCollectView}
                 showHeadlinesView={showHeadlinesView}
+                showHighlightsView={showHighlightsView}
                 showAvatarView={showAvatarView}
                 chromeHidden={hideWorkspaceSectionRail}
                 className="absolute z-20"
@@ -4957,10 +4973,12 @@ export function AppShell() {
         showOutliersView={showOutliersView}
         showCollectView={showCollectView}
         showHeadlinesView={showHeadlinesView}
+        showHighlightsView={showHighlightsView}
         showAvatarView={showAvatarView}
         onShowOutliersViewChange={handleShowOutliersViewChange}
         onShowCollectViewChange={handleShowCollectViewChange}
         onShowHeadlinesViewChange={handleShowHeadlinesViewChange}
+        onShowHighlightsViewChange={handleShowHighlightsViewChange}
         onShowAvatarViewChange={handleShowAvatarViewChange}
         collectViewOrder={collectViewOrder}
         onCollectViewOrderChange={handleCollectViewOrderChange}

@@ -177,10 +177,12 @@ type SettingsModalProps = {
   showOutliersView: boolean;
   showCollectView: boolean;
   showHeadlinesView: boolean;
+  showHighlightsView: boolean;
   showAvatarView: boolean;
   onShowOutliersViewChange: (enabled: boolean) => void;
   onShowCollectViewChange: (enabled: boolean) => void;
   onShowHeadlinesViewChange: (enabled: boolean) => void;
+  onShowHighlightsViewChange: (enabled: boolean) => void;
   onShowAvatarViewChange: (enabled: boolean) => void;
   collectViewOrder: CollectSubView[];
   onCollectViewOrderChange: (order: CollectSubView[]) => void;
@@ -235,10 +237,12 @@ export function SettingsModal({
   showOutliersView,
   showCollectView,
   showHeadlinesView,
+  showHighlightsView,
   showAvatarView,
   onShowOutliersViewChange,
   onShowCollectViewChange,
   onShowHeadlinesViewChange,
+  onShowHighlightsViewChange,
   onShowAvatarViewChange,
   collectViewOrder,
   onCollectViewOrderChange,
@@ -346,10 +350,12 @@ export function SettingsModal({
                 showOutliersView={showOutliersView}
                 showCollectView={showCollectView}
                 showHeadlinesView={showHeadlinesView}
+                showHighlightsView={showHighlightsView}
                 showAvatarView={showAvatarView}
                 onShowOutliersViewChange={onShowOutliersViewChange}
                 onShowCollectViewChange={onShowCollectViewChange}
                 onShowHeadlinesViewChange={onShowHeadlinesViewChange}
+                onShowHighlightsViewChange={onShowHighlightsViewChange}
                 onShowAvatarViewChange={onShowAvatarViewChange}
                 collectViewOrder={collectViewOrder}
                 onCollectViewOrderChange={onCollectViewOrderChange}
@@ -452,10 +458,12 @@ function CollectSettingsPanel({
   showOutliersView,
   showCollectView,
   showHeadlinesView,
+  showHighlightsView,
   showAvatarView,
   onShowOutliersViewChange,
   onShowCollectViewChange,
   onShowHeadlinesViewChange,
+  onShowHighlightsViewChange,
   onShowAvatarViewChange,
   collectViewOrder,
   onCollectViewOrderChange,
@@ -465,10 +473,12 @@ function CollectSettingsPanel({
   showOutliersView: boolean;
   showCollectView: boolean;
   showHeadlinesView: boolean;
+  showHighlightsView: boolean;
   showAvatarView: boolean;
   onShowOutliersViewChange: (enabled: boolean) => void;
   onShowCollectViewChange: (enabled: boolean) => void;
   onShowHeadlinesViewChange: (enabled: boolean) => void;
+  onShowHighlightsViewChange: (enabled: boolean) => void;
   onShowAvatarViewChange: (enabled: boolean) => void;
   collectViewOrder: CollectSubView[];
   onCollectViewOrderChange: (order: CollectSubView[]) => void;
@@ -501,6 +511,7 @@ function CollectSettingsPanel({
     Number(showOutliersView) +
     Number(showCollectView) +
     Number(showHeadlinesView) +
+    Number(showHighlightsView) +
     Number(showAvatarView);
 
   const orderedViews = normalizeCollectViewOrder(collectViewOrder);
@@ -508,12 +519,14 @@ function CollectSettingsPanel({
     outliers: showOutliersView,
     collect: showCollectView,
     headlines: showHeadlinesView,
+    highlights: showHighlightsView,
     avatar: showAvatarView,
   };
   const viewOnChange: Record<CollectSubView, (enabled: boolean) => void> = {
     outliers: onShowOutliersViewChange,
     collect: onShowCollectViewChange,
     headlines: onShowHeadlinesViewChange,
+    highlights: onShowHighlightsViewChange,
     avatar: onShowAvatarViewChange,
   };
 
@@ -604,7 +617,7 @@ function CollectSettingsPanel({
     <div className="space-y-5">
       <SettingsSectionHeader
         title="Research"
-        description="Outliers, Ideas, Headlines, and Avatar in the workspace rail."
+        description="Outliers, Ideas, Headlines, Highlights, and Avatar in the workspace rail."
       />
       <div className={`rounded-xl bg-mist ${drag ? "overflow-visible" : "overflow-hidden"}`}>
         <ul>

@@ -1,9 +1,10 @@
-export type CollectSubView = "outliers" | "collect" | "headlines" | "avatar";
+export type CollectSubView = "outliers" | "collect" | "headlines" | "highlights" | "avatar";
 
 export type CollectSubViewFlags = {
   showOutliersView: boolean;
   showCollectView: boolean;
   showHeadlinesView: boolean;
+  showHighlightsView: boolean;
   showAvatarView: boolean;
 };
 
@@ -11,6 +12,7 @@ export const COLLECT_SUB_VIEWS: CollectSubView[] = [
   "outliers",
   "collect",
   "headlines",
+  "highlights",
   "avatar",
 ];
 
@@ -18,6 +20,7 @@ export const COLLECT_SUB_VIEW_LABELS: Record<CollectSubView, string> = {
   outliers: "Outliers",
   collect: "Ideas",
   headlines: "Headlines",
+  highlights: "Highlights",
   avatar: "Avatar",
 };
 
@@ -73,6 +76,7 @@ export function isCollectViewEnabled(view: CollectSubView, views: CollectSubView
   if (view === "outliers") return views.showOutliersView;
   if (view === "collect") return views.showCollectView;
   if (view === "headlines") return views.showHeadlinesView;
+  if (view === "highlights") return views.showHighlightsView;
   return views.showAvatarView;
 }
 

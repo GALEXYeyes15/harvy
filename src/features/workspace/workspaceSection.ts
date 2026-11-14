@@ -23,6 +23,7 @@ export function workspaceSectionLabel(
     showOutliersView: boolean;
     showCollectView: boolean;
     showHeadlinesView: boolean;
+    showHighlightsView?: boolean;
     showAvatarView: boolean;
   },
 ): string {
@@ -31,6 +32,7 @@ export function workspaceSectionLabel(
     views.showOutliersView ? "Outliers" : null,
     views.showCollectView ? "Ideas" : null,
     views.showHeadlinesView ? "Headlines" : null,
+    views.showHighlightsView ? "Highlights" : null,
     views.showAvatarView ? "Avatar" : null,
   ].filter((label): label is string => Boolean(label));
   if (labels.length === 1) return labels[0]!;
