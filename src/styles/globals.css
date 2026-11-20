@@ -3451,9 +3451,33 @@ html.eink [data-harvy-sidebar] {
   background-image: none !important;
 }
 
-html.eink .harvy-title-bar-drag,
+/*
+ * The active tab is the same paper as the page, so a faint line traces its shape instead:
+ * along the bottom of the strip, up and over the active tab, and back down. The strip's line
+ * is a pseudo-element under the active tab (E-ink forbids box-shadow and strips chrome
+ * background images), so the opaque active tab hides it below itself.
+ */
 html.eink .harvy-tab-strip {
-  border-bottom: 1px solid var(--color-line);
+  --harvy-eink-tab-line: color-mix(in oklab, var(--color-ink) 14%, transparent);
+}
+
+html.eink .harvy-tab-strip::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  height: 1px;
+  pointer-events: none;
+  background-color: var(--harvy-eink-tab-line);
+}
+
+html.eink .harvy-page-tab--active {
+  background-color: var(--color-stage);
+  border: 1px solid var(--harvy-eink-tab-line);
+  border-top: 0;
+  border-bottom: 0;
 }
 
 html.eink .harvy-context-menu,
