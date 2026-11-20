@@ -3,7 +3,20 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
-type DomWithDesc = Node & { pmViewDesc?: unknown };
+type DomWithDesc = Node & { pmViewDesc?: { contentDOM?: Node | null } };
+
+type ObservedView = EditorView & {
+  domObserver?: { stop: () => void; start: () => void; flush: () => void };
+};
+
+/** Wait this long after the last edit/mutation; injectors act on idle, typing never waits. */
+const IDLE_MS = 400;
+
+/** Widgets and atom node views own their DOM even though their insides have no view desc. */
+function isOwnedLeaf(node: Node): boolean {
+  const desc = (node as DomWithDesc).pmViewDesc;
+  return Boolean(desc && node.nodeType === 1 && !desc.contentDOM);
+}
 
 const TEXTBLOCK_TYPES = new Set(["paragraph", "heading", "harvyOutlineParagraph"]);
 
@@ -35,7 +48,7 @@ function splitForeignText(block: HTMLElement): { prefix: string; suffix: string 
     for (const child of parent.childNodes) {
       if ((child as DomWithDesc).pmViewDesc) {
         if (child.nodeType === 3 && (child.nodeValue ?? "").length > 0) seenOwnedText = true;
-        if (child.nodeType === 1) visit(child);
+        if (child.nodeType === 1 && !isOwnedLeaf(child)) visit(child);
         continue;
       }
       if (child.nodeType === 3) {
@@ -57,7 +70,7 @@ function splitForeignText(block: HTMLElement): { prefix: string; suffix: string 
 function removeForeign(parent: Node): void {
   for (const child of [...parent.childNodes]) {
     if ((child as DomWithDesc).pmViewDesc) {
-      if (child.nodeType === 1) removeForeign(child);
+      if (child.nodeType === 1 && !isOwnedLeaf(child)) removeForeign(child);
       continue;
     }
     if (child.nodeType === 1 && containsOwned(child)) {
@@ -103,6 +116,12 @@ let recovering = false;
 /** Pull stray DOM text back into the document so it can be edited and saved. */
 export function recoverForeignDocumentDom(view: EditorView): void {
   if (recovering || view.composing || !view.editable) return;
+  const observer = (view as ObservedView).domObserver;
+  // Let ProseMirror read its own pending keystrokes first. Typing mid-sentence often makes the
+  // browser split a text node; until PM flushes, the tail looks unowned and would be "recovered"
+  // to the end of the paragraph, leaving the rest of the line out of sync with the document.
+  observer?.flush();
+  if (view.composing) return;
   const edits = foreignEdits(view);
   if (edits.length === 0) return;
 
@@ -118,8 +137,6 @@ export function recoverForeignDocumentDom(view: EditorView): void {
     for (const step of steps) {
       tr = tr.insertText(step.text, step.pos);
     }
-    const observer = (view as EditorView & { domObserver?: { stop: () => void; start: () => void } })
-      .domObserver;
     observer?.stop();
     try {
       for (const dom of doms) removeForeign(dom);
@@ -142,13 +159,14 @@ export const ForeignDomRecovery = Extension.create({
     return [
       new Plugin({
         view(editorView) {
-          let frame = 0;
+          let timer = 0;
           const schedule = () => {
-            if (frame || recovering) return;
-            frame = requestAnimationFrame(() => {
-              frame = 0;
+            if (recovering) return;
+            if (timer) window.clearTimeout(timer);
+            timer = window.setTimeout(() => {
+              timer = 0;
               recoverForeignDocumentDom(editorView);
-            });
+            }, IDLE_MS);
           };
           const observer = new MutationObserver(schedule);
           observer.observe(editorView.dom, { subtree: true, childList: true, characterData: true });
@@ -157,7 +175,7 @@ export const ForeignDomRecovery = Extension.create({
             update: schedule,
             destroy() {
               observer.disconnect();
-              if (frame) cancelAnimationFrame(frame);
+              if (timer) window.clearTimeout(timer);
             },
           };
         },

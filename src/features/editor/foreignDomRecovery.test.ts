@@ -51,4 +51,20 @@ describe("foreign DOM recovery", () => {
     recoverForeignDocumentDom(editor.view);
     expect(editor.state.doc.textContent).toBe("what we've done.");
   });
+
+  it("does not mistake a mid-sentence keystroke for stray text", () => {
+    editor = new Editor({
+      extensions: [StarterKit],
+      content: "<p>Hello world here.</p>",
+    });
+    const paragraph = editor.view.dom.querySelector("p")!;
+    // WebKit often splits the text node at the caret; the tail has no view desc until PM reads it.
+    const tail = (paragraph.firstChild as Text).splitText(6);
+    paragraph.insertBefore(document.createTextNode("big "), tail);
+
+    recoverForeignDocumentDom(editor.view);
+
+    expect(editor.state.doc.textContent).toBe("Hello big world here.");
+    expect(paragraph.textContent).toBe("Hello big world here.");
+  });
 });
