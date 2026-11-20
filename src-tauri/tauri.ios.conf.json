@@ -1,4 +1,5 @@
 {
+  "identifier": "com.harvy.writer",
   "bundle": {
     "iOS": {
       "minimumSystemVersion": "15.0",
