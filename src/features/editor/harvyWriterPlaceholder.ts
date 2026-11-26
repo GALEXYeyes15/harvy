@@ -25,12 +25,12 @@ export function isDocumentVisuallyBlank(doc: PMNode): boolean {
 }
 
 /**
- * TipTap Placeholder, but empty `harvyOutlineParagraph` placeholders in **writing** mode are decorated
- * by {@link HarvyOutlineParagraph}'s plugin instead (scaffold hint from `writingScaffold`).
+ * TipTap Placeholder, but empty `harvyWriterOutlineParagraph` placeholders in **writing** mode are decorated
+ * by {@link HarvyWriterOutlineParagraph}'s plugin instead (scaffold hint from `writingScaffold`).
  *
  * Normal paragraphs only get a placeholder when the document is visually blank (e.g. “Start writing…”).
  */
-export const HarvyPlaceholder = Placeholder.extend({
+export const HarvyWriterPlaceholder = Placeholder.extend({
   addProseMirrorPlugins() {
     return [
       new Plugin({

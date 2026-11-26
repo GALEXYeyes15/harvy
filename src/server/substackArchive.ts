@@ -68,7 +68,7 @@ const ARCHIVE_PAGE_SIZE = 50;
 const ARCHIVE_MAX_POSTS = 200;
 const NOTES_PAGE_SIZE = 20;
 const NOTES_MAX_ITEMS = 200;
-const USER_AGENT = "Harvy/0.1 (Substack public archive)";
+const USER_AGENT = "HarvyWriter/0.1 (Substack public archive)";
 
 export function parseSubstackHandle(raw: string): string {
   const trimmed = raw.trim();

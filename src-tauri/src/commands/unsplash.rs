@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 const UNSPLASH_SEARCH_URL: &str = "https://api.unsplash.com/search/photos";
 const UNSPLASH_PHOTOS_URL: &str = "https://api.unsplash.com/photos";
 const UNSPLASH_MISSING_KEY_MSG: &str =
-    "Missing Unsplash API key. Add UNSPLASH_ACCESS_KEY to .env.local and restart Harvy.";
+    "Missing Unsplash API key. Add UNSPLASH_ACCESS_KEY to .env.local and restart Harvy Writer.";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

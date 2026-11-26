@@ -300,7 +300,7 @@ export async function rankRelatedEssays(input: {
   candidates: RelatedEssayCandidate[];
 }): Promise<RelatedEssayItem[]> {
   if (!isTauriRuntime()) {
-    throw new Error("Related essays are only available in the Harvy desktop app.");
+    throw new Error("Related essays are only available in the Harvy Writer desktop app.");
   }
   if (input.candidates.length === 0) return [];
   const result = await invoke<{ matches?: RelatedRankMatch[] }>("ai_check_related_essays", {

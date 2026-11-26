@@ -1,4 +1,4 @@
-//! Extract attributed text from a workspace PDF so Harvy can convert it to Markdown.
+//! Extract attributed text from a workspace PDF so Harvy Writer can convert it to Markdown.
 
 use serde::Serialize;
 use std::path::PathBuf;
@@ -194,7 +194,7 @@ fn link_from_object(value: objc2::rc::Retained<objc2::runtime::AnyObject>) -> Op
 
 #[cfg(not(target_os = "macos"))]
 fn extract_pdf_text_macos(_app: &AppHandle, _file_path: &str) -> Result<Vec<PdfTextRun>, String> {
-    Err("PDF conversion is only available in the Harvy desktop app on macOS.".to_string())
+    Err("PDF conversion is only available in the Harvy Writer desktop app on macOS.".to_string())
 }
 
 /// Return attributed text runs stored in a PDF under the current workspace folder.

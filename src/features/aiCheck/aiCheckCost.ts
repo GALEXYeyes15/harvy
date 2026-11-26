@@ -96,7 +96,7 @@ export function formatModelIdForPicker(modelId: string): string {
 }
 
 /** Capable mid-tier models for AI check + podcast notes (not opus/o1, not bare haiku). */
-export function isRecommendedHarvyModel(modelId: string): boolean {
+export function isRecommendedHarvyWriterModel(modelId: string): boolean {
   const id = modelId.toLowerCase();
   if (/opus|^o1(?!-mini)|^o3(?!-mini)|^o4/i.test(id)) return false;
   if (/haiku|nano|fable/i.test(id)) return false;
@@ -115,7 +115,7 @@ export function pickRecommendedModelId(
 ): string | null {
   if (models.length === 0) return null;
   const sorted = sortModelsByCost(models);
-  const recommended = sorted.filter((m) => isRecommendedHarvyModel(m.id));
+  const recommended = sorted.filter((m) => isRecommendedHarvyWriterModel(m.id));
   const pool = recommended.length > 0 ? recommended : sorted;
 
   if (provider === "anthropic") {
@@ -134,7 +134,7 @@ export function pickRecommendedModelId(
 
 export function modelOptionLabel(modelId: string): string {
   const name = formatModelIdForPicker(modelId);
-  const recommended = isRecommendedHarvyModel(modelId) ? " (recommended)" : "";
+  const recommended = isRecommendedHarvyWriterModel(modelId) ? " (recommended)" : "";
   return `${name}${recommended} · ${formatModelRatesShort(modelId)}`;
 }
 

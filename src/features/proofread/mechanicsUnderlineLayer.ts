@@ -9,7 +9,7 @@ export type MechanicsUnderlineLayerState = {
 };
 
 export const mechanicsUnderlineLayerKey = new PluginKey<MechanicsUnderlineLayerState>(
-  "harvyMechanicsUnderlineLayer",
+  "harvyWriterMechanicsUnderlineLayer",
 );
 
 /** Back-compat alias used by AppShell / EditorCanvas. */
@@ -51,7 +51,7 @@ function logOverlayError(scope: string, error: unknown): void {
   mechanicsOverlayDisabled = true;
   proofreadDecorationsViewRef.visible = false;
   if (import.meta.env.DEV) {
-    console.error(`[HarvyMechanics] overlay ${scope}`, error);
+    console.error(`[HarvyWriterMechanics] overlay ${scope}`, error);
   }
 }
 
@@ -340,9 +340,9 @@ class MechanicsUnderlineLayerView implements PluginViewLike {
 
         const el = document.createElement("div");
         el.className = `harvy-mechanics-underline harvy-mechanics-underline--${range.type}`;
-        el.dataset.harvyProofreadType = range.type;
+        el.dataset.harvyWriterProofreadType = range.type;
         if (range.suggestion) {
-          el.dataset.harvyProofreadSuggestion = range.suggestion;
+          el.dataset.harvyWriterProofreadSuggestion = range.suggestion;
         }
         el.style.left = `${local.left}px`;
         el.style.top = `${local.top}px`;

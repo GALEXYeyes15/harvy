@@ -18,7 +18,7 @@ export function parseSafeExternalUrl(href: string): string | null {
 
 async function openSafeExternalUrlAsync(url: string): Promise<void> {
   if (isTauriRuntime()) {
-    // Always use the system opener. `window.open` creates another Harvy webview.
+    // Always use the system opener. `window.open` creates another Harvy Writer webview.
     const { openUrl } = await import("@tauri-apps/plugin-opener");
     await openUrl(url);
     return;

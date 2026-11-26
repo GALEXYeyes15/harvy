@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Schema } from "@tiptap/pm/model";
-import { isDocumentVisuallyBlank } from "./harvyPlaceholder";
+import { isDocumentVisuallyBlank } from "./harvyWriterPlaceholder";
 
 const schema = new Schema({
   nodes: {

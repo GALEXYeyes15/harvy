@@ -403,7 +403,7 @@ export function AddFontsApp() {
             <p className="text-[15px] font-medium tracking-tight text-[#e8eaed]">
               Google Fonts
             </p>
-            <p className="mt-0.5 text-[12px] text-[#9aa0a6]">Add to Harvy</p>
+            <p className="mt-0.5 text-[12px] text-[#9aa0a6]">Add to Harvy Writer</p>
           </div>
 
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pb-6">

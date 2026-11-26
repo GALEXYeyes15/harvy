@@ -61,7 +61,7 @@ fn print_pdf_file_macos(app: &AppHandle, file_path: &str, title: Option<&str>) -
 
 #[cfg(not(target_os = "macos"))]
 fn print_pdf_file_macos(_app: &AppHandle, _file_path: &str, _title: Option<&str>) -> Result<(), String> {
-    Err("Print is only available in the Harvy desktop app on macOS.".to_string())
+    Err("Print is only available in the Harvy Writer desktop app on macOS.".to_string())
 }
 
 fn temp_print_pdf_path() -> Result<PathBuf, String> {

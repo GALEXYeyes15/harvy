@@ -104,7 +104,7 @@ export function calculateEditorStats(
   const passiveVoiceSentences = passiveHits.length;
   if (import.meta.env.DEV && PASSIVE_DEBUG_SENTENCE_RE.test(text)) {
     // eslint-disable-next-line no-console
-    console.log("[HarvyAnalysisDebug]", {
+    console.log("[HarvyWriterAnalysisDebug]", {
       passiveHits: passiveHits.map((h) => text.slice(h.start, h.end)),
       passiveCount: passiveHits.length,
     });

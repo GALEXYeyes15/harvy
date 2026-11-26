@@ -61,7 +61,7 @@ export function proofreadPlainTextAndPositions(
     const expected = doc.textBetween(0, doc.content.size, blockSeparator);
     if (text !== expected) {
       // eslint-disable-next-line no-console
-      console.warn("[HarvyProofread] plain text map drifted from textBetween", {
+      console.warn("[HarvyWriterProofread] plain text map drifted from textBetween", {
         builtLength: text.length,
         expectedLength: expected.length,
       });

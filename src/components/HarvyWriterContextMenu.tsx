@@ -10,19 +10,19 @@ import {
 import { createPortal } from "react-dom";
 import type { Editor } from "@tiptap/core";
 import {
-  closeHarvyContextMenu,
-  ensureHarvyContextMenuMount,
+  closeHarvyWriterContextMenu,
+  ensureHarvyWriterContextMenuMount,
   findScrollableAncestors,
-  getHarvyContextMenuMount,
+  getHarvyWriterContextMenuMount,
   HARVY_CONTEXT_MENU_CLASS,
   HARVY_CONTEXT_MENU_DIVIDER_CLASS,
-  isHarvyContextMenuAnchorVisible,
-  placeHarvyContextMenu,
-  type HarvyContextMenuAnchorRange,
-  type HarvyContextMenuPlacement,
-} from "../features/editor/harvyContextMenu";
+  isHarvyWriterContextMenuAnchorVisible,
+  placeHarvyWriterContextMenu,
+  type HarvyWriterContextMenuAnchorRange,
+  type HarvyWriterContextMenuPlacement,
+} from "../features/editor/harvyWriterContextMenu";
 
-type HarvyContextMenuShellProps = {
+type HarvyWriterContextMenuShellProps = {
   children: ReactNode;
   menuRef?: RefObject<HTMLDivElement | null>;
   role?: string;
@@ -33,7 +33,7 @@ type HarvyContextMenuShellProps = {
   onPointerLeave?: (e: React.PointerEvent) => void;
 };
 
-export function HarvyContextMenuShell({
+export function HarvyWriterContextMenuShell({
   children,
   menuRef,
   role = "menu",
@@ -42,7 +42,7 @@ export function HarvyContextMenuShell({
   onMouseDown,
   onPointerEnter,
   onPointerLeave,
-}: HarvyContextMenuShellProps) {
+}: HarvyWriterContextMenuShellProps) {
   return (
     <div
       ref={menuRef}
@@ -58,28 +58,28 @@ export function HarvyContextMenuShell({
   );
 }
 
-export function HarvyContextMenuDivider() {
+export function HarvyWriterContextMenuDivider() {
   return <div className={HARVY_CONTEXT_MENU_DIVIDER_CLASS} aria-hidden />;
 }
 
-type UseHarvyContextMenuPortalOptions = {
+type UseHarvyWriterContextMenuPortalOptions = {
   editor: Editor | null;
-  anchor: HarvyContextMenuAnchorRange | null;
-  placement?: HarvyContextMenuPlacement;
+  anchor: HarvyWriterContextMenuAnchorRange | null;
+  placement?: HarvyWriterContextMenuPlacement;
   visible: boolean;
   onClose: () => void;
   repositionDeps?: unknown[];
 };
 
 /** Mount a React context menu in the editor scroll column with shared anchoring. */
-export function useHarvyContextMenuPortal({
+export function useHarvyWriterContextMenuPortal({
   editor,
   anchor,
   placement = "beside-below-end",
   visible,
   onClose,
   repositionDeps = [],
-}: UseHarvyContextMenuPortalOptions) {
+}: UseHarvyWriterContextMenuPortalOptions) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [mountEl, setMountEl] = useState<HTMLElement | null>(null);
 
@@ -88,15 +88,15 @@ export function useHarvyContextMenuPortal({
     const menu = menuRef.current;
     if (!ed || !menu || !anchor || !visible) return;
 
-    const mount = getHarvyContextMenuMount(ed.view);
+    const mount = getHarvyWriterContextMenuMount(ed.view);
     if (!mount) return;
 
-    if (!isHarvyContextMenuAnchorVisible(ed.view, anchor)) {
+    if (!isHarvyWriterContextMenuAnchorVisible(ed.view, anchor)) {
       onClose();
       return;
     }
 
-    placeHarvyContextMenu(menu, ed.view, mount, anchor, placement);
+    placeHarvyWriterContextMenu(menu, ed.view, mount, anchor, placement);
   }, [editor, anchor, placement, visible, onClose]);
 
   useEffect(() => {
@@ -104,9 +104,9 @@ export function useHarvyContextMenuPortal({
       setMountEl(null);
       return;
     }
-    const mount = getHarvyContextMenuMount(editor.view);
+    const mount = getHarvyWriterContextMenuMount(editor.view);
     if (mount) {
-      ensureHarvyContextMenuMount(mount);
+      ensureHarvyWriterContextMenuMount(mount);
       setMountEl(mount);
     }
   }, [editor, visible]);
@@ -162,13 +162,13 @@ export function useHarvyContextMenuPortal({
   }, [visible, editor, onClose]);
 
   useEffect(() => {
-    if (visible) closeHarvyContextMenu();
+    if (visible) closeHarvyWriterContextMenu();
   }, [visible]);
 
   return { menuRef, mountEl: visible && anchor ? mountEl : null, reposition };
 }
 
-export function HarvyContextMenuPortal({
+export function HarvyWriterContextMenuPortal({
   mountEl,
   children,
 }: {

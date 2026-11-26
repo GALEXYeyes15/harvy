@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isImagePreviewable } from "../workspace/tree";
 import { toWorkspaceRelativePath } from "../workspace/workspacePaths";
 import { isTauriRuntime } from "../save/saveRuntime";
-import { insertHarvyImageAtCursor } from "./insertHarvyImage";
+import { insertHarvyWriterImageAtCursor } from "./insertHarvyWriterImage";
 import { focusEditorAtClientCoords } from "./editorCanvasFocus";
 
 /** Custom MIME used when dragging workspace images from the sidebar (browser / HTML5 path). */
@@ -204,7 +204,7 @@ export function insertImageSrcsAtClientCoords(
 
   let inserted = false;
   for (const src of srcs) {
-    if (insertHarvyImageAtCursor(editor, { src })) inserted = true;
+    if (insertHarvyWriterImageAtCursor(editor, { src })) inserted = true;
   }
   return inserted;
 }

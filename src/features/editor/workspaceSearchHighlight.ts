@@ -17,7 +17,7 @@ type WorkspaceSearchHighlightMeta =
   | { clear: true };
 
 export const workspaceSearchHighlightKey = new PluginKey<WorkspaceSearchHighlightRange[]>(
-  "harvyWorkspaceSearchHighlight",
+  "harvyWriterWorkspaceSearchHighlight",
 );
 
 export function findWorkspaceSearchPmRanges(

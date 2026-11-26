@@ -5,19 +5,19 @@ import { describe, expect, it } from "vitest";
 import { editorHtmlToMarkdown, toEditorHtml } from "./documentMarkdown";
 import { handleBackspaceOnEmptyTextBlockKeyDown } from "./emptyTextBlockDeletion";
 import { EmptyTextBlockBackspace } from "./emptyTextBlockBackspace";
-import { HarvyMarkdownShortcuts } from "./harvyMarkdownShortcuts";
-import { HarvyParagraph } from "./harvyParagraph";
+import { HarvyWriterMarkdownShortcuts } from "./harvyWriterMarkdownShortcuts";
+import { HarvyWriterParagraph } from "./harvyWriterParagraph";
 
 function createEditor(content = "<p></p>") {
   return new Editor({
     extensions: [
       StarterKit.configure({ paragraph: false }),
-      HarvyParagraph,
-      HarvyMarkdownShortcuts,
+      HarvyWriterParagraph,
+      HarvyWriterMarkdownShortcuts,
       EmptyTextBlockBackspace,
     ],
     content,
-    enableInputRules: ["harvyMarkdownShortcuts"],
+    enableInputRules: ["harvyWriterMarkdownShortcuts"],
   });
 }
 
@@ -43,7 +43,7 @@ describe("horizontal rule markdown shortcut", () => {
     const ed = createEditor();
     try {
       expect(ed.schema.nodes.horizontalRule).toBeTruthy();
-      expect(ed.extensionManager.extensions.some((ext) => ext.name === "harvyMarkdownShortcuts")).toBe(
+      expect(ed.extensionManager.extensions.some((ext) => ext.name === "harvyWriterMarkdownShortcuts")).toBe(
         true,
       );
     } finally {

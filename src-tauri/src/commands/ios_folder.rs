@@ -27,12 +27,12 @@ define_class!(
     #[unsafe(super(NSObject))]
     #[thread_kind = MainThreadOnly]
     #[ivars = FolderPickerIvars]
-    struct HarvyFolderPickerDelegate;
+    struct HarvyWriterFolderPickerDelegate;
 
-    unsafe impl NSObjectProtocol for HarvyFolderPickerDelegate {}
+    unsafe impl NSObjectProtocol for HarvyWriterFolderPickerDelegate {}
 
     #[allow(deprecated)]
-    unsafe impl UIDocumentPickerDelegate for HarvyFolderPickerDelegate {
+    unsafe impl UIDocumentPickerDelegate for HarvyWriterFolderPickerDelegate {
         #[unsafe(method(documentPicker:didPickDocumentsAtURLs:))]
         fn documentPicker_didPickDocumentsAtURLs(
             &self,
@@ -60,7 +60,7 @@ define_class!(
     }
 );
 
-impl HarvyFolderPickerDelegate {
+impl HarvyWriterFolderPickerDelegate {
     fn new(
         mtm: MainThreadMarker,
         sender: mpsc::Sender<Result<Option<String>, String>>,
@@ -77,7 +77,7 @@ impl HarvyFolderPickerDelegate {
             return;
         };
         if !unsafe { url.startAccessingSecurityScopedResource() } {
-            self.finish(Err("Harvy could not access that folder.".to_string()));
+            self.finish(Err("Harvy Writer could not access that folder.".to_string()));
             return;
         }
         remember_folder(&url);
@@ -106,7 +106,7 @@ impl HarvyFolderPickerDelegate {
 }
 
 thread_local! {
-    static ACTIVE_DELEGATE: RefCell<Option<objc2::rc::Retained<HarvyFolderPickerDelegate>>> =
+    static ACTIVE_DELEGATE: RefCell<Option<objc2::rc::Retained<HarvyWriterFolderPickerDelegate>>> =
         const { RefCell::new(None) };
 }
 
@@ -315,7 +315,7 @@ fn present_picker(default_path: Option<String>, sender: mpsc::Sender<Result<Opti
         picker.setDirectoryURL(Some(&directory));
     }
 
-    let delegate = HarvyFolderPickerDelegate::new(mtm, sender);
+    let delegate = HarvyWriterFolderPickerDelegate::new(mtm, sender);
     picker.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
     ACTIVE_DELEGATE.with(|slot| {
         *slot.borrow_mut() = Some(delegate);

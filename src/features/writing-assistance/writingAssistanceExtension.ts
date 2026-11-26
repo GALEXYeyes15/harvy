@@ -8,7 +8,7 @@ import { collectPassiveHits } from "./passiveRules";
 import { collectSentenceComplexityDecorationsForDoc } from "./sentenceComplexityDecorations";
 import { writingPrefsRef } from "./writingAssistanceSettings";
 
-export const grammarDecorationsKey = new PluginKey<DecorationSet>("harvyGrammarDecorations");
+export const grammarDecorationsKey = new PluginKey<DecorationSet>("harvyWriterGrammarDecorations");
 export const writingAssistanceViewRef = {
   showReadabilityHighlights: false,
 };
@@ -83,7 +83,7 @@ function buildDecorationSet(doc: ProseMirrorNode): DecorationSet {
       const passiveHits = collectPassiveHits(docPlain);
       debugDocPassiveHitCount = passiveHits.length;
       // eslint-disable-next-line no-console
-      console.log("[HarvyPassiveRenderDebug] doc passive hits", {
+      console.log("[HarvyWriterPassiveRenderDebug] doc passive hits", {
         passiveCount: passiveHits.length,
         passiveHits: passiveHits.map((h) => docPlain.slice(h.start, h.end)),
       });
@@ -98,7 +98,7 @@ function buildDecorationSet(doc: ProseMirrorNode): DecorationSet {
       if (debugSentence) {
         const passiveIssues = issues.filter((i) => i.kind === "passive-voice");
         // eslint-disable-next-line no-console
-        console.log("[HarvyPassiveRenderDebug] node passive issues", {
+        console.log("[HarvyWriterPassiveRenderDebug] node passive issues", {
           nodePos: pos,
           nodeText: node.text,
           passiveIssues: passiveIssues.map((i) => node.text?.slice(i.start, i.end) ?? ""),
@@ -136,7 +136,7 @@ function buildDecorationSet(doc: ProseMirrorNode): DecorationSet {
   }
   if (import.meta.env.DEV && showEdit) {
     // eslint-disable-next-line no-console
-    console.log("[HarvySentenceComplexity]", {
+    console.log("[HarvyWriterSentenceComplexity]", {
       complexSentences: sentenceMetrics.complexCount,
       totalSentenceDecorations: sentenceMetrics.decorations.length,
     });
@@ -149,7 +149,7 @@ function buildDecorationSet(doc: ProseMirrorNode): DecorationSet {
     }).length;
     if (debugDocPassiveHitCount > passiveDecorationCount) {
       // eslint-disable-next-line no-console
-      console.log("[HarvyPassiveRenderDebug] passive hit detected but may be hidden by overlapping decoration", {
+      console.log("[HarvyWriterPassiveRenderDebug] passive hit detected but may be hidden by overlapping decoration", {
         docPassiveHits: debugDocPassiveHitCount,
         passiveDecorations: passiveDecorationCount,
       });

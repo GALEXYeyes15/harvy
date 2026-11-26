@@ -8,7 +8,7 @@ import {
 } from "./documentHtml";
 
 const markdownIt = new MarkdownIt({
-  /** Required to round-trip Harvy outline scaffold paragraphs (`data-harvy-outline-kind`) saved in Markdown. */
+  /** Required to round-trip Harvy Writer outline scaffold paragraphs (`data-harvy-outline-kind`) saved in Markdown. */
   html: true,
   linkify: true,
   typographer: true,
@@ -60,7 +60,7 @@ turndown.use(gfm);
  * Preserve outline scaffold blocks as inline HTML in Markdown so reopening the file keeps semantics.
  * TODO(product): add `editorHtmlToMarkdownCleanExport` for Save/Share that omits instructions (and optionally placeholders) per export rules.
  */
-turndown.addRule("harvyOutlineParagraph", {
+turndown.addRule("harvyWriterOutlineParagraph", {
   filter(node) {
     return (
       node.nodeName === "P" && Boolean((node as HTMLElement).getAttribute?.("data-harvy-outline-kind"))
@@ -72,8 +72,8 @@ turndown.addRule("harvyOutlineParagraph", {
   },
 });
 
-/** Preserve Harvy image blocks as inline HTML in Markdown (src + caption + width). */
-turndown.addRule("harvyImageBlock", {
+/** Preserve Harvy Writer image blocks as inline HTML in Markdown (src + caption + width). */
+turndown.addRule("harvyWriterImageBlock", {
   filter(node) {
     return node.nodeName === "FIGURE" && Boolean((node as HTMLElement).getAttribute?.("data-harvy-image"));
   },
@@ -85,9 +85,9 @@ turndown.addRule("harvyImageBlock", {
 
 /**
  * Never let standalone `<img>` fall through to GFM `![]()` — paths with spaces
- * then fail to reopen. Keep them as Harvy figure islands.
+ * then fail to reopen. Keep them as Harvy Writer figure islands.
  */
-turndown.addRule("harvyPlainImgToFigure", {
+turndown.addRule("harvyWriterPlainImgToFigure", {
   filter(node) {
     if (node.nodeName !== "IMG") return false;
     const el = node as HTMLElement;
@@ -128,7 +128,7 @@ function escapeAttr(value: string): string {
   return escapeText(value).replace(/"/g, "&quot;");
 }
 
-turndown.addRule("harvyRestorableParagraph", {
+turndown.addRule("harvyWriterRestorableParagraph", {
   filter(node) {
     return (
       node.nodeName === "P" &&
@@ -146,7 +146,7 @@ turndown.addRule("harvyRestorableParagraph", {
  * `<p><br></p>` is not Turndown-`isBlank`, so it would become a hard-break and
  * still collapse on reload — catch those here.
  */
-turndown.addRule("harvyEmptyParagraph", {
+turndown.addRule("harvyWriterEmptyParagraph", {
   filter(node) {
     return isEmptyParagraphElement(node);
   },
@@ -183,11 +183,11 @@ export function unescapeEscapedMarkdownImages(markdown: string): string {
 }
 
 /**
- * Convert CommonMark images to Harvy figure islands before markdown-it runs.
+ * Convert CommonMark images to Harvy Writer figure islands before markdown-it runs.
  * Destinations with spaces (e.g. `Designing habits/Images/x.png`) are invalid
  * unbracketed CommonMark destinations and otherwise render as broken/raw text.
  */
-export function markdownStandardImagesToHarvyFigures(markdown: string): string {
+export function markdownStandardImagesToHarvyWriterFigures(markdown: string): string {
   const normalized = unescapeEscapedMarkdownImages(markdown);
   return normalized.replace(/!\[([^\]]*)\]\((<[^>\n]+>|[^)\n]+)\)/g, (_full, altRaw, destRaw) => {
     const alt = String(altRaw ?? "");
@@ -227,7 +227,7 @@ export function markdownStandardImagesToHarvyFigures(markdown: string): string {
 }
 
 export function markdownToEditorHtml(markdown: string): string {
-  const md = markdownStandardImagesToHarvyFigures(markdown ?? "");
+  const md = markdownStandardImagesToHarvyWriterFigures(markdown ?? "");
   if (!md.trim()) return "<p></p>";
   return markdownIt.render(md);
 }
@@ -341,7 +341,7 @@ export function ingestTextFileContent(raw: string, sourcePath: string): string {
   const normalized = raw.replace(/\r\n/g, "\n");
   if (/\.(md|markdown|mkd)$/i.test(sourcePath)) {
     // Lift `![]()` (including spaced paths) into figure islands so open/save round-trips.
-    return markdownStandardImagesToHarvyFigures(normalized);
+    return markdownStandardImagesToHarvyWriterFigures(normalized);
   }
   if (looksLikeEditorHtml(normalized)) return editorHtmlToMarkdown(normalized);
   return plainTextToMarkdown(normalized);

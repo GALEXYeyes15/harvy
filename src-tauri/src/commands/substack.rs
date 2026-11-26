@@ -1,7 +1,7 @@
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
-const USER_AGENT: &str = "Harvy/0.1 (Substack public archive)";
+const USER_AGENT: &str = "HarvyWriter/0.1 (Substack public archive)";
 const ARCHIVE_PAGE_SIZE: usize = 50;
 const ARCHIVE_MAX_POSTS: usize = 200;
 const NOTES_PAGE_SIZE: usize = 20;

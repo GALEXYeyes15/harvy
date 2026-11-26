@@ -1,7 +1,7 @@
 use reqwest::blocking::Client;
 use serde::Serialize;
 
-const USER_AGENT: &str = "Harvy/0.1 (Medium public archive)";
+const USER_AGENT: &str = "HarvyWriter/0.1 (Medium public archive)";
 const MAX_POSTS: usize = 100;
 
 #[derive(Debug, Clone, Serialize)]

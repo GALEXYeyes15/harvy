@@ -99,7 +99,7 @@ export async function matchPublishedEssayUrls(opts: {
     throw new Error("Add your Substack URL first.");
   }
   if (!isTauriRuntime()) {
-    throw new Error("Matching published URLs requires the Harvy desktop app.");
+    throw new Error("Matching published URLs requires the Harvy Writer desktop app.");
   }
   const tree =
     opts.tree ??

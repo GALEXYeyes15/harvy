@@ -1,2 +1,2 @@
-# harvy
-Harvy text editor
+# Harvy Writer
+Harvy Writer text editor

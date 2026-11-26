@@ -10,7 +10,7 @@ import type { EditorState } from "@tiptap/pm/state";
 
 function isEligibleTextblock(state: EditorState): boolean {
   const { $from } = state.selection;
-  if ($from.parent.type.name === "harvyOutlineParagraph") return false;
+  if ($from.parent.type.name === "harvyWriterOutlineParagraph") return false;
   if ($from.parent.type.spec.code) return false;
   return true;
 }
@@ -38,8 +38,8 @@ function guardInputRule(rule: InputRule, guard: (state: EditorState) => boolean)
  * plus inline `--` → em dash.
  * Uses real BulletList / OrderedList / Heading / HorizontalRule nodes (StarterKit).
  */
-export const HarvyMarkdownShortcuts = Extension.create({
-  name: "harvyMarkdownShortcuts",
+export const HarvyWriterMarkdownShortcuts = Extension.create({
+  name: "harvyWriterMarkdownShortcuts",
   priority: 1000,
 
   addInputRules() {

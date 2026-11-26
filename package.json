@@ -12,7 +12,7 @@
     "tauri": "tauri",
     "tauri:build": "tauri build",
     "ios:build": "tauri ios build --export-method debugging --ci",
-    "ios:install": "rm -rf /tmp/harvy-ipa && mkdir -p /tmp/harvy-ipa && unzip -q src-tauri/gen/apple/build/arm64/Harvy.ipa -d /tmp/harvy-ipa && xcrun devicectl device install app --device 00008130-0004516138EB8D3A /tmp/harvy-ipa/Payload/Harvy.app",
+    "ios:install": "rm -rf /tmp/harvy-ipa && mkdir -p /tmp/harvy-ipa && unzip -q src-tauri/gen/apple/build/arm64/*.ipa -d /tmp/harvy-ipa && xcrun devicectl device install app --device 00008130-0004516138EB8D3A /tmp/harvy-ipa/Payload/*.app",
     "ipad:build": "bash scripts/ipad-build.sh",
     "ios:dev":"tauri ios dev \"Alex’s iPad mini\" --host",
     "postinstall": "node scripts/copy-hunspell-dictionary.mjs"

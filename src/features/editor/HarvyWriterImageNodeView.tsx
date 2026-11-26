@@ -3,19 +3,19 @@ import { ImagePlus, Subtitles, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   buildUnsplashAttribution,
-  type HarvyImageLoadAttrs,
-  type HarvyImageSource,
-} from "./harvyImageAttribution";
-import { HarvyImageSourcePopover } from "./HarvyImageSourcePopover";
-import { HarvyImageInsertionZone } from "./HarvyImageInsertionZone";
+  type HarvyWriterImageLoadAttrs,
+  type HarvyWriterImageSource,
+} from "./harvyWriterImageAttribution";
+import { HarvyWriterImageSourcePopover } from "./HarvyWriterImageSourcePopover";
+import { HarvyWriterImageInsertionZone } from "./HarvyWriterImageInsertionZone";
 import {
   hasAdjacentTextBlockAfter,
   hasAdjacentTextBlockBefore,
-} from "./harvyImageInsertion";
+} from "./harvyWriterImageInsertion";
 import { UnsplashAttributionCaption } from "./UnsplashAttributionCaption";
-import type { HarvyImageStatus, HarvyImageWidth } from "./harvyImage";
+import type { HarvyWriterImageStatus, HarvyWriterImageWidth } from "./harvyWriterImage";
 
-function useHarvyImageAdjacentTextBlocks(editor: NodeViewProps["editor"], getPos: NodeViewProps["getPos"]) {
+function useHarvyWriterImageAdjacentTextBlocks(editor: NodeViewProps["editor"], getPos: NodeViewProps["getPos"]) {
   const [adjacent, setAdjacent] = useState({ before: false, after: false });
 
   useEffect(() => {
@@ -39,20 +39,20 @@ function useHarvyImageAdjacentTextBlocks(editor: NodeViewProps["editor"], getPos
   return adjacent;
 }
 
-function normalizeLoadAttrs(selection: string | HarvyImageLoadAttrs): HarvyImageLoadAttrs {
+function normalizeLoadAttrs(selection: string | HarvyWriterImageLoadAttrs): HarvyWriterImageLoadAttrs {
   return typeof selection === "string" ? { src: selection } : selection;
 }
 
-export function HarvyImageNodeView({ node, updateAttributes, selected, editor, getPos, deleteNode }: NodeViewProps) {
+export function HarvyWriterImageNodeView({ node, updateAttributes, selected, editor, getPos, deleteNode }: NodeViewProps) {
   const src = (node.attrs.src as string | null) ?? null;
-  const status = (node.attrs.status as HarvyImageStatus) ?? (src ? "loaded" : "placeholder");
+  const status = (node.attrs.status as HarvyWriterImageStatus) ?? (src ? "loaded" : "placeholder");
   const caption = (node.attrs.caption as string) ?? "";
-  const imageSource = (node.attrs.imageSource as HarvyImageSource) ?? null;
+  const imageSource = (node.attrs.imageSource as HarvyWriterImageSource) ?? null;
   const photographerName = (node.attrs.photographerName as string) ?? "";
   const photographerUrl = (node.attrs.photographerUrl as string) ?? "";
   const captionHtml = (node.attrs.captionHtml as string) ?? "";
   const unsplashUrl = (node.attrs.unsplashUrl as string) ?? "";
-  const width = (node.attrs.width as HarvyImageWidth) ?? "full";
+  const width = (node.attrs.width as HarvyWriterImageWidth) ?? "full";
   const isPlaceholder = status === "placeholder" || !src;
   const [hovered, setHovered] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(false);
@@ -87,7 +87,7 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
   }, [caption, imageSource]);
 
   const resolveSrc = useCallback(
-    (stored: string) => editor.storage.harvyImage?.resolveSrc?.(stored) ?? stored,
+    (stored: string) => editor.storage.harvyWriterImage?.resolveSrc?.(stored) ?? stored,
     [editor],
   );
 
@@ -115,11 +115,11 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
   }, [caption, captionDraft, generatedUnsplashCaption, imageSource, updateAttributes]);
 
   const applyImageSource = useCallback(
-    (selection: string | HarvyImageLoadAttrs) => {
+    (selection: string | HarvyWriterImageLoadAttrs) => {
       const pos = getPos();
       if (typeof pos !== "number") return;
       const attrs = normalizeLoadAttrs(selection);
-      editor.storage.harvyImage?.loadImageAt?.(pos, attrs);
+      editor.storage.harvyWriterImage?.loadImageAt?.(pos, attrs);
       if (attrs.imageSource === "unsplash") {
         setCaptionOpen(false);
       }
@@ -158,7 +158,7 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
   }, [captionOpen]);
 
   const showChrome = !isPlaceholder && (selected || hovered);
-  const adjacentText = useHarvyImageAdjacentTextBlocks(editor, getPos);
+  const adjacentText = useHarvyWriterImageAdjacentTextBlocks(editor, getPos);
 
   if (isPlaceholder) {
     return (
@@ -174,7 +174,7 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
         onMouseLeave={() => setHovered(false)}
         contentEditable={false}
       >
-        {!adjacentText.before ? <HarvyImageInsertionZone position="before-image" /> : null}
+        {!adjacentText.before ? <HarvyWriterImageInsertionZone position="before-image" /> : null}
         <div className="harvy-image-node__content">
           <div className="harvy-image-node__frame harvy-image-node__frame--full">
             <button
@@ -209,16 +209,16 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
             ) : null}
           </div>
         </div>
-        {!adjacentText.after ? <HarvyImageInsertionZone position="after-image" /> : null}
+        {!adjacentText.after ? <HarvyWriterImageInsertionZone position="after-image" /> : null}
 
         {sourceOpen && pickerBtnRef.current
           ? (
-              <HarvyImageSourcePopover
+              <HarvyWriterImageSourcePopover
                 mode="insert"
                 anchorEl={pickerBtnRef.current}
                 onClose={() => setSourceOpen(false)}
                 onSelectImage={applyImageSource}
-                onUploadFile={() => editor.storage.harvyImage?.pickLocalImage?.() ?? Promise.resolve(null)}
+                onUploadFile={() => editor.storage.harvyWriterImage?.pickLocalImage?.() ?? Promise.resolve(null)}
               />
             )
           : null}
@@ -239,7 +239,7 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
       onMouseLeave={() => setHovered(false)}
       contentEditable={false}
     >
-      {!adjacentText.before ? <HarvyImageInsertionZone position="before-image" /> : null}
+      {!adjacentText.before ? <HarvyWriterImageInsertionZone position="before-image" /> : null}
       <div className="harvy-image-node__content">
         <div className={`harvy-image-node__frame harvy-image-node__frame--${width}`}>
           {showChrome ? (
@@ -317,23 +317,23 @@ export function HarvyImageNodeView({ node, updateAttributes, selected, editor, g
                 captionRef.current?.blur();
                 const pos = getPos();
                 if (typeof pos === "number") {
-                  editor.commands.focusParagraphAfterHarvyImage(pos);
+                  editor.commands.focusParagraphAfterHarvyWriterImage(pos);
                 }
               }
             }}
           />
         ) : null}
       </div>
-      {!adjacentText.after ? <HarvyImageInsertionZone position="after-image" /> : null}
+      {!adjacentText.after ? <HarvyWriterImageInsertionZone position="after-image" /> : null}
 
       {replaceSourceOpen && replaceBtnRef.current
         ? (
-            <HarvyImageSourcePopover
+            <HarvyWriterImageSourcePopover
               mode="replace"
               anchorEl={replaceBtnRef.current}
               onClose={() => setReplaceSourceOpen(false)}
               onSelectImage={applyImageSource}
-              onUploadFile={() => editor.storage.harvyImage?.pickLocalImage?.() ?? Promise.resolve(null)}
+              onUploadFile={() => editor.storage.harvyWriterImage?.pickLocalImage?.() ?? Promise.resolve(null)}
             />
           )
         : null}

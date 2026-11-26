@@ -2,12 +2,12 @@ import type { EditorView } from "@tiptap/pm/view";
 import { setLinkOnView } from "../editor/editorFormatActions";
 import { hrefForEditorLink } from "../editor/linkUrlValidation";
 import {
-  appendHarvyContextMenuSections,
-  closeHarvyContextMenu,
+  appendHarvyWriterContextMenuSections,
+  closeHarvyWriterContextMenu,
   HARVY_CONTEXT_MENU_DIVIDER_CLASS,
-  openHarvyContextMenuAt,
-  type HarvyContextMenuSection,
-} from "../editor/harvyContextMenu";
+  openHarvyWriterContextMenuAt,
+  type HarvyWriterContextMenuSection,
+} from "../editor/harvyWriterContextMenu";
 import { relatedEssayLinkingRef } from "../related-essays/relatedEssayLinkingRef";
 import type { MechanicsSuggestionPopoverAnchor } from "./mechanicsIssueAtClick";
 import { ignoreMechanicsSuggestionForDocument } from "./mechanics/mechanicsSuggestionIgnore";
@@ -20,7 +20,7 @@ import type { ProofreadIssue } from "./types";
 import { aiCheckPopoverPrefsRef } from "../aiCheck/aiCheckPopoverPrefs";
 
 export function closeMechanicsSuggestionPopover(): void {
-  closeHarvyContextMenu();
+  closeHarvyWriterContextMenu();
 }
 
 function displayMessage(issue: ProofreadIssue): string {
@@ -58,7 +58,7 @@ function openRelatedEssayPopover(opts: {
   const url =
     issue.relatedUrl?.trim() || relatedEssayLinkingRef.urlForPath(path);
 
-  openHarvyContextMenuAt({
+  openHarvyWriterContextMenuAt({
     view,
     anchor: { from: pmFrom, to: pmTo },
     placement: "below-start",
@@ -80,7 +80,7 @@ function openRelatedEssayPopover(opts: {
       divider.setAttribute("aria-hidden", "true");
       menuEl.appendChild(divider);
 
-      appendHarvyContextMenuSections(
+      appendHarvyWriterContextMenuSections(
         menuEl,
         [
           [
@@ -96,7 +96,7 @@ function openRelatedEssayPopover(opts: {
                     );
                   if (!href) {
                     window.alert(
-                      "Add your Substack URL in Settings → Export so Harvy can link this essay.",
+                      "Add your Substack URL in Settings → Export so Harvy Writer can link this essay.",
                     );
                     return;
                   }
@@ -133,7 +133,7 @@ export function openMechanicsSuggestionPopover(opts: {
   const message = displayMessage(issue);
   const replacement = replacementText(issue);
 
-  openHarvyContextMenuAt({
+  openHarvyWriterContextMenuAt({
     view,
     anchor: { from: pmFrom, to: pmTo },
     placement: "below-start",
@@ -153,7 +153,7 @@ export function openMechanicsSuggestionPopover(opts: {
       note.textContent = message;
       menuEl.appendChild(note);
 
-      const sections: HarvyContextMenuSection[] = [];
+      const sections: HarvyWriterContextMenuSection[] = [];
 
       const showReplace =
         issue.type !== "ai" || aiCheckPopoverPrefsRef.showReplaceSuggestions;
@@ -189,7 +189,7 @@ export function openMechanicsSuggestionPopover(opts: {
         menuEl.appendChild(divider);
       }
 
-      appendHarvyContextMenuSections(menuEl, sections, runAction);
+      appendHarvyWriterContextMenuSections(menuEl, sections, runAction);
     },
   });
 }

@@ -158,7 +158,7 @@ export function dismissNotionIdeaPage(pageId: string): void {
 
 function requireTauri(): void {
   if (!isTauriRuntime()) {
-    throw new Error("Notion Ideas sync requires the Harvy desktop app.");
+    throw new Error("Notion Ideas sync requires the Harvy Writer desktop app.");
   }
 }
 

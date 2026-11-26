@@ -65,7 +65,7 @@ export async function searchUnsplashPhotos(
   const apiKey = process.env.UNSPLASH_ACCESS_KEY?.trim() ?? "";
   if (!apiKey) {
     throw new Error(
-      "Missing Unsplash API key. Add UNSPLASH_ACCESS_KEY to .env.local and restart Harvy.",
+      "Missing Unsplash API key. Add UNSPLASH_ACCESS_KEY to .env.local and restart Harvy Writer.",
     );
   }
 
@@ -106,7 +106,7 @@ export async function listPopularUnsplashPhotos(opts?: {
   const apiKey = process.env.UNSPLASH_ACCESS_KEY?.trim() ?? "";
   if (!apiKey) {
     throw new Error(
-      "Missing Unsplash API key. Add UNSPLASH_ACCESS_KEY to .env.local and restart Harvy.",
+      "Missing Unsplash API key. Add UNSPLASH_ACCESS_KEY to .env.local and restart Harvy Writer.",
     );
   }
 

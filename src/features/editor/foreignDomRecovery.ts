@@ -18,7 +18,7 @@ function isOwnedLeaf(node: Node): boolean {
   return Boolean(desc && node.nodeType === 1 && !desc.contentDOM);
 }
 
-const TEXTBLOCK_TYPES = new Set(["paragraph", "heading", "harvyOutlineParagraph"]);
+const TEXTBLOCK_TYPES = new Set(["paragraph", "heading", "harvyWriterOutlineParagraph"]);
 
 /**
  * Grammarly, LanguageTool, and some macOS writing tools inject DOM inside the

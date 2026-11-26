@@ -40,7 +40,7 @@ function logJoinListBackspace(state: EditorState, step: string, detail?: Record<
   const snapFrom = Math.max(0, $from.pos - 30);
   const snapTo = Math.min(state.doc.content.size, $from.pos + 30);
 
-  console.log("[HarvyJoinListBackspace]", step, {
+  console.log("[HarvyWriterJoinListBackspace]", step, {
     selectionPos: $from.pos,
     parentType: $from.parent.type.name,
     parentDepth: $from.depth,

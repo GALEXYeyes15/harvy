@@ -70,14 +70,14 @@ export function FocusModeModal({
       ) : (
         <div className="space-y-5">
           <p className="text-[13px] leading-relaxed text-muted/90">
-            A 25-minute writing sprint. Harvy goes fullscreen and stays frontmost. Sidebars stay
+            A 25-minute writing sprint. Harvy Writer goes fullscreen and stays frontmost. Sidebars stay
             closed, the current line stays in the middle of the screen, and Backspace and arrow keys
             are turned off so you keep moving forward.
           </p>
           <ul className="space-y-2 text-[12px] leading-snug text-muted/80">
             <li className="flex gap-2">
               <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted/50" aria-hidden />
-              <span>Fullscreen lock — Harvy stays on top for the session</span>
+              <span>Fullscreen lock — Harvy Writer stays on top for the session</span>
             </li>
             <li className="flex gap-2">
               <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted/50" aria-hidden />

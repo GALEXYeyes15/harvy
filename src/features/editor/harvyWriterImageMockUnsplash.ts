@@ -1,4 +1,4 @@
-import { DEFAULT_UNSPLASH_URL } from "./harvyImageAttribution";
+import { DEFAULT_UNSPLASH_URL } from "./harvyWriterImageAttribution";
 import type { UnsplashImageResult } from "./unsplashSearch";
 
 export type { UnsplashImageResult };

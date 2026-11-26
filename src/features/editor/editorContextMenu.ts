@@ -9,14 +9,14 @@ import { openSpellingSuggestionPopover } from "../proofread/spellingSuggestionPo
 import { getMechanicsSuggestionAtPointer } from "../proofread/mechanicsIssueAtClick";
 import { openMechanicsSuggestionPopover } from "../proofread/mechanicsSuggestionPopover";
 import {
-  closeHarvyContextMenu,
-  openHarvyContextMenu,
-  type HarvyContextMenuAnchorRange,
-  type HarvyContextMenuSection,
-} from "./harvyContextMenu";
+  closeHarvyWriterContextMenu,
+  openHarvyWriterContextMenu,
+  type HarvyWriterContextMenuAnchorRange,
+  type HarvyWriterContextMenuSection,
+} from "./harvyWriterContextMenu";
 
 export function removeEditorContextMenu(): void {
-  closeHarvyContextMenu();
+  closeHarvyWriterContextMenu();
 }
 
 function focusViewAtCoords(view: EditorView, clientX: number, clientY: number): void {
@@ -48,13 +48,13 @@ export function openEditorContextMenu(opts: {
   const hasSelection = !empty && from !== to;
 
   const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
-  const anchor: HarvyContextMenuAnchorRange = hasSelection
+  const anchor: HarvyWriterContextMenuAnchorRange = hasSelection
     ? { from, to }
     : hit
       ? { from: hit.pos, to: hit.pos }
       : { from, to: from };
 
-  const sections: HarvyContextMenuSection[] = [
+  const sections: HarvyWriterContextMenuSection[] = [
     [
       {
         label: "Cut",
@@ -74,7 +74,7 @@ export function openEditorContextMenu(opts: {
     sections.push([{ label: "Insert image", onClick: () => void onInsertImage() }]);
   }
 
-  openHarvyContextMenu({
+  openHarvyWriterContextMenu({
     view,
     anchor,
     sections,

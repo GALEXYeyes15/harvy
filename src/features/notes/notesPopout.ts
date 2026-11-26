@@ -71,7 +71,7 @@ async function notesWindowSize(): Promise<{ width: number; height: number }> {
 /** Open the Notes pop-out, or focus it if already open. */
 export async function openNotesPopoutWindow(): Promise<void> {
   if (!isTauriRuntime()) {
-    window.alert("Expanding Notes requires the Harvy desktop app.");
+    window.alert("Expanding Notes requires the Harvy Writer desktop app.");
     return;
   }
 
@@ -110,7 +110,7 @@ export async function openNotesPopoutWindow(): Promise<void> {
 /** Toggle the Notes pop-out open/closed. */
 export async function toggleNotesPopoutWindow(): Promise<void> {
   if (!isTauriRuntime()) {
-    window.alert("Expanding Notes requires the Harvy desktop app.");
+    window.alert("Expanding Notes requires the Harvy Writer desktop app.");
     return;
   }
 

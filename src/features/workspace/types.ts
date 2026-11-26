@@ -32,7 +32,7 @@ export type WorkspaceDocument = {
   notionParentPageId: string;
   /** Nested Notion page that holds the synced essay body. */
   notionEssayPageId: string;
-  /** When true, Harvy created the parent database row and may rename it. */
+  /** When true, Harvy Writer created the parent database row and may rename it. */
   notionRenameParent: boolean;
   /** Notion URL for the parent Ideas row. */
   notionParentUrl: string;

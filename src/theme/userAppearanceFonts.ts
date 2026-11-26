@@ -77,7 +77,7 @@ export function ensureGoogleFontStylesheet(family: string): void {
   const link = document.createElement("link");
   link.rel = "stylesheet";
   link.href = href;
-  link.dataset.harvyGoogleFont = trimmed;
+  link.dataset.harvyWriterGoogleFont = trimmed;
   document.head.appendChild(link);
   loadedFamilies.add(trimmed.toLowerCase());
 }

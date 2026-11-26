@@ -3,12 +3,12 @@ import type { ResolvedPos } from "@tiptap/pm/model";
 import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
-import { isCursorAtStartOfListItemState } from "./harvyListKeyboard";
+import { isCursorAtStartOfListItemState } from "./harvyWriterListKeyboard";
 import { joinParagraphWithPrecedingListOnBackspace } from "./joinParagraphWithPrecedingList";
 
 /** Temporary logging to verify Substack-style Backspace in the active editor. */
 function logSubstackBackspace(step: string, detail?: Record<string, unknown>): void {
-  console.log("[HarvySubstackBackspace]", step, detail ?? "");
+  console.log("[HarvyWriterSubstackBackspace]", step, detail ?? "");
 }
 
 /** True when a text block has no meaningful text (whitespace, hard breaks, and filler only). */
@@ -97,8 +97,8 @@ function getHorizontalRulePosDirectlyBeforeBlockStart(doc: PMNode, blockStart: n
   return blockStart - previous.nodeSize;
 }
 
-/** Position of the top-level `harvyImage` directly before the block containing `$from`, if any. */
-function getHarvyImagePosDirectlyAbove($from: ResolvedPos): number | null {
+/** Position of the top-level `harvyWriterImage` directly before the block containing `$from`, if any. */
+function getHarvyWriterImagePosDirectlyAbove($from: ResolvedPos): number | null {
   if ($from.depth < 1) return null;
 
   const blockIndex = $from.index(1);
@@ -106,7 +106,7 @@ function getHarvyImagePosDirectlyAbove($from: ResolvedPos): number | null {
 
   const doc = $from.node(0);
   const previous = doc.child(blockIndex - 1);
-  if (previous.type.name !== "harvyImage") return null;
+  if (previous.type.name !== "harvyWriterImage") return null;
 
   let imagePos = 0;
   for (let i = 0; i < blockIndex - 1; i++) {
@@ -116,10 +116,10 @@ function getHarvyImagePosDirectlyAbove($from: ResolvedPos): number | null {
   return imagePos;
 }
 
-function getHarvyImagePosDirectlyBeforeBlockStart(doc: PMNode, blockStart: number): number | null {
+function getHarvyWriterImagePosDirectlyBeforeBlockStart(doc: PMNode, blockStart: number): number | null {
   if (blockStart <= 0) return null;
   const previous = doc.resolve(blockStart).nodeBefore;
-  if (!previous || previous.type.name !== "harvyImage") return null;
+  if (!previous || previous.type.name !== "harvyWriterImage") return null;
   return blockStart - previous.nodeSize;
 }
 
@@ -266,7 +266,7 @@ export function handleBackspaceOnEmptyTextBlockKeyDown(view: EditorView, event: 
         : selection.$from.parent.type.name,
   });
 
-  if (selection instanceof NodeSelection && selection.node.type.name === "harvyImage") {
+  if (selection instanceof NodeSelection && selection.node.type.name === "harvyWriterImage") {
     logSubstackBackspace("delete selected image block");
     event.preventDefault();
     view.dispatch(state.tr.deleteSelection().scrollIntoView());
@@ -329,7 +329,7 @@ export function handleBackspaceOnEmptyTextBlockKeyDown(view: EditorView, event: 
   });
 
   const imagePosBefore =
-    getHarvyImagePosDirectlyAbove($from) ?? getHarvyImagePosDirectlyBeforeBlockStart(doc, from);
+    getHarvyWriterImagePosDirectlyAbove($from) ?? getHarvyWriterImagePosDirectlyBeforeBlockStart(doc, from);
 
   let tr = state.tr.delete(from, to);
 

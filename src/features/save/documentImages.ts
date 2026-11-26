@@ -48,7 +48,7 @@ export function collectEmbeddedImageSrcs(
 
   if (editor) {
     editor.state.doc.descendants((node) => {
-      if (node.type.name !== "harvyImage") return;
+      if (node.type.name !== "harvyWriterImage") return;
       if (node.attrs.status !== "loaded") return;
       const src = typeof node.attrs.src === "string" ? node.attrs.src : "";
       push({
@@ -105,7 +105,7 @@ export function rewriteImageSrcsInEditor(
   let changed = false;
 
   state.doc.descendants((node, pos) => {
-    if (node.type.name !== "harvyImage") return;
+    if (node.type.name !== "harvyWriterImage") return;
     const src = typeof node.attrs.src === "string" ? node.attrs.src : "";
     const next = replacements.get(src);
     if (!next || next === src) return;

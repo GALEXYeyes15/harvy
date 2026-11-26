@@ -316,7 +316,7 @@ export function SidebarLeft({
         }`}
       >
         <p className="harvy-app-wordmark truncate text-[21px] font-semibold tracking-tight text-ink">
-          {iosLayout ? APP_NAME : `${APP_NAME} Editor`}
+          {APP_NAME}
         </p>
       </div>
 

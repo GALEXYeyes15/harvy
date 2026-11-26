@@ -1,7 +1,7 @@
 [package]
 name = "harvy"
 version = "0.1.0"
-description = "Harvy — a minimal writing app"
+description = "Harvy Writer — a minimal writing app"
 authors = ["you"]
 edition = "2021"
 

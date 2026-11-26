@@ -39,7 +39,7 @@ const TRIBUTE_SLIDES: TributeSlide[] = [
       <div className="space-y-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted/50">Tribute</p>
         <p className="max-w-md text-[14px] leading-relaxed text-muted/90">
-          This presentation is a place for dedications, thanks, and the story behind Harvy. Add slides here as the
+          This presentation is a place for dedications, thanks, and the story behind Harvy Writer. Add slides here as the
           tribute grows.
         </p>
       </div>

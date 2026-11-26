@@ -164,7 +164,7 @@ export async function syncEssayWithNotion(input: {
   renameParent?: boolean;
 }): Promise<NotionSyncEssayResult> {
   if (!isTauriRuntime()) {
-    throw new Error("Sync with Notion requires the Harvy desktop app.");
+    throw new Error("Sync with Notion requires the Harvy Writer desktop app.");
   }
   return invoke<NotionSyncEssayResult>("notion_sync_essay", {
     input: {

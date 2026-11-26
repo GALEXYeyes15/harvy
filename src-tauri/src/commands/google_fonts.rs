@@ -7,7 +7,7 @@ use std::collections::HashMap;
 const METADATA_URL: &str = "https://fonts.google.com/metadata/fonts";
 const TAGS_CSV_URL: &str =
     "https://raw.githubusercontent.com/google/fonts/main/tags/all/families.csv";
-const USER_AGENT: &str = "Harvy/0.1 (Google Fonts catalog)";
+const USER_AGENT: &str = "HarvyWriter/0.1 (Google Fonts catalog)";
 const EXPRESSIVE_PREFIX: &str = "/Expressive/";
 
 #[derive(Debug, Clone, Serialize)]

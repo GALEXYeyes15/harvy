@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
-  markdownStandardImagesToHarvyFigures,
+  markdownStandardImagesToHarvyWriterFigures,
   markdownToEditorHtml,
   toEditorHtml,
 } from "./documentMarkdown";
 
-describe("markdownStandardImagesToHarvyFigures", () => {
+describe("markdownStandardImagesToHarvyWriterFigures", () => {
   it("converts markdown images whose paths contain spaces", () => {
     const md =
       "![Photo by Luca Bravo on Unsplash](Designing habits/Images/img_1.png)\n\nHello.\n";
-    const out = markdownStandardImagesToHarvyFigures(md);
+    const out = markdownStandardImagesToHarvyWriterFigures(md);
     expect(out).toContain("data-harvy-image");
     expect(out).toContain('src="Designing habits/Images/img_1.png"');
     expect(out).toContain('data-photographer-name="Luca Bravo"');
@@ -19,7 +19,7 @@ describe("markdownStandardImagesToHarvyFigures", () => {
   it("converts escaped markdown image syntax from disk", () => {
     const md =
       "!\\[Photo by Luca Bravo on Unsplash\\](Designing habits/Images/img\\_1784422886509\\_1.png)\n\nHello.\n";
-    const out = markdownStandardImagesToHarvyFigures(md);
+    const out = markdownStandardImagesToHarvyWriterFigures(md);
     expect(out).toContain("data-harvy-image");
     expect(out).toContain('src="Designing habits/Images/img_1784422886509_1.png"');
     expect(out).toContain('data-photographer-name="Luca Bravo"');

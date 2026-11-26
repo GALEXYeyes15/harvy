@@ -910,7 +910,7 @@ function ArtificialIntelligencePanel({
   const handleAiEnabledChange = (nextEnabled: boolean) => {
     setAiToggleError(null);
     if (!isTauriRuntime()) {
-      setAiToggleError("AI check requires the Harvy desktop app.");
+      setAiToggleError("AI check requires the Harvy Writer desktop app.");
       return;
     }
     if (nextEnabled && !aiConfig?.hasApiKey) {
@@ -932,7 +932,7 @@ function ArtificialIntelligencePanel({
   const handleAiShowReplaceChange = (showReplaceSuggestions: boolean) => {
     setAiToggleError(null);
     if (!isTauriRuntime()) {
-      setAiToggleError("AI check requires the Harvy desktop app.");
+      setAiToggleError("AI check requires the Harvy Writer desktop app.");
       return;
     }
     if (!aiConfig?.hasApiKey) {

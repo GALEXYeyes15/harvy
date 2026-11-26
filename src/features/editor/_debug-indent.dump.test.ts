@@ -2,14 +2,14 @@ import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { describe, it } from "vitest";
 import { editorHtmlToMarkdown, toEditorHtml } from "./documentMarkdown";
-import { HarvyParagraph } from "./harvyParagraph";
+import { HarvyWriterParagraph } from "./harvyWriterParagraph";
 
 describe("blockquote", () => {
   it("round trips", () => {
     const ed = new Editor({
       extensions: [
         StarterKit.configure({ paragraph: false }),
-        HarvyParagraph,
+        HarvyWriterParagraph,
       ],
       content: "<blockquote><p>Quoted</p></blockquote>",
     });

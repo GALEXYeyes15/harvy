@@ -2,9 +2,9 @@ import OrderedList from "@tiptap/extension-ordered-list";
 import { Plugin } from "@tiptap/pm/state";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 
-export type HarvyOrderedListDelimiter = "period" | "paren";
+export type HarvyWriterOrderedListDelimiter = "period" | "paren";
 
-function parentOrderedListDelimiter(doc: EditorState["doc"], listPos: number): HarvyOrderedListDelimiter | null {
+function parentOrderedListDelimiter(doc: EditorState["doc"], listPos: number): HarvyWriterOrderedListDelimiter | null {
   const $pos = doc.resolve(listPos + 1);
   for (let d = $pos.depth - 1; d > 0; d--) {
     if ($pos.before(d) === listPos) continue;
@@ -43,14 +43,14 @@ function inheritNestedOrderedListDelimiters(state: EditorState): Transaction | n
 /**
  * Ordered lists with period (`1.`) or parenthesis (`1)`) marker delimiters.
  */
-export const HarvyOrderedList = OrderedList.extend({
+export const HarvyWriterOrderedList = OrderedList.extend({
   addAttributes() {
     return {
       delimiter: {
-        default: "period" as HarvyOrderedListDelimiter,
+        default: "period" as HarvyWriterOrderedListDelimiter,
         parseHTML: (element) => (element.getAttribute("data-delimiter") === "paren" ? "paren" : "period"),
         renderHTML: (attributes) => {
-          const delimiter = attributes.delimiter as HarvyOrderedListDelimiter | undefined;
+          const delimiter = attributes.delimiter as HarvyWriterOrderedListDelimiter | undefined;
           return { "data-delimiter": delimiter === "paren" ? "paren" : "period" };
         },
       },

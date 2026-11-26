@@ -28,8 +28,8 @@ import {
   clearTypewriterPadding,
   scrollTypewriterLine,
 } from "../features/editor/typewriterScrolling";
-import { HarvyParagraph } from "../features/editor/harvyParagraph";
-import { HarvyPlaceholder } from "../features/editor/harvyPlaceholder";
+import { HarvyWriterParagraph } from "../features/editor/harvyWriterParagraph";
+import { HarvyWriterPlaceholder } from "../features/editor/harvyWriterPlaceholder";
 import { editorHtmlToMarkdown, toEditorHtml } from "../features/editor/documentMarkdown";
 import {
   grammarDecorationsKey,
@@ -52,7 +52,7 @@ import {
   tryOpenMechanicsSuggestionPopover,
   tryOpenSpellingSuggestionPopover,
 } from "../features/editor/editorContextMenu";
-import { closeHarvyContextMenu } from "../features/editor/harvyContextMenu";
+import { closeHarvyWriterContextMenu } from "../features/editor/harvyWriterContextMenu";
 import type { HeadlinePair } from "../features/aiCheck/aiCheck";
 import { HeadlineSuggestMenu } from "./HeadlineSuggestMenu";
 import {
@@ -60,8 +60,8 @@ import {
   handleEditorLinkPointerDown,
 } from "../features/editor/editorLinkClick";
 import { handleImageCaptionLinkPointerDown } from "../features/editor/editorImageCaptionLinks";
-import { HarvyImage } from "../features/editor/harvyImage";
-import type { HarvyImageLoadAttrs } from "../features/editor/harvyImageAttribution";
+import { HarvyWriterImage } from "../features/editor/harvyWriterImage";
+import type { HarvyWriterImageLoadAttrs } from "../features/editor/harvyWriterImageAttribution";
 import { resolveWorkspaceImageSrc } from "../features/editor/imageAssets";
 import {
   HARVY_SIDEBAR_IMAGE_DROP_EVENT,
@@ -73,16 +73,16 @@ import {
   type SidebarImageDropDetail,
 } from "../features/editor/imageDrop";
 import { isTauriRuntime } from "../features/save/saveRuntime";
-import { HarvyListItem } from "../features/editor/harvyListItem";
-import { HarvyOrderedList } from "../features/editor/harvyOrderedList";
-import { HarvyListKeyboard } from "../features/editor/harvyListKeyboard";
+import { HarvyWriterListItem } from "../features/editor/harvyWriterListItem";
+import { HarvyWriterOrderedList } from "../features/editor/harvyWriterOrderedList";
+import { HarvyWriterListKeyboard } from "../features/editor/harvyWriterListKeyboard";
 import { LinkEditorSelectionHighlight } from "../features/editor/linkEditorSelectionHighlight";
 import { WorkspaceSearchHighlight } from "../features/editor/workspaceSearchHighlight";
 import { DocumentFindHighlight } from "../features/editor/documentFindHighlight";
 import { ForeignDomRecovery } from "../features/editor/foreignDomRecovery";
-import { HarvyMarkdownShortcuts } from "../features/editor/harvyMarkdownShortcuts";
+import { HarvyWriterMarkdownShortcuts } from "../features/editor/harvyWriterMarkdownShortcuts";
 import { PlainTextPaste } from "../features/editor/plainTextPaste";
-import { HarvyOutlineParagraph } from "../features/outline/harvyOutlineParagraph";
+import { HarvyWriterOutlineParagraph } from "../features/outline/harvyWriterOutlineParagraph";
 import type { SidebarToolsMode } from "../features/sidebar/sidebarToolsMode";
 
 type EditorCanvasProps = {
@@ -137,7 +137,7 @@ type EditorCanvasProps = {
   /** Local file picker → workspace-relative `src`. */
   pickLocalImage?: () => Promise<string | null>;
   /** Load image `src` onto the block at `pos`. */
-  loadImageAt?: (pos: number, attrs: HarvyImageLoadAttrs) => void;
+  loadImageAt?: (pos: number, attrs: HarvyWriterImageLoadAttrs) => void;
   /** Insert image block at cursor (same flow as context menu action). */
   onInsertImage?: () => void | Promise<void>;
   /** When on, two-finger click (context menu) on Title or Subtitle opens Suggest titles. */
@@ -270,7 +270,7 @@ export function EditorCanvas({
   const openHeadlineMenu = useCallback(
     (el: HTMLElement) => {
       if (!isEditable || !showTitleGeneration) return;
-      closeHarvyContextMenu();
+      closeHarvyWriterContextMenu();
       setHeadlineAnchorEl(el);
       setHeadlineMountEl(writingSurfaceRef.current);
       setHeadlineMenuOpen(true);
@@ -326,9 +326,9 @@ export function EditorCanvas({
         }),
         EmptyTextBlockBackspace,
         FocusModeGuards,
-        HarvyParagraph,
-        HarvyListItem,
-        HarvyOrderedList,
+        HarvyWriterParagraph,
+        HarvyWriterListItem,
+        HarvyWriterOrderedList,
         Underline,
         Link.configure({
           openOnClick: false,
@@ -337,10 +337,10 @@ export function EditorCanvas({
             class: "harvy-editor-link underline decoration-from-font underline-offset-[0.12em]",
           },
         }),
-        HarvyOutlineParagraph,
+        HarvyWriterOutlineParagraph,
         PlainTextPaste,
-        HarvyImage,
-        HarvyPlaceholder.configure({
+        HarvyWriterImage,
+        HarvyWriterPlaceholder.configure({
           placeholder: placeholder ?? "",
         }),
         WritingAssistance,
@@ -349,12 +349,12 @@ export function EditorCanvas({
         WorkspaceSearchHighlight,
         DocumentFindHighlight,
         ForeignDomRecovery,
-        HarvyMarkdownShortcuts,
-        HarvyListKeyboard,
+        HarvyWriterMarkdownShortcuts,
+        HarvyWriterListKeyboard,
       ],
       content: initialEditorHtml,
       editable: isEditable,
-      enableInputRules: ["harvyMarkdownShortcuts"],
+      enableInputRules: ["harvyWriterMarkdownShortcuts"],
       editorProps: {
         attributes: {
           id: "harvy-editor",
@@ -422,7 +422,7 @@ export function EditorCanvas({
     if (!/!(\[|\\\[).{0,200}(\]|\\\])\([^)\n]+\)/.test(text)) return;
     let hasImageNode = false;
     editor.state.doc.descendants((node) => {
-      if (node.type.name === "harvyImage") {
+      if (node.type.name === "harvyWriterImage") {
         hasImageNode = true;
         return false;
       }
@@ -505,12 +505,12 @@ export function EditorCanvas({
 
   useEffect(() => {
     if (!editor) return;
-    const storage = editor.storage.harvyImage;
+    const storage = editor.storage.harvyWriterImage;
     if (storage) {
       storage.resolveSrc = (storedSrc: string) =>
         resolveWorkspaceImageSrc(workspaceRootPathRef.current, storedSrc);
       storage.pickLocalImage = () => pickLocalImageRef.current?.() ?? Promise.resolve(null);
-      storage.loadImageAt = (pos: number, attrs: HarvyImageLoadAttrs) =>
+      storage.loadImageAt = (pos: number, attrs: HarvyWriterImageLoadAttrs) =>
         loadImageAtRef.current?.(pos, attrs);
     }
   }, [editor, workspaceRootPath, pickLocalImage, loadImageAt]);

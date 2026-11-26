@@ -2,31 +2,31 @@ import { Node, mergeAttributes } from "@tiptap/core";
 import type { DOMOutputSpec } from "@tiptap/pm/model";
 import { NodeSelection, Plugin } from "@tiptap/pm/state";
 import { ReactNodeViewRenderer } from "@tiptap/react";
-import { HarvyImageNodeView } from "./HarvyImageNodeView";
+import { HarvyWriterImageNodeView } from "./HarvyWriterImageNodeView";
 import {
   buildUnsplashAttribution,
-  type HarvyImageLoadAttrs,
-  type HarvyImageSource,
+  type HarvyWriterImageLoadAttrs,
+  type HarvyWriterImageSource,
   isManuallyEditedUnsplashCaption,
   resolveUnsplashWebsiteUrl,
   sanitizeUnsplashCaptionHtml,
   UNSPLASH_WEBSITE_URL,
-} from "./harvyImageAttribution";
-import { handleHarvyImageAdjacentPointerDown, isHarvyImageInteractiveTarget } from "./harvyImageAdjacentFocus";
+} from "./harvyWriterImageAttribution";
+import { handleHarvyWriterImageAdjacentPointerDown, isHarvyWriterImageInteractiveTarget } from "./harvyWriterImageAdjacentFocus";
 import {
-  focusParagraphAfterHarvyImageAtPos,
-  focusParagraphAfterHarvyImageInTr,
-  focusParagraphBeforeHarvyImageAtPos,
-  insertHarvyImageBlocksAtSelection,
-} from "./harvyImageInsertion";
+  focusParagraphAfterHarvyWriterImageAtPos,
+  focusParagraphAfterHarvyWriterImageInTr,
+  focusParagraphBeforeHarvyWriterImageAtPos,
+  insertHarvyWriterImageBlocksAtSelection,
+} from "./harvyWriterImageInsertion";
 
-export type HarvyImageWidth = "small" | "medium" | "full";
-export type HarvyImageStatus = "placeholder" | "loaded";
+export type HarvyWriterImageWidth = "small" | "medium" | "full";
+export type HarvyWriterImageStatus = "placeholder" | "loaded";
 
-export type HarvyImageStorage = {
+export type HarvyWriterImageStorage = {
   resolveSrc: (storedSrc: string) => string;
   pickLocalImage: () => Promise<string | null>;
-  loadImageAt: (pos: number, attrs: HarvyImageLoadAttrs) => void;
+  loadImageAt: (pos: number, attrs: HarvyWriterImageLoadAttrs) => void;
 };
 
 function readCaptionHtmlFromFigure(element: HTMLElement): string {
@@ -80,7 +80,7 @@ function readFigureAttrs(el: HTMLElement) {
     caption: el.querySelector("figcaption")?.textContent?.trim() ?? el.getAttribute("data-caption") ?? "",
     captionHtml: readCaptionHtmlFromFigure(el),
     width: parseImageWidth(el),
-    imageSource: (el.getAttribute("data-image-source") as HarvyImageSource) || null,
+    imageSource: (el.getAttribute("data-image-source") as HarvyWriterImageSource) || null,
     photographerName: el.getAttribute("data-photographer-name") ?? "",
     photographerUrl: el.getAttribute("data-photographer-url") ?? "",
     unsplashUrl: resolveUnsplashWebsiteUrl(el.getAttribute("data-unsplash-url")),
@@ -88,7 +88,7 @@ function readFigureAttrs(el: HTMLElement) {
 }
 
 function renderFigcaption(attrs: Record<string, unknown>): DOMOutputSpec | null {
-  const imageSource = attrs.imageSource as HarvyImageSource;
+  const imageSource = attrs.imageSource as HarvyWriterImageSource;
   const photographerName = (attrs.photographerName as string | undefined)?.trim();
   if (imageSource === "unsplash" && photographerName) {
     const photographerUrl = (attrs.photographerUrl as string | undefined)?.trim() || "#";
@@ -128,7 +128,7 @@ function renderFigcaption(attrs: Record<string, unknown>): DOMOutputSpec | null 
 
 function mergeLoadedImageAttrs(
   current: Record<string, unknown>,
-  attrs: HarvyImageLoadAttrs,
+  attrs: HarvyWriterImageLoadAttrs,
 ): Record<string, unknown> {
   const next: Record<string, unknown> = {
     ...current,
@@ -158,7 +158,7 @@ function mergeLoadedImageAttrs(
   const keepManualCaption =
     wasUnsplash &&
     isManuallyEditedUnsplashCaption({
-      imageSource: current.imageSource as HarvyImageSource,
+      imageSource: current.imageSource as HarvyWriterImageSource,
       caption: current.caption as string | undefined,
       photographerName: current.photographerName as string | undefined,
       photographerUrl: current.photographerUrl as string | undefined,
@@ -183,7 +183,7 @@ function mergeLoadedImageAttrs(
   };
 }
 
-function parseImageWidth(element: HTMLElement): HarvyImageWidth {
+function parseImageWidth(element: HTMLElement): HarvyWriterImageWidth {
   const raw =
     element.getAttribute("data-width") ??
     (element.tagName === "FIGURE" ? element.getAttribute("data-harvy-image-width") : null);
@@ -191,7 +191,7 @@ function parseImageWidth(element: HTMLElement): HarvyImageWidth {
   return "full";
 }
 
-function parseImageStatus(element: HTMLElement, src: string | null): HarvyImageStatus {
+function parseImageStatus(element: HTMLElement, src: string | null): HarvyWriterImageStatus {
   const raw = element.getAttribute("data-harvy-image-status");
   if (raw === "placeholder") return "placeholder";
   if (raw === "loaded") return "loaded";
@@ -201,27 +201,27 @@ function parseImageStatus(element: HTMLElement, src: string | null): HarvyImageS
 
 declare module "@tiptap/core" {
   interface Storage {
-    harvyImage: HarvyImageStorage;
+    harvyWriterImage: HarvyWriterImageStorage;
   }
 
   interface Commands<ReturnType> {
-    harvyImage: {
-      insertHarvyImagePlaceholder: () => ReturnType;
-      insertHarvyImage: (attrs: {
+    harvyWriterImage: {
+      insertHarvyWriterImagePlaceholder: () => ReturnType;
+      insertHarvyWriterImage: (attrs: {
         src: string;
         caption?: string;
-        width?: HarvyImageWidth;
+        width?: HarvyWriterImageWidth;
       }) => ReturnType;
-      loadHarvyImageAt: (pos: number, attrs: HarvyImageLoadAttrs) => ReturnType;
-      replaceHarvyImageAt: (pos: number, attrs: { src: string }) => ReturnType;
-      focusParagraphAfterHarvyImage: (pos: number) => ReturnType;
-      focusParagraphBeforeHarvyImage: (pos: number) => ReturnType;
+      loadHarvyWriterImageAt: (pos: number, attrs: HarvyWriterImageLoadAttrs) => ReturnType;
+      replaceHarvyWriterImageAt: (pos: number, attrs: { src: string }) => ReturnType;
+      focusParagraphAfterHarvyWriterImage: (pos: number) => ReturnType;
+      focusParagraphBeforeHarvyWriterImage: (pos: number) => ReturnType;
     };
   }
 }
 
-export const HarvyImage = Node.create({
-  name: "harvyImage",
+export const HarvyWriterImage = Node.create({
+  name: "harvyWriterImage",
   group: "block",
   atom: true,
   draggable: true,
@@ -231,8 +231,8 @@ export const HarvyImage = Node.create({
     return {
       resolveSrc: (storedSrc: string) => storedSrc,
       pickLocalImage: async () => null,
-      loadImageAt: (_pos: number, _attrs: HarvyImageLoadAttrs) => {},
-    } satisfies HarvyImageStorage;
+      loadImageAt: (_pos: number, _attrs: HarvyWriterImageLoadAttrs) => {},
+    } satisfies HarvyWriterImageStorage;
   },
 
   addAttributes() {
@@ -248,7 +248,7 @@ export const HarvyImage = Node.create({
         },
       },
       status: {
-        default: "loaded" as HarvyImageStatus,
+        default: "loaded" as HarvyWriterImageStatus,
         parseHTML: (element) => {
           const el = element as HTMLElement;
           const img = el.tagName === "IMG" ? el : el.querySelector("img");
@@ -302,7 +302,7 @@ export const HarvyImage = Node.create({
         },
       },
       imageSource: {
-        default: null as HarvyImageSource,
+        default: null as HarvyWriterImageSource,
         parseHTML: (element) => {
           const raw = (element as HTMLElement).getAttribute("data-image-source");
           return raw === "unsplash" ? "unsplash" : null;
@@ -341,7 +341,7 @@ export const HarvyImage = Node.create({
         },
       },
       width: {
-        default: "full" as HarvyImageWidth,
+        default: "full" as HarvyWriterImageWidth,
         parseHTML: (element) => parseImageWidth(element as HTMLElement),
         renderHTML: (attributes) => ({
           "data-width": attributes.width as string,
@@ -367,7 +367,7 @@ export const HarvyImage = Node.create({
           if (el.closest("figure[data-harvy-image], figure.harvy-image-block")) return false;
           return {
             src: el.getAttribute("src"),
-            status: "loaded" as HarvyImageStatus,
+            status: "loaded" as HarvyWriterImageStatus,
             alt: el.getAttribute("alt") ?? "",
             caption: "",
             width: "full",
@@ -380,7 +380,7 @@ export const HarvyImage = Node.create({
   renderHTML({ HTMLAttributes }) {
     const { caption, width, src, alt, status, captionHtml: _captionHtml, ...rest } = HTMLAttributes;
     const figcaption = (caption as string | undefined)?.trim();
-    const imageStatus = (status as HarvyImageStatus | undefined) ?? (src ? "loaded" : "placeholder");
+    const imageStatus = (status as HarvyWriterImageStatus | undefined) ?? (src ? "loaded" : "placeholder");
     const isPlaceholder = imageStatus === "placeholder" || !src;
     const figcaptionNode = renderFigcaption(HTMLAttributes);
 
@@ -405,7 +405,7 @@ export const HarvyImage = Node.create({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(HarvyImageNodeView);
+    return ReactNodeViewRenderer(HarvyWriterImageNodeView);
   },
 
   onCreate() {
@@ -415,7 +415,7 @@ export const HarvyImage = Node.create({
     let changed = false;
 
     state.doc.descendants((node, pos) => {
-      if (node.type.name !== "harvyImage") return;
+      if (node.type.name !== "harvyWriterImage") return;
       const nextAttrs = normalizeLegacyUnsplashNodeAttrs(node.attrs);
       if (!nextAttrs) return;
       tr = tr.setNodeMarkup(pos, undefined, nextAttrs);
@@ -431,11 +431,11 @@ export const HarvyImage = Node.create({
         props: {
           handleDOMEvents: {
             mousedown: (view, event) =>
-              handleHarvyImageAdjacentPointerDown(view, event as MouseEvent),
+              handleHarvyWriterImageAdjacentPointerDown(view, event as MouseEvent),
           },
           handleClick: (view, _pos, event) => {
             if (!(event.target instanceof Element)) return false;
-            if (isHarvyImageInteractiveTarget(event.target)) return false;
+            if (isHarvyWriterImageInteractiveTarget(event.target)) return false;
             const figure = event.target.closest("[data-harvy-image]");
             if (!figure || !view.dom.contains(figure)) return false;
             return true;
@@ -447,7 +447,7 @@ export const HarvyImage = Node.create({
           let tr: import("@tiptap/pm/state").Transaction | null = null;
 
           newState.doc.descendants((node, pos) => {
-            if (node.type.name !== "harvyImage") return;
+            if (node.type.name !== "harvyWriterImage") return;
             const nextAttrs = normalizeLegacyUnsplashNodeAttrs(node.attrs);
             if (!nextAttrs) return;
             tr = (tr ?? newState.tr).setNodeMarkup(pos, undefined, nextAttrs);
@@ -464,14 +464,14 @@ export const HarvyImage = Node.create({
       Enter: ({ editor }) => {
         const { selection } = editor.state;
         if (selection instanceof NodeSelection && selection.node.type.name === this.name) {
-          return editor.commands.focusParagraphAfterHarvyImage(selection.from);
+          return editor.commands.focusParagraphAfterHarvyWriterImage(selection.from);
         }
         return false;
       },
       ArrowDown: ({ editor }) => {
         const { selection } = editor.state;
         if (selection instanceof NodeSelection && selection.node.type.name === this.name) {
-          return editor.commands.focusParagraphAfterHarvyImage(selection.from);
+          return editor.commands.focusParagraphAfterHarvyWriterImage(selection.from);
         }
         return false;
       },
@@ -480,21 +480,21 @@ export const HarvyImage = Node.create({
 
   addCommands() {
     return {
-      insertHarvyImagePlaceholder:
+      insertHarvyWriterImagePlaceholder:
         () =>
         ({ editor }) =>
-          insertHarvyImageBlocksAtSelection(editor, {
+          insertHarvyWriterImageBlocksAtSelection(editor, {
             src: null,
             status: "placeholder",
             caption: "",
             width: "full",
             alt: "",
           }),
-      insertHarvyImage:
-        (attrs: { src: string; caption?: string; width?: HarvyImageWidth }) =>
+      insertHarvyWriterImage:
+        (attrs: { src: string; caption?: string; width?: HarvyWriterImageWidth }) =>
         ({ editor }) => {
           if (!attrs.src) return false;
-          return insertHarvyImageBlocksAtSelection(editor, {
+          return insertHarvyWriterImageBlocksAtSelection(editor, {
             src: attrs.src,
             status: "loaded",
             caption: attrs.caption ?? "",
@@ -502,30 +502,30 @@ export const HarvyImage = Node.create({
             alt: attrs.caption ?? "",
           });
         },
-      loadHarvyImageAt:
-        (pos: number, attrs: HarvyImageLoadAttrs) =>
+      loadHarvyWriterImageAt:
+        (pos: number, attrs: HarvyWriterImageLoadAttrs) =>
         ({ tr, dispatch, state }) => {
           const node = tr.doc.nodeAt(pos);
           if (!node || node.type.name !== this.name) return false;
           if (!attrs.src) return false;
           if (!dispatch) return true;
           let nextTr = tr.setNodeMarkup(pos, undefined, mergeLoadedImageAttrs(node.attrs, attrs));
-          nextTr = focusParagraphAfterHarvyImageInTr(nextTr, pos, state.schema);
+          nextTr = focusParagraphAfterHarvyWriterImageInTr(nextTr, pos, state.schema);
           dispatch(nextTr);
           return true;
         },
-      replaceHarvyImageAt:
+      replaceHarvyWriterImageAt:
         (pos: number, attrs: { src: string }) =>
         ({ commands }) =>
-          commands.loadHarvyImageAt(pos, attrs),
-      focusParagraphAfterHarvyImage:
+          commands.loadHarvyWriterImageAt(pos, attrs),
+      focusParagraphAfterHarvyWriterImage:
         (pos: number) =>
         ({ editor }) =>
-          focusParagraphAfterHarvyImageAtPos(editor, pos),
-      focusParagraphBeforeHarvyImage:
+          focusParagraphAfterHarvyWriterImageAtPos(editor, pos),
+      focusParagraphBeforeHarvyWriterImage:
         (pos: number) =>
         ({ editor }) =>
-          focusParagraphBeforeHarvyImageAtPos(editor, pos),
+          focusParagraphBeforeHarvyWriterImageAtPos(editor, pos),
     };
   },
 });

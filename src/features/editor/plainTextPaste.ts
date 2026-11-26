@@ -108,7 +108,7 @@ function handlePlainTextPaste(view: EditorView, event: ClipboardEvent, slice: Sl
 
 /**
  * Default paste behaves like "Paste and Match Style": plain text only, no inherited marks.
- * Outline placeholder paste is handled separately in {@link HarvyOutlineParagraph}.
+ * Outline placeholder paste is handled separately in {@link HarvyWriterOutlineParagraph}.
  */
 export const PlainTextPaste = Extension.create({
   name: "plainTextPaste",

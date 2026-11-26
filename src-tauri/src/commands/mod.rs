@@ -802,7 +802,7 @@ fn headlines_catalog_path(app: &AppHandle) -> Result<PathBuf, String> {
     let harvy_dir = workspace_root_dir(app)?.join(".harvy");
     fs::create_dir_all(&harvy_dir).map_err(|e| {
         format!(
-            "Could not create Harvy workspace folder '{}': {}",
+            "Could not create Harvy Writer workspace folder '{}': {}",
             harvy_dir.display(),
             e
         )

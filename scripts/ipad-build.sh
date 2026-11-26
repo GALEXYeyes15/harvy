@@ -11,8 +11,8 @@ bundle_id="com.harvy.writer"
 
 "$root/node_modules/.bin/tauri" ios build --export-method debugging
 
-ipa="$root/src-tauri/gen/apple/build/arm64/Harvy.ipa"
-if [[ ! -f "$ipa" ]]; then
+ipa="$(find "$root/src-tauri/gen/apple/build/arm64" -maxdepth 1 -name '*.ipa' -print -quit 2>/dev/null || true)"
+if [[ -z "$ipa" || ! -f "$ipa" ]]; then
   echo "The build finished, but the install package was not found." >&2
   exit 1
 fi

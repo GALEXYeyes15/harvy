@@ -1,9 +1,9 @@
 import type { EditorView } from "@tiptap/pm/view";
 import {
-  closeHarvyContextMenu,
-  openHarvyContextMenu,
-  type HarvyContextMenuSection,
-} from "../editor/harvyContextMenu";
+  closeHarvyWriterContextMenu,
+  openHarvyWriterContextMenu,
+  type HarvyWriterContextMenuSection,
+} from "../editor/harvyWriterContextMenu";
 import { getSpellingSuggestions } from "./mechanics/spellingChecker";
 import {
   addWordToCustomDictionary,
@@ -13,7 +13,7 @@ import type { SpellingPopoverAnchor } from "./spellingIssueAtClick";
 import { spellingContextMenuRef } from "./spellingContextMenuRef";
 
 export function closeSpellingSuggestionPopover(): void {
-  closeHarvyContextMenu();
+  closeHarvyWriterContextMenu();
 }
 
 export function openSpellingSuggestionPopover(opts: {
@@ -24,7 +24,7 @@ export function openSpellingSuggestionPopover(opts: {
   const { word, pmFrom, pmTo } = anchor;
 
   const suggestions = getSpellingSuggestions(word, 3);
-  const sections: HarvyContextMenuSection[] = [];
+  const sections: HarvyWriterContextMenuSection[] = [];
 
   if (suggestions.length > 0) {
     sections.push(
@@ -55,7 +55,7 @@ export function openSpellingSuggestionPopover(opts: {
     },
   ]);
 
-  openHarvyContextMenu({
+  openHarvyWriterContextMenu({
     view,
     anchor: { from: pmFrom, to: pmTo },
     sections,

@@ -115,7 +115,7 @@ export function collectPassiveHits(text: string): PassiveHit[] {
     if (!part) {
       if (isDebugSentence && rejectedByNonModifier) {
         // eslint-disable-next-line no-console
-        console.log("[HarvyPassiveDebug] reject:no-participle-after-modifiers", {
+        console.log("[HarvyWriterPassiveDebug] reject:no-participle-after-modifiers", {
           be: be.text,
           window: toks
             .slice(i + 1, i + 1 + PASSIVE_LOOKAHEAD_TOKENS)
@@ -128,7 +128,7 @@ export function collectPassiveHits(text: string): PassiveHit[] {
     if (spanMatchesPassiveException(text, be.start, part.end, passive.exceptionPhrasesNorm)) {
       if (isDebugSentence) {
         // eslint-disable-next-line no-console
-        console.log("[HarvyPassiveDebug] reject:exception-phrase", {
+        console.log("[HarvyWriterPassiveDebug] reject:exception-phrase", {
           span: text.slice(be.start, part.end),
         });
       }
@@ -148,7 +148,7 @@ export function collectPassiveHits(text: string): PassiveHit[] {
   if (isDebugSentence) {
     // eslint-disable-next-line no-console
     console.log(
-      "[HarvyPassiveDebug] accepted",
+      "[HarvyWriterPassiveDebug] accepted",
       deduped.map((h) => text.slice(h.start, h.end)),
     );
   }

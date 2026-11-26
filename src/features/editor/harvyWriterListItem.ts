@@ -4,7 +4,7 @@ import ListItem from "@tiptap/extension-list-item";
  * List items with optional virtual indent for first-in-list Tab nesting
  * (when ProseMirror `sinkListItem` has no previous sibling).
  */
-export const HarvyListItem = ListItem.extend({
+export const HarvyWriterListItem = ListItem.extend({
   addAttributes() {
     return {
       indentLevel: {
@@ -20,7 +20,7 @@ export const HarvyListItem = ListItem.extend({
           return { "data-harvy-indent-level": String(level) };
         },
       },
-      harvyVisualDepth: {
+      harvyWriterVisualDepth: {
         default: null as number | null,
         parseHTML: (element) => {
           const raw = element.getAttribute("data-harvy-visual-depth");
@@ -28,7 +28,7 @@ export const HarvyListItem = ListItem.extend({
           return parsed != null && Number.isFinite(parsed) && parsed > 0 ? parsed : null;
         },
         renderHTML: (attributes) => {
-          const depth = attributes.harvyVisualDepth as number | null;
+          const depth = attributes.harvyWriterVisualDepth as number | null;
           if (depth == null || depth <= 0) return {};
           return { "data-harvy-visual-depth": String(depth) };
         },

@@ -3,7 +3,7 @@ import {
   buildUnsplashCaptionHtmlFromFigure,
   isUnsplashFigure,
   sanitizeUnsplashCaptionHtml,
-} from "./harvyImageAttribution";
+} from "./harvyWriterImageAttribution";
 import { resolveWorkspaceImageSrc } from "./imageAssets";
 import { editorHtmlToMarkdown, markdownToEditorHtml } from "./documentMarkdown";
 import { getDocumentMarkdown } from "../save/saveRuntime";

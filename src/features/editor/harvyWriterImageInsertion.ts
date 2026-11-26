@@ -5,14 +5,14 @@ import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import type { Transaction } from "@tiptap/pm/state";
 
 function isOutlinePlaceholderBlock(node: PMNode): boolean {
-  return node.type.name === "harvyOutlineParagraph" && node.attrs.kind === "placeholder";
+  return node.type.name === "harvyWriterOutlineParagraph" && node.attrs.kind === "placeholder";
 }
 
 /** Fresh top-level paragraph with no outline/caption scaffold attrs. */
 function createBodyParagraph(schema: Schema): PMNode | null {
   const paragraph = schema.nodes.paragraph;
   if (!paragraph) return null;
-  return paragraph.create({ harvyRestorableScaffold: null });
+  return paragraph.create({ harvyWriterRestorableScaffold: null });
 }
 
 /** Clear marks that would carry caption/link styling into new body typing. */
@@ -42,10 +42,10 @@ function normalizeAdjacentBlockForBodyTyping(
     return { tr, blockPos };
   }
 
-  if (block.type.name === "paragraph" && block.attrs.harvyRestorableScaffold) {
+  if (block.type.name === "paragraph" && block.attrs.harvyWriterRestorableScaffold) {
     tr = tr.setNodeMarkup(blockPos, undefined, {
       ...block.attrs,
-      harvyRestorableScaffold: null,
+      harvyWriterRestorableScaffold: null,
     });
   }
 
@@ -53,13 +53,13 @@ function normalizeAdjacentBlockForBodyTyping(
 }
 
 /** Ensure a text block exists before the image and place the caret inside it. */
-export function focusParagraphBeforeHarvyImageInTr(
+export function focusParagraphBeforeHarvyWriterImageInTr(
   tr: Transaction,
   imagePos: number,
   schema: Schema,
 ): Transaction {
   const node = tr.doc.nodeAt(imagePos);
-  if (!node || node.type.name !== "harvyImage") return tr;
+  if (!node || node.type.name !== "harvyWriterImage") return tr;
 
   const paragraph = schema.nodes.paragraph;
   if (!paragraph) return tr;
@@ -84,13 +84,13 @@ export function focusParagraphBeforeHarvyImageInTr(
 }
 
 /** Ensure a text block exists after the image and place the caret inside it. */
-export function focusParagraphAfterHarvyImageInTr(
+export function focusParagraphAfterHarvyWriterImageInTr(
   tr: Transaction,
   imagePos: number,
   schema: Schema,
 ): Transaction {
   const node = tr.doc.nodeAt(imagePos);
-  if (!node || node.type.name !== "harvyImage") return tr;
+  if (!node || node.type.name !== "harvyWriterImage") return tr;
 
   const paragraph = schema.nodes.paragraph;
   if (!paragraph) return tr;
@@ -116,21 +116,21 @@ export function focusParagraphAfterHarvyImageInTr(
 /** True when a text block sits directly above the image (including empty paragraphs). */
 export function hasAdjacentTextBlockBefore(doc: PMNode, imagePos: number): boolean {
   const node = doc.nodeAt(imagePos);
-  if (!node || node.type.name !== "harvyImage") return false;
+  if (!node || node.type.name !== "harvyWriterImage") return false;
   return doc.resolve(imagePos).nodeBefore?.isTextblock ?? false;
 }
 
 /** True when a text block sits directly below the image (including empty paragraphs). */
 export function hasAdjacentTextBlockAfter(doc: PMNode, imagePos: number): boolean {
   const node = doc.nodeAt(imagePos);
-  if (!node || node.type.name !== "harvyImage") return false;
+  if (!node || node.type.name !== "harvyWriterImage") return false;
   const after = imagePos + node.nodeSize;
   return doc.nodeAt(after)?.isTextblock ?? false;
 }
 
-export function findHarvyImagePosNearSelection(editor: Editor): number | null {
+export function findHarvyWriterImagePosNearSelection(editor: Editor): number | null {
   const { selection, doc } = editor.state;
-  if (selection instanceof NodeSelection && selection.node.type.name === "harvyImage") {
+  if (selection instanceof NodeSelection && selection.node.type.name === "harvyWriterImage") {
     return selection.from;
   }
 
@@ -138,45 +138,45 @@ export function findHarvyImagePosNearSelection(editor: Editor): number | null {
   const from = Math.max(0, selection.from - 2);
   const to = Math.min(doc.content.size, selection.to + 2);
   doc.nodesBetween(from, to, (node, pos) => {
-    if (node.type.name === "harvyImage") found = pos;
+    if (node.type.name === "harvyWriterImage") found = pos;
   });
   return found;
 }
 
-export function focusParagraphAfterHarvyImageAtPos(editor: Editor, imagePos: number): boolean {
+export function focusParagraphAfterHarvyWriterImageAtPos(editor: Editor, imagePos: number): boolean {
   const { state, view } = editor;
-  const tr = focusParagraphAfterHarvyImageInTr(state.tr, imagePos, state.schema);
+  const tr = focusParagraphAfterHarvyWriterImageInTr(state.tr, imagePos, state.schema);
   view.dispatch(tr);
   view.focus();
   return true;
 }
 
-export function focusParagraphBeforeHarvyImageAtPos(editor: Editor, imagePos: number): boolean {
+export function focusParagraphBeforeHarvyWriterImageAtPos(editor: Editor, imagePos: number): boolean {
   const { state, view } = editor;
-  const tr = focusParagraphBeforeHarvyImageInTr(state.tr, imagePos, state.schema);
+  const tr = focusParagraphBeforeHarvyWriterImageInTr(state.tr, imagePos, state.schema);
   view.dispatch(tr);
   view.focus();
   return true;
 }
 
-/** Insert a harvyImage block at the selection without replacing surrounding text. */
-export function insertHarvyImageBlocksAtSelection(
+/** Insert a harvyWriterImage block at the selection without replacing surrounding text. */
+export function insertHarvyWriterImageBlocksAtSelection(
   editor: Editor,
   imageAttrs: Record<string, unknown>,
 ): boolean {
   const didInsert = editor
     .chain()
     .focus()
-    .insertContent({ type: "harvyImage", attrs: imageAttrs })
+    .insertContent({ type: "harvyWriterImage", attrs: imageAttrs })
     .run();
 
   if (!didInsert) return false;
 
-  const imagePos = findHarvyImagePosNearSelection(editor);
+  const imagePos = findHarvyWriterImagePosNearSelection(editor);
   if (imagePos == null) {
     editor.view.focus();
     return true;
   }
 
-  return focusParagraphAfterHarvyImageAtPos(editor, imagePos);
+  return focusParagraphAfterHarvyWriterImageAtPos(editor, imagePos);
 }

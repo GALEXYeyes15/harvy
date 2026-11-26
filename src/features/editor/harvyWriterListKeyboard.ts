@@ -221,8 +221,8 @@ function sinkOrIndentListItemAtStart(editor: Editor): boolean {
  * - Backspace at the start of any list item outdents or converts to a paragraph
  * - Tab / Shift+Tab at the start of a list item nest / unnest one level
  */
-export const HarvyListKeyboard = Extension.create({
-  name: "harvyListKeyboard",
+export const HarvyWriterListKeyboard = Extension.create({
+  name: "harvyWriterListKeyboard",
   priority: 10001,
 
   addKeyboardShortcuts() {

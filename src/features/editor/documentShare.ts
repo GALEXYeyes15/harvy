@@ -26,7 +26,7 @@ export async function shareMarkdownPdf(
     return;
   }
   if (!isTauriRuntime()) {
-    window.alert("Share is available in the Harvy desktop app on macOS.");
+    window.alert("Share is available in the Harvy Writer desktop app on macOS.");
     return;
   }
   await invoke("share_markdown", {

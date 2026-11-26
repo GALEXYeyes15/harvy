@@ -44,7 +44,7 @@ pub(crate) fn load_env_files() {
             }
             _ => {
                 eprintln!(
-                    "[harvy] UNSPLASH_ACCESS_KEY is missing — add it to .env.local at the project root and restart Harvy"
+                    "[harvy] UNSPLASH_ACCESS_KEY is missing — add it to .env.local at the project root and restart Harvy Writer"
                 );
             }
         }

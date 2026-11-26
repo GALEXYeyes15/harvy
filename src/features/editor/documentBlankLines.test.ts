@@ -8,11 +8,11 @@ import {
   toEditorHtml,
 } from "./documentMarkdown";
 import { plainTextToHtml } from "./documentHtml";
-import { HarvyParagraph } from "./harvyParagraph";
+import { HarvyWriterParagraph } from "./harvyWriterParagraph";
 
 function createEditor(content: string): Editor {
   return new Editor({
-    extensions: [StarterKit.configure({ paragraph: false }), HarvyParagraph],
+    extensions: [StarterKit.configure({ paragraph: false }), HarvyWriterParagraph],
     content,
   });
 }

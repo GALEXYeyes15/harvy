@@ -28,7 +28,7 @@ type LineRun = {
 };
 
 /**
- * Convert extracted PDF text the same way Harvy ingests a `.txt` file:
+ * Convert extracted PDF text the same way Harvy Writer ingests a `.txt` file:
  * single newlines stay line breaks, blank lines stay empty paragraphs.
  */
 export function pdfExtractedTextToMarkdown(raw: string): string {
@@ -37,7 +37,7 @@ export function pdfExtractedTextToMarkdown(raw: string): string {
   return ingestTextFileContent(normalized, "document.txt");
 }
 
-/** Convert attributed PDF runs into Harvy Markdown (headings, bold, italic, underline, links). */
+/** Convert attributed PDF runs into Harvy Writer Markdown (headings, bold, italic, underline, links). */
 export function pdfExtractedRunsToMarkdown(runs: PdfTextRun[]): string {
   if (!Array.isArray(runs) || runs.length === 0) return "";
 

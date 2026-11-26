@@ -3,7 +3,7 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
 const MAX_VIDEOS: usize = 50;
-const USER_AGENT: &str = "Harvy/0.1 (YouTube public archive)";
+const USER_AGENT: &str = "HarvyWriter/0.1 (YouTube public archive)";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -16,7 +16,7 @@ export type YoutubeVideoResult = {
 };
 
 const MAX_VIDEOS = 50;
-const USER_AGENT = "Harvy/0.1 (YouTube public archive)";
+const USER_AGENT = "HarvyWriter/0.1 (YouTube public archive)";
 
 function youtubeApiKey(): string | null {
   const key = process.env.YOUTUBE_API_KEY?.trim() ?? "";

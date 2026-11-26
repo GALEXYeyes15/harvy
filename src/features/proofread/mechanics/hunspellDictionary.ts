@@ -76,7 +76,7 @@ export function ensureHunspellLoaded(): Promise<void> {
       typeof window !== "undefined" ? loadHunspellInBrowser() : loadHunspellInNode();
     loadPromise = loader.catch((err: unknown) => {
       loadPromise = null;
-      console.error("[HarvyHunspell] Failed to load Hunspell dictionary", err);
+      console.error("[HarvyWriterHunspell] Failed to load Hunspell dictionary", err);
       throw err;
     });
   }

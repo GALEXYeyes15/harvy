@@ -1,8 +1,8 @@
 import { Search, Upload } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { buildUnsplashLoadAttrs, type HarvyImageLoadAttrs } from "./harvyImageAttribution";
-import { MOCK_UNSPLASH_IMAGES } from "./harvyImageMockUnsplash";
+import { buildUnsplashLoadAttrs, type HarvyWriterImageLoadAttrs } from "./harvyWriterImageAttribution";
+import { MOCK_UNSPLASH_IMAGES } from "./harvyWriterImageMockUnsplash";
 import { searchUnsplashPhotos, listPopularUnsplashPhotos, type UnsplashImageResult } from "./unsplashSearch";
 import { formatUnsplashSearchError, logUnsplashSearchFailure } from "./unsplashErrors";
 import { UnsplashBrowseModal, type ExpandFromRect } from "./UnsplashBrowseModal";
@@ -16,13 +16,13 @@ const TABS: { id: ImageSourceTab; label: string }[] = [
   { id: "giphy", label: "GIPHY" },
 ];
 
-export type HarvyImageSourcePopoverMode = "insert" | "replace";
+export type HarvyWriterImageSourcePopoverMode = "insert" | "replace";
 
-type HarvyImageSourcePopoverProps = {
-  mode?: HarvyImageSourcePopoverMode;
+type HarvyWriterImageSourcePopoverProps = {
+  mode?: HarvyWriterImageSourcePopoverMode;
   anchorEl: HTMLElement;
   onClose: () => void;
-  onSelectImage: (selection: string | HarvyImageLoadAttrs) => void;
+  onSelectImage: (selection: string | HarvyWriterImageLoadAttrs) => void;
   onUploadFile: () => Promise<string | null>;
 };
 
@@ -45,7 +45,7 @@ function isLikelyImageUrl(value: string): boolean {
 export function computeImageSourcePopoverPosition(
   anchorRect: DOMRect,
   panelWidth: number,
-  mode: HarvyImageSourcePopoverMode,
+  mode: HarvyWriterImageSourcePopoverMode,
 ): { top: number; left: number } {
   const width = Math.min(panelWidth, window.innerWidth - VIEWPORT_PAD * 2);
   const top = Math.min(anchorRect.bottom + VERTICAL_GAP, window.innerHeight - MAX_POPOVER_HEIGHT);
@@ -67,13 +67,13 @@ export function computeImageSourcePopoverPosition(
   return { top, left };
 }
 
-export function HarvyImageSourcePopover({
+export function HarvyWriterImageSourcePopover({
   mode = "insert",
   anchorEl,
   onClose,
   onSelectImage,
   onUploadFile,
-}: HarvyImageSourcePopoverProps) {
+}: HarvyWriterImageSourcePopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<ImageSourceTab>("upload");
   const [linkUrl, setLinkUrl] = useState("");

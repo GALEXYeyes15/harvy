@@ -29,7 +29,7 @@ pub struct NotionIdeasConfig {
     pub title_property: String,
     pub notes_property: String,
     pub status_property: String,
-    /// Status value that means “in the Ideas queue” (shown in Harvy).
+    /// Status value that means “in the Ideas queue” (shown in Harvy Writer).
     #[serde(default = "default_idea_status")]
     pub idea_status_value: String,
     /// Status value set when Start writing (removed from Ideas).
@@ -527,7 +527,7 @@ fn looks_like_missing_database(message: &str) -> bool {
 fn explain_database_access_error(message: &str, database_id: &str) -> String {
     if looks_like_missing_database(message) {
         format!(
-            "Harvy can't open Notion database {database_id}. The URL is fine — Harvy just doesn't have access yet. In Notion: … → Connections → Manage connections → Internal → Harvy, then select that database."
+            "Harvy Writer can't open Notion database {database_id}. The URL is fine — Harvy Writer just doesn't have access yet. In Notion: … → Connections → Manage connections → Internal → Harvy Writer, then select that database."
         )
     } else {
         message.to_string()
@@ -1799,12 +1799,12 @@ mod tests {
     #[test]
     fn explains_unshared_database() {
         let message = explain_database_access_error(
-            "Could not find database with ID: fc18c16a-5124-4937-81c2-17f7bf0172cf. Make sure the relevant pages and databases are shared with your integration \"Harvy\".",
+            "Could not find database with ID: fc18c16a-5124-4937-81c2-17f7bf0172cf. Make sure the relevant pages and databases are shared with your integration \"Harvy Writer\".",
             "fc18c16a-5124-4937-81c2-17f7bf0172cf",
         );
         assert!(message.contains("Manage connections"));
         assert!(message.contains("Internal"));
-        assert!(message.contains("Harvy"));
+        assert!(message.contains("Harvy Writer"));
         assert!(message.contains("fc18c16a-5124-4937-81c2-17f7bf0172cf"));
     }
 

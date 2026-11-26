@@ -1,4 +1,4 @@
-import { openExternalHref } from "./harvyImageAttribution";
+import { openExternalHref } from "./harvyWriterImageAttribution";
 
 /** Open Unsplash attribution links inside image captions (ProseMirror otherwise swallows clicks). */
 export function handleImageCaptionLinkPointerDown(event: MouseEvent): boolean {

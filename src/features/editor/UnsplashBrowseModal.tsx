@@ -1,8 +1,8 @@
 import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { buildUnsplashLoadAttrs, type HarvyImageLoadAttrs } from "./harvyImageAttribution";
-import { MOCK_UNSPLASH_IMAGES } from "./harvyImageMockUnsplash";
+import { buildUnsplashLoadAttrs, type HarvyWriterImageLoadAttrs } from "./harvyWriterImageAttribution";
+import { MOCK_UNSPLASH_IMAGES } from "./harvyWriterImageMockUnsplash";
 import { formatUnsplashSearchError, logUnsplashSearchFailure } from "./unsplashErrors";
 import { searchUnsplashPhotos, listPopularUnsplashPhotos, type UnsplashImageResult } from "./unsplashSearch";
 
@@ -25,7 +25,7 @@ type UnsplashBrowseModalProps = {
   initialResults?: UnsplashImageResult[];
   /** Screen rect of the small popover to animate from. */
   expandFrom?: ExpandFromRect | null;
-  onSelectImage: (selection: HarvyImageLoadAttrs) => void;
+  onSelectImage: (selection: HarvyWriterImageLoadAttrs) => void;
 };
 
 function mergeUniqueResults(

@@ -1,6 +1,6 @@
 export type FileMenuHandlers = {
   save: () => void | Promise<void>;
-  /** Opens Harvy’s in-app Save As sheet. */
+  /** Opens Harvy Writer’s in-app Save As sheet. */
   saveAs: () => void | Promise<void>;
   /** Copy the full document (rich HTML + plain text). */
   copyDocument: () => void | Promise<void>;

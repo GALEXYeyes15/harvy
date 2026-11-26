@@ -119,7 +119,7 @@ fn show_share_sheet_macos(
     _file_path: &Path,
     _anchor: Option<ShareAnchor>,
 ) -> Result<(), String> {
-    Err("Share is only available in the Harvy desktop app on macOS.".to_string())
+    Err("Share is only available in the Harvy Writer desktop app on macOS.".to_string())
 }
 
 /// Render Markdown to a temporary PDF and open the macOS share sheet.

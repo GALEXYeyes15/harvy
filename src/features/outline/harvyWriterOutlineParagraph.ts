@@ -6,18 +6,18 @@ import { Fragment, Slice } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
-export type HarvyOutlineKind = "placeholder" | "instruction";
+export type HarvyWriterOutlineKind = "placeholder" | "instruction";
 
-const harvyOutlinePluginKey = new PluginKey("harvyOutlinePlaceholderWriting");
+const harvyWriterOutlinePluginKey = new PluginKey("harvyWriterOutlinePlaceholderWriting");
 
-function findEnclosingHarvyPlaceholder(
+function findEnclosingHarvyWriterPlaceholder(
   state: EditorState,
   pos: number,
 ): { pos: number; node: PMNode } | null {
   const $pos = state.doc.resolve(pos);
   for (let d = $pos.depth; d >= 1; d--) {
     const node = $pos.node(d);
-    if (node.type.name === "harvyOutlineParagraph" && node.attrs.kind === "placeholder") {
+    if (node.type.name === "harvyWriterOutlineParagraph" && node.attrs.kind === "placeholder") {
       return { pos: $pos.before(d), node };
     }
   }
@@ -26,15 +26,15 @@ function findEnclosingHarvyPlaceholder(
 
 function isHintlessEmptyPlaceholder(node: PMNode): boolean {
   return (
-    node.type.name === "harvyOutlineParagraph" &&
+    node.type.name === "harvyWriterOutlineParagraph" &&
     node.attrs.kind === "placeholder" &&
     !((node.attrs.writingScaffold as string | null) ?? "").trim() &&
     isNodeEmpty(node)
   );
 }
 
-function isCreateOutlineMode(editor: { storage: { harvyOutlineParagraph?: { createOutlineMode?: boolean } } }): boolean {
-  return editor.storage.harvyOutlineParagraph?.createOutlineMode ?? false;
+function isCreateOutlineMode(editor: { storage: { harvyWriterOutlineParagraph?: { createOutlineMode?: boolean } } }): boolean {
+  return editor.storage.harvyWriterOutlineParagraph?.createOutlineMode ?? false;
 }
 
 /**
@@ -43,7 +43,7 @@ function isCreateOutlineMode(editor: { storage: { harvyOutlineParagraph?: { crea
  */
 function handlePlaceholderTextInput(
   view: EditorView,
-  editor: { storage: { harvyOutlineParagraph?: { createOutlineMode?: boolean } } },
+  editor: { storage: { harvyWriterOutlineParagraph?: { createOutlineMode?: boolean } } },
   text: string,
 ): boolean {
   if (!text || /[\r\n]/.test(text)) {
@@ -59,7 +59,7 @@ function handlePlaceholderTextInput(
     return false;
   }
 
-  const found = findEnclosingHarvyPlaceholder(state, sel.$from.pos);
+  const found = findEnclosingHarvyWriterPlaceholder(state, sel.$from.pos);
   if (!found || !isNodeEmpty(found.node)) {
     return false;
   }
@@ -72,7 +72,7 @@ function handlePlaceholderTextInput(
   const scaffoldHint = (found.node.attrs.writingScaffold as string | null) ?? "";
   const marks = state.storedMarks ?? [];
   const textNode = state.schema.text(text, marks);
-  const paragraph = paragraphType.create({ harvyRestorableScaffold: scaffoldHint }, Fragment.from(textNode));
+  const paragraph = paragraphType.create({ harvyWriterRestorableScaffold: scaffoldHint }, Fragment.from(textNode));
 
   const tr = state.tr.replaceWith(found.pos, found.pos + found.node.nodeSize, paragraph);
   const endPos = found.pos + 1 + text.length;
@@ -83,7 +83,7 @@ function handlePlaceholderTextInput(
 
 function handlePlaceholderPaste(
   view: EditorView,
-  editor: { storage: { harvyOutlineParagraph?: { createOutlineMode?: boolean } } },
+  editor: { storage: { harvyWriterOutlineParagraph?: { createOutlineMode?: boolean } } },
   event: ClipboardEvent,
   slice: Slice,
 ): boolean {
@@ -97,7 +97,7 @@ function handlePlaceholderPaste(
     return false;
   }
 
-  const found = findEnclosingHarvyPlaceholder(state, sel.$from.pos);
+  const found = findEnclosingHarvyWriterPlaceholder(state, sel.$from.pos);
   if (!found || !isNodeEmpty(found.node)) {
     return false;
   }
@@ -119,7 +119,7 @@ function handlePlaceholderPaste(
   }
 
   const textNode = state.schema.text(pasted);
-  const paragraph = paragraphType.create({ harvyRestorableScaffold: scaffoldHint }, Fragment.from(textNode));
+  const paragraph = paragraphType.create({ harvyWriterRestorableScaffold: scaffoldHint }, Fragment.from(textNode));
 
   const tr = state.tr.replaceWith(found.pos, found.pos + found.node.nodeSize, paragraph);
   const endPos = found.pos + 1 + pasted.length;
@@ -136,8 +136,8 @@ function handlePlaceholderPaste(
  * **Create Outline Mode OFF:** placeholder `content` is empty; `writingScaffold` drives hints;
  * {@link handlePlaceholderTextInput} / {@link handlePlaceholderPaste} promote in the same step as input.
  */
-export const HarvyOutlineParagraph = Node.create({
-  name: "harvyOutlineParagraph",
+export const HarvyWriterOutlineParagraph = Node.create({
+  name: "harvyWriterOutlineParagraph",
   group: "block",
   content: "inline*",
   defining: true,
@@ -152,7 +152,7 @@ export const HarvyOutlineParagraph = Node.create({
   addAttributes() {
     return {
       kind: {
-        default: "placeholder" as HarvyOutlineKind,
+        default: "placeholder" as HarvyWriterOutlineKind,
       },
       /** Hint shown when the block is empty in writing mode (normal editing). */
       writingScaffold: {
@@ -166,10 +166,10 @@ export const HarvyOutlineParagraph = Node.create({
 
     return [
       new Plugin({
-        key: harvyOutlinePluginKey,
+        key: harvyWriterOutlinePluginKey,
         props: {
           decorations(state) {
-            const createOutlineMode = ext.editor?.storage?.harvyOutlineParagraph?.createOutlineMode ?? false;
+            const createOutlineMode = ext.editor?.storage?.harvyWriterOutlineParagraph?.createOutlineMode ?? false;
             if (createOutlineMode) {
               return DecorationSet.empty;
             }
@@ -178,7 +178,7 @@ export const HarvyOutlineParagraph = Node.create({
             const decorations: Decoration[] = [];
 
             doc.descendants((node, pos) => {
-              if (node.type.name !== "harvyOutlineParagraph" || node.attrs.kind !== "placeholder") {
+              if (node.type.name !== "harvyWriterOutlineParagraph" || node.attrs.kind !== "placeholder") {
                 return true;
               }
               if (!isNodeEmpty(node)) {
@@ -222,12 +222,12 @@ export const HarvyOutlineParagraph = Node.create({
             return null;
           }
 
-          const createOutlineMode = ext.editor?.storage?.harvyOutlineParagraph?.createOutlineMode ?? false;
+          const createOutlineMode = ext.editor?.storage?.harvyWriterOutlineParagraph?.createOutlineMode ?? false;
           if (createOutlineMode) {
             return null;
           }
 
-          const outlineType = newState.schema.nodes.harvyOutlineParagraph;
+          const outlineType = newState.schema.nodes.harvyWriterOutlineParagraph;
           const paragraphType = newState.schema.nodes.paragraph;
           if (!outlineType || !paragraphType) {
             return null;
@@ -238,7 +238,7 @@ export const HarvyOutlineParagraph = Node.create({
 
           newState.doc.descendants((node, pos) => {
             if (node.type === paragraphType && isNodeEmpty(node)) {
-              const raw = node.attrs.harvyRestorableScaffold as string | null | undefined;
+              const raw = node.attrs.harvyWriterRestorableScaffold as string | null | undefined;
               if (raw != null && raw.length > 0) {
                 toRestore.push({ pos, node });
               }
@@ -267,7 +267,7 @@ export const HarvyOutlineParagraph = Node.create({
           toRestore.sort((a, b) => b.pos - a.pos);
 
           for (const { pos, node } of toRestore) {
-            const scaffold = String(node.attrs.harvyRestorableScaffold ?? "");
+            const scaffold = String(node.attrs.harvyWriterRestorableScaffold ?? "");
             const outline = outlineType.create(
               { kind: "placeholder", writingScaffold: scaffold },
               Fragment.empty,
@@ -310,7 +310,7 @@ export const HarvyOutlineParagraph = Node.create({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    const kind = node.attrs.kind as HarvyOutlineKind;
+    const kind = node.attrs.kind as HarvyWriterOutlineKind;
     const writingScaffold = node.attrs.writingScaffold as string | null;
     const cls =
       kind === "instruction" ? "harvy-outline-instruction" : "harvy-outline-placeholder";

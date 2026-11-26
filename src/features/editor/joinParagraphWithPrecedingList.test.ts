@@ -3,9 +3,9 @@ import StarterKit from "@tiptap/starter-kit";
 import { describe, expect, it } from "vitest";
 import { handleBackspaceOnEmptyTextBlockKeyDown } from "./emptyTextBlockDeletion";
 import { EmptyTextBlockBackspace } from "./emptyTextBlockBackspace";
-import { HarvyListItem } from "./harvyListItem";
-import { HarvyListKeyboard } from "./harvyListKeyboard";
-import { HarvyParagraph } from "./harvyParagraph";
+import { HarvyWriterListItem } from "./harvyWriterListItem";
+import { HarvyWriterListKeyboard } from "./harvyWriterListKeyboard";
+import { HarvyWriterParagraph } from "./harvyWriterParagraph";
 
 function createEditor(content: string) {
   return new Editor({
@@ -17,9 +17,9 @@ function createEditor(content: string) {
         gapcursor: false,
       }),
       EmptyTextBlockBackspace,
-      HarvyParagraph,
-      HarvyListItem,
-      HarvyListKeyboard,
+      HarvyWriterParagraph,
+      HarvyWriterListItem,
+      HarvyWriterListKeyboard,
     ],
     content,
     editorProps: {

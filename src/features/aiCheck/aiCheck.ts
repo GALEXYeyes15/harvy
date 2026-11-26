@@ -55,7 +55,7 @@ export type AiCheckSaveInput = {
 
 function requireTauri(): void {
   if (!isTauriRuntime()) {
-    throw new Error("AI check requires the Harvy desktop app.");
+    throw new Error("AI check requires the Harvy Writer desktop app.");
   }
 }
 
@@ -175,7 +175,7 @@ export {
   formatAiCheckCostUsd,
   formatAiModelDisplayName,
   formatModelRatesShort,
-  isRecommendedHarvyModel,
+  isRecommendedHarvyWriterModel,
   modelOptionLabel,
   pickRecommendedModelId,
   sortModelsByCost,

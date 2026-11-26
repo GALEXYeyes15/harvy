@@ -14,14 +14,14 @@ export function openExternalHref(href: string, event: { preventDefault: () => vo
   openSafeExternalUrl(href, event);
 }
 
-export type HarvyImageSource = "unsplash" | null;
+export type HarvyWriterImageSource = "unsplash" | null;
 
-export type HarvyImageLoadAttrs = {
+export type HarvyWriterImageLoadAttrs = {
   src: string;
   caption?: string;
   captionHtml?: string;
-  width?: import("./harvyImage").HarvyImageWidth;
-  imageSource?: HarvyImageSource;
+  width?: import("./harvyWriterImage").HarvyWriterImageWidth;
+  imageSource?: HarvyWriterImageSource;
   photographerName?: string;
   photographerUrl?: string;
   unsplashUrl?: string;
@@ -72,7 +72,7 @@ export function buildUnsplashAttribution(input: UnsplashAttributionInput): {
 }
 
 export function isManuallyEditedUnsplashCaption(attrs: {
-  imageSource?: HarvyImageSource | null;
+  imageSource?: HarvyWriterImageSource | null;
   caption?: string;
   photographerName?: string;
   photographerUrl?: string;
@@ -93,7 +93,7 @@ export function isManuallyEditedUnsplashCaption(attrs: {
 export function buildUnsplashLoadAttrs(
   src: string,
   input: UnsplashAttributionInput,
-): HarvyImageLoadAttrs {
+): HarvyWriterImageLoadAttrs {
   const { caption, captionHtml } = buildUnsplashAttribution(input);
   return {
     src,

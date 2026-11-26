@@ -1,7 +1,7 @@
 //! Markdown → PDF with editorial typography (A4, margins, heading sizes, lists).
 //! Always embeds Libre Baskerville (Regular + Bold), independent of editor appearance.
 //! Other characters are mapped to ASCII-ish fallbacks.
-//! Embedded Harvy `<figure data-harvy-image>` blocks (and CommonMark images) are drawn
+//! Embedded Harvy Writer `<figure data-harvy-image>` blocks (and CommonMark images) are drawn
 //! from workspace-relative paths or http(s) URLs when possible.
 
 use image::GenericImageView;
@@ -207,7 +207,7 @@ fn parse_image_marker(text: &str) -> Option<usize> {
     num.parse().ok()
 }
 
-/// Lift Harvy figure islands into markers so the Markdown parser keeps document order.
+/// Lift Harvy Writer figure islands into markers so the Markdown parser keeps document order.
 fn extract_harvy_figures(markdown: &str) -> (String, Vec<PdfImageSpec>) {
     let figure_re = match Regex::new(r"(?is)<figure\b[^>]*\bdata-harvy-image\b[^>]*>.*?</figure>") {
         Ok(re) => re,
@@ -596,7 +596,7 @@ pub fn write_markdown_pdf(path: &str, markdown: &str, workspace_root: &Path) -> 
     let title = std::path::Path::new(path)
         .file_name()
         .and_then(|s| s.to_str())
-        .unwrap_or("Harvy export");
+        .unwrap_or("Harvy Writer export");
 
     let (prepared, images) = extract_harvy_figures(markdown);
     let mut w = Writer::new(title, workspace_root, images)?;

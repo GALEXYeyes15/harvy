@@ -3,14 +3,14 @@ import { createPortal } from "react-dom";
 import { Zap } from "lucide-react";
 import type { HeadlinePair } from "../features/aiCheck/aiCheck";
 import {
-  closeHarvyContextMenu,
+  closeHarvyWriterContextMenu,
   findScrollableAncestors,
   HARVY_CONTEXT_MENU_DIVIDER_CLASS,
   HARVY_CONTEXT_MENU_ITEM_CLASS,
   HARVY_CONTEXT_MENU_ITEM_DISABLED_CLASS,
-  placeHarvyContextMenuForElement,
-} from "../features/editor/harvyContextMenu";
-import { HarvyContextMenuShell } from "./HarvyContextMenu";
+  placeHarvyWriterContextMenuForElement,
+} from "../features/editor/harvyWriterContextMenu";
+import { HarvyWriterContextMenuShell } from "./HarvyWriterContextMenu";
 
 type HeadlineSuggestMenuProps = {
   open: boolean;
@@ -45,12 +45,12 @@ export function HeadlineSuggestMenu({
 
   useLayoutEffect(() => {
     if (!open) return;
-    closeHarvyContextMenu();
+    closeHarvyWriterContextMenu();
   }, [open]);
 
   useLayoutEffect(() => {
     if (!open || !anchorEl || !mountEl || !menuRef.current) return;
-    placeHarvyContextMenuForElement(menuRef.current, mountEl, anchorEl);
+    placeHarvyWriterContextMenuForElement(menuRef.current, mountEl, anchorEl);
   }, [open, anchorEl, mountEl, running, runningFromHeadlines, error, pairs]);
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export function HeadlineSuggestMenu({
 
     const reposition = () => {
       if (!menuRef.current) return;
-      placeHarvyContextMenuForElement(menuRef.current, mountEl, anchorEl);
+      placeHarvyWriterContextMenuForElement(menuRef.current, mountEl, anchorEl);
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -94,7 +94,7 @@ export function HeadlineSuggestMenu({
   if (!open || !mountEl) return null;
 
   return createPortal(
-    <HarvyContextMenuShell
+    <HarvyWriterContextMenuShell
       menuRef={menuRef}
       ariaLabel="Suggest titles"
       className="harvy-context-menu--headlines"
@@ -172,7 +172,7 @@ export function HeadlineSuggestMenu({
           })}
         </>
       ) : null}
-    </HarvyContextMenuShell>,
+    </HarvyWriterContextMenuShell>,
     mountEl,
   );
 }

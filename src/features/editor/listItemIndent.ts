@@ -88,8 +88,8 @@ export function clearListItemIndentInTr(tr: Transaction, $from: ResolvedPos): Tr
   if (!found) return tr;
 
   const indentLevel = (found.node.attrs.indentLevel as number | undefined) ?? 0;
-  const harvyVisualDepth = found.node.attrs.harvyVisualDepth as number | null | undefined;
-  if (indentLevel <= 0 && (harvyVisualDepth == null || harvyVisualDepth <= 0)) {
+  const harvyWriterVisualDepth = found.node.attrs.harvyWriterVisualDepth as number | null | undefined;
+  if (indentLevel <= 0 && (harvyWriterVisualDepth == null || harvyWriterVisualDepth <= 0)) {
     return tr;
   }
 
@@ -97,7 +97,7 @@ export function clearListItemIndentInTr(tr: Transaction, $from: ResolvedPos): Tr
   return tr.setNodeMarkup(mappedPos, undefined, {
     ...found.node.attrs,
     indentLevel: 0,
-    harvyVisualDepth: null,
+    harvyWriterVisualDepth: null,
   });
 }
 
@@ -115,13 +115,13 @@ export function setListItemIndentInTr(
     return tr.setNodeMarkup(mappedPos, undefined, {
       ...node.attrs,
       indentLevel: 0,
-      harvyVisualDepth: null,
+      harvyWriterVisualDepth: null,
     });
   }
 
   return tr.setNodeMarkup(mappedPos, undefined, {
     ...node.attrs,
     indentLevel,
-    harvyVisualDepth: visualDepthFor(structuralDepth, indentLevel),
+    harvyWriterVisualDepth: visualDepthFor(structuralDepth, indentLevel),
   });
 }

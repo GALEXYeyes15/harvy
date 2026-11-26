@@ -15,7 +15,7 @@ const EMPTY: DocumentFindState = { query: "", activeIndex: 0, ranges: [] };
 
 type DocumentFindMeta = { clear: true } | { query: string; activeIndex: number };
 
-export const documentFindHighlightKey = new PluginKey<DocumentFindState>("harvyDocumentFind");
+export const documentFindHighlightKey = new PluginKey<DocumentFindState>("harvyWriterDocumentFind");
 
 function clampIndex(index: number, count: number): number {
   if (count <= 0) return 0;

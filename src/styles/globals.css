@@ -847,7 +847,7 @@
     color: color-mix(in oklab, var(--color-muted) 58%, var(--color-ink));
   }
 
-  /* ProseMirror gap cursor: horizontal blinking line between blocks — disabled in Harvy. */
+  /* ProseMirror gap cursor: horizontal blinking line between blocks — disabled in Harvy Writer. */
   .ProseMirror-harvy .ProseMirror-gapcursor,
   .ProseMirror-harvy .ProseMirror-gapcursor::after {
     display: none !important;

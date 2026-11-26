@@ -15,7 +15,7 @@ type LinkEditorSelectionHighlightMeta =
   | { clear: true };
 
 export const linkEditorSelectionHighlightKey = new PluginKey<LinkEditorSelectionHighlightState>(
-  "harvyLinkEditorSelectionHighlight",
+  "harvyWriterLinkEditorSelectionHighlight",
 );
 
 function isValidRange(view: EditorView, from: number, to: number): boolean {

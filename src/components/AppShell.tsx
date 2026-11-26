@@ -144,11 +144,11 @@ import { copyDocumentToClipboard } from "../features/editor/documentClipboard";
 import { openSafeExternalUrl } from "../features/editor/openExternalUrl";
 import { printDocumentFromEditor } from "../features/editor/documentPrint";
 import { shareAnchorFromElement, shareMarkdownPdf } from "../features/editor/documentShare";
-import type { HarvyImageLoadAttrs } from "../features/editor/harvyImageAttribution";
+import type { HarvyWriterImageLoadAttrs } from "../features/editor/harvyWriterImageAttribution";
 import {
-  insertHarvyImagePlaceholderAtCursor,
-  loadHarvyImageAt,
-} from "../features/editor/insertHarvyImage";
+  insertHarvyWriterImagePlaceholderAtCursor,
+  loadHarvyWriterImageAt,
+} from "../features/editor/insertHarvyWriterImage";
 import {
   countSentenceComplexityFromStoredDocument,
   countSentenceComplexityInDoc,
@@ -1424,7 +1424,7 @@ export function AppShell() {
 
   const chooseWorkspaceFolder = useCallback(async () => {
     if (!isTauriRuntime()) {
-      window.alert("Choosing a workspace folder requires the Harvy desktop app.");
+      window.alert("Choosing a workspace folder requires the Harvy Writer desktop app.");
       return;
     }
     try {
@@ -1924,7 +1924,7 @@ export function AppShell() {
   const openSaveAsModal = useCallback(
     async (opts?: { purpose?: "document" | "podcast-notes"; fileName?: string }) => {
       if (!isTauriRuntime()) {
-        window.alert("Save As is only available in the Harvy desktop app.");
+        window.alert("Save As is only available in the Harvy Writer desktop app.");
         return false;
       }
       if (!hasWorkspaceFolder) {
@@ -2213,7 +2213,7 @@ export function AppShell() {
 
   const performExportPdf = useCallback(async () => {
     if (!isTauriRuntime()) {
-      window.alert("Export as PDF is only available in the Harvy desktop app.");
+      window.alert("Export as PDF is only available in the Harvy Writer desktop app.");
       return;
     }
     if (!hasWorkspaceFolder || !workspaceRootPath) {
@@ -2299,7 +2299,7 @@ export function AppShell() {
   const performExportPodcastNotesPdf = useCallback(async () => {
     if (podcastNotesRunning || saveAsSubmitting || podcastNotesPreviewOpen) return;
     if (!isTauriRuntime()) {
-      window.alert("Export Presentation Notes is only available in the Harvy desktop app.");
+      window.alert("Export Presentation Notes is only available in the Harvy Writer desktop app.");
       return;
     }
     if (!hasWorkspaceFolder) {
@@ -2379,7 +2379,7 @@ export function AppShell() {
 
   const performSave = useCallback(async () => {
     if (!isTauriRuntime()) {
-      window.alert("Save is only available in the Harvy desktop app.");
+      window.alert("Save is only available in the Harvy Writer desktop app.");
       return;
     }
     if (!hasWorkspaceFolder) {
@@ -2715,7 +2715,7 @@ export function AppShell() {
           if (!isDirtyRef.current) return;
           try {
             const ok = await confirm("Discard unsaved changes and close the window?", {
-              title: "Harvy",
+              title: "Harvy Writer",
               kind: "warning",
             });
             if (!ok) event.preventDefault();
@@ -2806,7 +2806,7 @@ export function AppShell() {
 
   async function convertPdfToMarkdown(node: FileNode) {
     if (!isTauriRuntime()) {
-      window.alert("Converting PDFs requires the Harvy desktop app.");
+      window.alert("Converting PDFs requires the Harvy Writer desktop app.");
       return;
     }
 
@@ -3082,7 +3082,7 @@ export function AppShell() {
 
   async function handleCreateMarkdownFile() {
     if (!isTauriRuntime()) {
-      window.alert("Creating files on disk requires the Harvy desktop app.");
+      window.alert("Creating files on disk requires the Harvy Writer desktop app.");
       return;
     }
     if (!hasWorkspaceFolder || !supportedTree || !workspaceRootPath) {
@@ -3128,7 +3128,7 @@ export function AppShell() {
 
   async function handleStartWritingFromIdea(item: CollectItem) {
     if (!isTauriRuntime()) {
-      window.alert("Starting a draft requires the Harvy desktop app.");
+      window.alert("Starting a draft requires the Harvy Writer desktop app.");
       return;
     }
     if (!hasWorkspaceFolder || !supportedTree || !workspaceRootPath) {
@@ -3445,7 +3445,7 @@ export function AppShell() {
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    console.log("[HarvyTitle] shell", {
+    console.log("[HarvyWriterTitle] shell", {
       titleRenameEnabled,
       activeTabId,
       hasActiveDocument: Boolean(activeDocument),
@@ -3757,7 +3757,7 @@ export function AppShell() {
 
   const handleGenerateHeadlines = useCallback(async () => {
     if (!isTauriRuntime()) {
-      setHeadlinePairsError("Headline suggestions are only available in the Harvy desktop app.");
+      setHeadlinePairsError("Headline suggestions are only available in the Harvy Writer desktop app.");
       return;
     }
     if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
@@ -3787,7 +3787,7 @@ export function AppShell() {
 
   const handleGenerateHeadlinesFromShots = useCallback(async () => {
     if (!isTauriRuntime()) {
-      setHeadlinePairsError("Headline suggestions are only available in the Harvy desktop app.");
+      setHeadlinePairsError("Headline suggestions are only available in the Harvy Writer desktop app.");
       return;
     }
     if (!aiCheckConfig?.enabled || !aiCheckConfig.hasApiKey) {
@@ -3889,7 +3889,7 @@ export function AppShell() {
       if (notionSyncRunningRef.current) return null;
       if (!isTauriRuntime()) {
         if (!opts?.silent) {
-          window.alert("Sync with Notion is only available in the Harvy desktop app.");
+          window.alert("Sync with Notion is only available in the Harvy Writer desktop app.");
         }
         return null;
       }
@@ -4062,7 +4062,7 @@ export function AppShell() {
 
   const handleInsertImage = useCallback(() => {
     if (!tiptapEditor || !editorEditable) return;
-    insertHarvyImagePlaceholderAtCursor(tiptapEditor);
+    insertHarvyWriterImagePlaceholderAtCursor(tiptapEditor);
   }, [tiptapEditor, editorEditable]);
 
   const pickLocalImage = useCallback(async () => {
@@ -4074,9 +4074,9 @@ export function AppShell() {
   }, [hasWorkspaceFolder]);
 
   const loadImageAtPos = useCallback(
-    (pos: number, attrs: HarvyImageLoadAttrs) => {
+    (pos: number, attrs: HarvyWriterImageLoadAttrs) => {
       if (!tiptapEditor || !editorEditable || !attrs.src) return;
-      loadHarvyImageAt(tiptapEditor, pos, attrs);
+      loadHarvyWriterImageAt(tiptapEditor, pos, attrs);
     },
     [tiptapEditor, editorEditable],
   );

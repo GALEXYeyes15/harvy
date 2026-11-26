@@ -1,4 +1,4 @@
-//! Convert Harvy Markdown into Notion block JSON.
+//! Convert Harvy Writer Markdown into Notion block JSON.
 
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use serde_json::{json, Value};

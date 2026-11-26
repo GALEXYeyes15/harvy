@@ -14,7 +14,7 @@ export type MediumPostResult = {
   coverImage?: string | null;
 };
 
-const USER_AGENT = "Harvy/0.1 (Medium public archive)";
+const USER_AGENT = "HarvyWriter/0.1 (Medium public archive)";
 const MAX_POSTS = 100;
 
 export function parseMediumUsername(raw: string): string {

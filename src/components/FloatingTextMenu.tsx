@@ -29,13 +29,13 @@ import {
   HARVY_CONTEXT_MENU_TOOLBAR_BTN_ACTIVE_CLASS,
   HARVY_CONTEXT_MENU_TOOLBAR_BTN_CLASS,
   HARVY_CONTEXT_MENU_TOOLBAR_CLASS,
-  type HarvyContextMenuAnchorRange,
-} from "../features/editor/harvyContextMenu";
+  type HarvyWriterContextMenuAnchorRange,
+} from "../features/editor/harvyWriterContextMenu";
 import {
-  HarvyContextMenuPortal,
-  HarvyContextMenuShell,
-  useHarvyContextMenuPortal,
-} from "./HarvyContextMenu";
+  HarvyWriterContextMenuPortal,
+  HarvyWriterContextMenuShell,
+  useHarvyWriterContextMenuPortal,
+} from "./HarvyWriterContextMenu";
 
 /** Wait this long after the last selection change (and after pointer release) before showing the menu. */
 const STABLE_SELECTION_MS = 100;
@@ -50,8 +50,8 @@ type FloatingTextMenuProps = {
 };
 
 export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: FloatingTextMenuProps) {
-  const [anchor, setAnchor] = useState<HarvyContextMenuAnchorRange | null>(null);
-  const [panelAnchor, setPanelAnchor] = useState<HarvyContextMenuAnchorRange | null>(null);
+  const [anchor, setAnchor] = useState<HarvyWriterContextMenuAnchorRange | null>(null);
+  const [panelAnchor, setPanelAnchor] = useState<HarvyWriterContextMenuAnchorRange | null>(null);
   const [menuOpacityOn, setMenuOpacityOn] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -61,7 +61,7 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
   const pointerSelectingRef = useRef(false);
   const anchorVisibleRef = useRef(false);
   const linkOpenRef = useRef(false);
-  const linkSelectionRef = useRef<HarvyContextMenuAnchorRange | null>(null);
+  const linkSelectionRef = useRef<HarvyWriterContextMenuAnchorRange | null>(null);
   const linkInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -101,7 +101,7 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
     setAnchor(null);
   }, []);
 
-  const { menuRef, mountEl, reposition } = useHarvyContextMenuPortal({
+  const { menuRef, mountEl, reposition } = useHarvyWriterContextMenuPortal({
     editor,
     anchor: panelAnchor,
     placement: "beside-below-end",
@@ -149,7 +149,7 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
     }
   }, [anchor, clearFadeOutTimer, panelAnchor]);
 
-  const anchorFromCurrentSelection = useCallback((): HarvyContextMenuAnchorRange | null => {
+  const anchorFromCurrentSelection = useCallback((): HarvyWriterContextMenuAnchorRange | null => {
     if (linkOpenRef.current && linkSelectionRef.current) {
       return linkSelectionRef.current;
     }
@@ -381,8 +381,8 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
   const ed = editor;
 
   return (
-    <HarvyContextMenuPortal mountEl={mountEl}>
-      <HarvyContextMenuShell
+    <HarvyWriterContextMenuPortal mountEl={mountEl}>
+      <HarvyWriterContextMenuShell
         menuRef={menuRef}
         role={linkOpen ? "dialog" : "toolbar"}
         ariaLabel={linkOpen ? "Edit link" : "Text formatting"}
@@ -519,7 +519,7 @@ export function FloatingTextMenu({ editor, isEditable, onApplyFormat }: Floating
             )}
           </>
         )}
-      </HarvyContextMenuShell>
-    </HarvyContextMenuPortal>
+      </HarvyWriterContextMenuShell>
+    </HarvyWriterContextMenuPortal>
   );
 }

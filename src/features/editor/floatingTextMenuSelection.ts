@@ -18,17 +18,17 @@ function domSelectionTouchesImageBlock(): boolean {
   return Boolean(el?.closest(IMAGE_BLOCK_SELECTOR));
 }
 
-function proseMirrorSelectionTouchesHarvyImage(editor: Editor): boolean {
+function proseMirrorSelectionTouchesHarvyWriterImage(editor: Editor): boolean {
   const { selection, doc } = editor.state;
 
-  if (selection instanceof NodeSelection && selection.node.type.name === "harvyImage") {
+  if (selection instanceof NodeSelection && selection.node.type.name === "harvyWriterImage") {
     return true;
   }
 
   const testPos = (pos: number): boolean => {
     const $pos = doc.resolve(pos);
     for (let depth = $pos.depth; depth >= 0; depth--) {
-      if ($pos.node(depth).type.name === "harvyImage") return true;
+      if ($pos.node(depth).type.name === "harvyWriterImage") return true;
     }
     return false;
   };
@@ -42,7 +42,7 @@ function proseMirrorSelectionTouchesHarvyImage(editor: Editor): boolean {
  */
 export function isTextFormattingSelection(editor: Editor): boolean {
   if (domSelectionTouchesImageBlock()) return false;
-  if (proseMirrorSelectionTouchesHarvyImage(editor)) return false;
+  if (proseMirrorSelectionTouchesHarvyWriterImage(editor)) return false;
 
   const { selection } = editor.state;
   if (!(selection instanceof TextSelection) || selection.empty) return false;

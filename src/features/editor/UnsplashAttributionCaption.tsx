@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react";
-import { openExternalHref, resolveUnsplashWebsiteUrl } from "./harvyImageAttribution";
+import { openExternalHref, resolveUnsplashWebsiteUrl } from "./harvyWriterImageAttribution";
 
 type UnsplashAttributionCaptionProps = {
   photographerName: string;

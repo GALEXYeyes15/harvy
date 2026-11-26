@@ -25,7 +25,7 @@ export type NativeAppMenuOptions = {
 /**
  * Installs a native application / window menu (macOS menu bar when applicable).
  *
- * Save As opens Harvy’s in-app Save As sheet; choosing Where uses the native folder picker.
+ * Save As opens Harvy Writer’s in-app Save As sheet; choosing Where uses the native folder picker.
  * Rebuild when Research, Focus, or Export availability changes so items stay in sync.
  */
 export async function setupNativeAppMenu(options: NativeAppMenuOptions = {}): Promise<void> {
@@ -39,7 +39,7 @@ export async function setupNativeAppMenu(options: NativeAppMenuOptions = {}): Pr
   const notionSyncRunning = options.notionSyncRunning ?? false;
 
   const harvy = await Submenu.new({
-    text: "Harvy",
+    text: "Harvy Writer",
     items: [
       await PredefinedMenuItem.new({
         item: { About: null },

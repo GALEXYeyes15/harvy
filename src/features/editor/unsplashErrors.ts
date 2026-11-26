@@ -1,5 +1,5 @@
 export const UNSPLASH_MISSING_KEY_MESSAGE =
-  "Missing Unsplash API key. Add UNSPLASH_ACCESS_KEY to .env.local and restart Harvy.";
+  "Missing Unsplash API key. Add UNSPLASH_ACCESS_KEY to .env.local and restart Harvy Writer.";
 
 const MISSING_KEY_RE =
   /UNSPLASH_ACCESS_KEY|not configured|Missing Unsplash API key/i;

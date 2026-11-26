@@ -1,19 +1,19 @@
 import type { EditorView } from "@tiptap/pm/view";
 
-export type HarvyContextMenuItem = {
+export type HarvyWriterContextMenuItem = {
   label: string;
   onClick: () => void;
   disabled?: boolean;
 };
 
-export type HarvyContextMenuSection = HarvyContextMenuItem[];
+export type HarvyWriterContextMenuSection = HarvyWriterContextMenuItem[];
 
-export type HarvyContextMenuAnchorRange = {
+export type HarvyWriterContextMenuAnchorRange = {
   from: number;
   to: number;
 };
 
-export type HarvyContextMenuPlacement = "below-start" | "beside-below-end";
+export type HarvyWriterContextMenuPlacement = "below-start" | "beside-below-end";
 
 export const HARVY_CONTEXT_MENU_CLASS = "harvy-context-menu";
 export const HARVY_CONTEXT_MENU_ITEM_CLASS = "harvy-context-menu-item";
@@ -41,7 +41,7 @@ export function findScrollableAncestors(el: HTMLElement): HTMLElement[] {
 }
 
 /** Content wrapper inside the editor scroll column (scrolls with document text). */
-export function getHarvyContextMenuMount(view: EditorView): HTMLElement | null {
+export function getHarvyWriterContextMenuMount(view: EditorView): HTMLElement | null {
   const editorEl = view.dom;
   if (!editorEl?.isConnected) return null;
 
@@ -60,21 +60,21 @@ export function getHarvyContextMenuMount(view: EditorView): HTMLElement | null {
  * Same mount as mechanics underlines (sibling of ProseMirror) so popovers share
  * the underline coordinate space — left edge lines up with the green bar.
  */
-export function getHarvyUnderlineAlignedMount(view: EditorView): HTMLElement | null {
+export function getHarvyWriterUnderlineAlignedMount(view: EditorView): HTMLElement | null {
   const editorEl = view.dom;
   if (!editorEl?.isConnected) return null;
   return editorEl.parentElement;
 }
 
-export function ensureHarvyContextMenuMount(mount: HTMLElement): void {
+export function ensureHarvyWriterContextMenuMount(mount: HTMLElement): void {
   if (window.getComputedStyle(mount).position === "static") {
     mount.style.position = "relative";
   }
 }
 
-export function isHarvyContextMenuAnchorVisible(
+export function isHarvyWriterContextMenuAnchorVisible(
   view: EditorView,
-  anchor: HarvyContextMenuAnchorRange,
+  anchor: HarvyWriterContextMenuAnchorRange,
 ): boolean {
   try {
     const start = view.coordsAtPos(anchor.from, 1);
@@ -171,12 +171,12 @@ function popupMaxRightViewport(): number {
 }
 
 /** Position a menu inside the editor mount from the current document range. */
-export function placeHarvyContextMenu(
+export function placeHarvyWriterContextMenu(
   menuEl: HTMLElement,
   view: EditorView,
   mount: HTMLElement,
-  anchor: HarvyContextMenuAnchorRange,
-  placement: HarvyContextMenuPlacement = "below-start",
+  anchor: HarvyWriterContextMenuAnchorRange,
+  placement: HarvyWriterContextMenuPlacement = "below-start",
 ): void {
   const start = view.coordsAtPos(anchor.from, 1);
   const end = view.coordsAtPos(anchor.to, -1);
@@ -227,7 +227,7 @@ export function placeHarvyContextMenu(
 }
 
 /** Position a menu below an HTMLElement (title/subtitle fields, etc.). */
-export function placeHarvyContextMenuForElement(
+export function placeHarvyWriterContextMenuForElement(
   menuEl: HTMLElement,
   mount: HTMLElement,
   element: HTMLElement,
@@ -250,16 +250,16 @@ export function placeHarvyContextMenuForElement(
   menuEl.style.top = `${Math.max(0, top)}px`;
 }
 
-export function createHarvyContextMenuElement(): HTMLDivElement {
+export function createHarvyWriterContextMenuElement(): HTMLDivElement {
   const el = document.createElement("div");
   el.className = HARVY_CONTEXT_MENU_CLASS;
   el.setAttribute("role", "menu");
   return el;
 }
 
-export function appendHarvyContextMenuSections(
+export function appendHarvyWriterContextMenuSections(
   menuEl: HTMLElement,
-  sections: HarvyContextMenuSection[],
+  sections: HarvyWriterContextMenuSection[],
   runAction: (onClick: () => void) => void,
 ): void {
   sections.forEach((section, sectionIndex) => {
@@ -294,43 +294,43 @@ export function appendHarvyContextMenuSections(
   });
 }
 
-export type HarvyContextMenuSession = {
+export type HarvyWriterContextMenuSession = {
   menuEl: HTMLDivElement;
   mount: HTMLElement;
   view: EditorView;
-  anchor: HarvyContextMenuAnchorRange;
-  placement: HarvyContextMenuPlacement;
+  anchor: HarvyWriterContextMenuAnchorRange;
+  placement: HarvyWriterContextMenuPlacement;
   cleanups: Array<() => void>;
 };
 
-let activeSession: HarvyContextMenuSession | null = null;
+let activeSession: HarvyWriterContextMenuSession | null = null;
 
-function clearSessionCleanups(session: HarvyContextMenuSession): void {
+function clearSessionCleanups(session: HarvyWriterContextMenuSession): void {
   for (const cleanup of session.cleanups) cleanup();
   session.cleanups.length = 0;
 }
 
-export function closeHarvyContextMenu(): void {
+export function closeHarvyWriterContextMenu(): void {
   if (!activeSession) return;
   clearSessionCleanups(activeSession);
   activeSession.menuEl.remove();
   activeSession = null;
 }
 
-export function getActiveHarvyContextMenu(): HarvyContextMenuSession | null {
+export function getActiveHarvyWriterContextMenu(): HarvyWriterContextMenuSession | null {
   return activeSession;
 }
 
-export function attachHarvyContextMenuListeners(
-  session: HarvyContextMenuSession,
+export function attachHarvyWriterContextMenuListeners(
+  session: HarvyWriterContextMenuSession,
   onClose: () => void,
 ): void {
   const reposition = () => {
-    if (!isHarvyContextMenuAnchorVisible(session.view, session.anchor)) {
+    if (!isHarvyWriterContextMenuAnchorVisible(session.view, session.anchor)) {
       onClose();
       return;
     }
-    placeHarvyContextMenu(
+    placeHarvyWriterContextMenu(
       session.menuEl,
       session.view,
       session.mount,
@@ -367,44 +367,44 @@ export function attachHarvyContextMenuListeners(
   session.cleanups.push(() => session.view.dom.removeEventListener("input", onInput));
 }
 
-export function openHarvyContextMenu(opts: {
+export function openHarvyWriterContextMenu(opts: {
   view: EditorView;
-  anchor: HarvyContextMenuAnchorRange;
-  sections: HarvyContextMenuSection[];
-  placement?: HarvyContextMenuPlacement;
+  anchor: HarvyWriterContextMenuAnchorRange;
+  sections: HarvyWriterContextMenuSection[];
+  placement?: HarvyWriterContextMenuPlacement;
   onAction?: () => void;
   className?: string;
   /** Prefer the ProseMirror parent (same as underlines) so left edges line up. */
   alignToUnderlineMount?: boolean;
 }): void {
-  closeHarvyContextMenu();
+  closeHarvyWriterContextMenu();
 
   const mount = opts.alignToUnderlineMount
-    ? getHarvyUnderlineAlignedMount(opts.view) ?? getHarvyContextMenuMount(opts.view)
-    : getHarvyContextMenuMount(opts.view);
+    ? getHarvyWriterUnderlineAlignedMount(opts.view) ?? getHarvyWriterContextMenuMount(opts.view)
+    : getHarvyWriterContextMenuMount(opts.view);
   if (!mount) return;
 
-  ensureHarvyContextMenuMount(mount);
+  ensureHarvyWriterContextMenuMount(mount);
 
-  const menuEl = createHarvyContextMenuElement();
+  const menuEl = createHarvyWriterContextMenuElement();
   if (opts.className) {
     menuEl.classList.add(opts.className);
   }
   const runAction = (onClick: () => void) => {
-    closeHarvyContextMenu();
+    closeHarvyWriterContextMenu();
     onClick();
     opts.onAction?.();
     opts.view.focus();
   };
 
-  appendHarvyContextMenuSections(menuEl, opts.sections, runAction);
+  appendHarvyWriterContextMenuSections(menuEl, opts.sections, runAction);
 
   const placement = opts.placement ?? "below-start";
   // Attach first so offsetWidth/height and absolute containing block are correct.
   mount.appendChild(menuEl);
-  placeHarvyContextMenu(menuEl, opts.view, mount, opts.anchor, placement);
+  placeHarvyWriterContextMenu(menuEl, opts.view, mount, opts.anchor, placement);
 
-  const session: HarvyContextMenuSession = {
+  const session: HarvyWriterContextMenuSession = {
     menuEl,
     mount,
     view: opts.view,
@@ -414,34 +414,34 @@ export function openHarvyContextMenu(opts: {
   };
 
   activeSession = session;
-  attachHarvyContextMenuListeners(session, closeHarvyContextMenu);
+  attachHarvyWriterContextMenuListeners(session, closeHarvyWriterContextMenu);
 }
 
-export function openHarvyContextMenuAt(opts: {
+export function openHarvyWriterContextMenuAt(opts: {
   view: EditorView;
-  anchor: HarvyContextMenuAnchorRange;
-  placement?: HarvyContextMenuPlacement;
+  anchor: HarvyWriterContextMenuAnchorRange;
+  placement?: HarvyWriterContextMenuPlacement;
   className?: string;
   onAction?: () => void;
   alignToUnderlineMount?: boolean;
   populate: (menuEl: HTMLDivElement, runAction: (onClick: () => void) => void) => void;
 }): void {
-  closeHarvyContextMenu();
+  closeHarvyWriterContextMenu();
 
   const mount = opts.alignToUnderlineMount
-    ? getHarvyUnderlineAlignedMount(opts.view) ?? getHarvyContextMenuMount(opts.view)
-    : getHarvyContextMenuMount(opts.view);
+    ? getHarvyWriterUnderlineAlignedMount(opts.view) ?? getHarvyWriterContextMenuMount(opts.view)
+    : getHarvyWriterContextMenuMount(opts.view);
   if (!mount) return;
 
-  ensureHarvyContextMenuMount(mount);
+  ensureHarvyWriterContextMenuMount(mount);
 
-  const menuEl = createHarvyContextMenuElement();
+  const menuEl = createHarvyWriterContextMenuElement();
   if (opts.className) {
     menuEl.classList.add(opts.className);
   }
 
   const runAction = (onClick: () => void) => {
-    closeHarvyContextMenu();
+    closeHarvyWriterContextMenu();
     onClick();
     opts.onAction?.();
     opts.view.focus();
@@ -451,9 +451,9 @@ export function openHarvyContextMenuAt(opts: {
 
   const placement = opts.placement ?? "below-start";
   mount.appendChild(menuEl);
-  placeHarvyContextMenu(menuEl, opts.view, mount, opts.anchor, placement);
+  placeHarvyWriterContextMenu(menuEl, opts.view, mount, opts.anchor, placement);
 
-  const session: HarvyContextMenuSession = {
+  const session: HarvyWriterContextMenuSession = {
     menuEl,
     mount,
     view: opts.view,
@@ -463,5 +463,5 @@ export function openHarvyContextMenuAt(opts: {
   };
 
   activeSession = session;
-  attachHarvyContextMenuListeners(session, closeHarvyContextMenu);
+  attachHarvyWriterContextMenuListeners(session, closeHarvyWriterContextMenu);
 }
