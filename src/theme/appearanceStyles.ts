@@ -22,6 +22,8 @@ const LEGACY_CYBER_STYLE_KEY = "harvy:cyber-style:v1";
 const LEGACY_CYBER_STYLE_ID = "cyber";
 const CLASSIC_TYPOGRAPHY_KEY = "harvy:classic-typography:v1";
 const LEGACY_THEME_KEY = "harvy-theme";
+/** Last non–E-ink theme, restored when Display switches back to Color. */
+const LAST_COLOR_STYLE_ID_KEY = "harvy:last-color-style";
 
 /** Built-in default style (warm paper / charcoal). */
 export const CLASSIC_STYLE_ID = "classic";
@@ -369,6 +371,25 @@ export function readStoredAppearanceStyleId(): AppearanceStyleId {
 export function writeStoredAppearanceStyleId(id: AppearanceStyleId) {
   if (typeof window === "undefined") return;
   localStorage.setItem(STYLE_ID_KEY, id);
+  if (id !== EINK_STYLE_ID) {
+    try {
+      localStorage.setItem(LAST_COLOR_STYLE_ID_KEY, id);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/** The color theme to return to when leaving E-ink (Classic if none or it was deleted). */
+export function readLastColorAppearanceStyleId(): AppearanceStyleId {
+  if (typeof window === "undefined") return CLASSIC_STYLE_ID;
+  try {
+    const raw = localStorage.getItem(LAST_COLOR_STYLE_ID_KEY);
+    if (!raw || raw === EINK_STYLE_ID || raw === CLASSIC_STYLE_ID) return CLASSIC_STYLE_ID;
+    return readCustomAppearanceStyles().some((s) => s.id === raw) ? raw : CLASSIC_STYLE_ID;
+  } catch {
+    return CLASSIC_STYLE_ID;
+  }
 }
 
 export function readCustomAppearanceStyles(): CustomAppearanceStyle[] {

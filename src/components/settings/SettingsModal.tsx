@@ -36,6 +36,7 @@ import {
   applyAppearanceStyle,
   CLASSIC_STYLE_ID,
   EINK_STYLE_ID,
+  readLastColorAppearanceStyleId,
   duplicateAppearanceStyle,
   deleteCustomAppearanceStyle,
   builtInClassicAppearanceStyle,
@@ -1137,8 +1138,7 @@ function AppearancePanel({
     };
   }, []);
 
-  const einkStyle = builtInEinkAppearanceStyle();
-  const einkPreview = resolvedTheme === "dark" ? einkStyle.dark : einkStyle.light;
+  const einkActive = appearanceStyleId === EINK_STYLE_ID && !editor;
 
   return (
     <div className="space-y-5">
@@ -1149,7 +1149,7 @@ function AppearancePanel({
 
       <div>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-          System
+          Text
         </p>
         <div className={`rounded-xl bg-mist px-3.5 ${SETTINGS_OUTLINE} ${SETTINGS_DIVIDE_Y}`}>
           <div className="flex items-center justify-between gap-4 py-3">
@@ -1168,13 +1168,13 @@ function AppearancePanel({
             />
           </div>
           <div className="flex items-center justify-between gap-4 py-3">
-            <p className="text-[13px] font-medium text-ink">Line expansion</p>
+            <p className="text-[13px] font-medium text-ink">Line spacing</p>
             <TypographyStepper
               value={systemTypography.lineExpansionPx}
               min={SYSTEM_LINE_EXPANSION_LIMITS.min}
               max={SYSTEM_LINE_EXPANSION_LIMITS.max}
               step={SYSTEM_LINE_EXPANSION_LIMITS.step}
-              ariaLabel="Line expansion"
+              ariaLabel="Line spacing"
               onChange={(lineExpansionPx) => {
                 const next = writeSystemTypography({ lineExpansionPx });
                 setSystemTypography(next);
@@ -1186,70 +1186,98 @@ function AppearancePanel({
 
       <div>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
-          Themes
+          Display
         </p>
-        <div className="flex flex-wrap gap-3" role="list">
-          <StylePreviewCard
-            label="Classic Light"
-            subtitle={!systemPrefersDark ? "(System)" : undefined}
-            selected={classicLightSelected}
-            bodyFontId="libre-baskerville"
-            previewStyle={{ backgroundColor: "#faf7f2", color: "#2a2622" }}
-            onSelect={selectClassicLight}
-            onEdit={openEditClassic}
-          />
-          <StylePreviewCard
-            label="Classic Dark"
-            subtitle={systemPrefersDark ? "(System)" : undefined}
-            selected={classicDarkSelected}
-            bodyFontId="libre-baskerville"
-            previewStyle={{ backgroundColor: "#191919", color: "#e5e5e5" }}
-            onSelect={selectClassicDark}
-            onEdit={openEditClassic}
-          />
-          <StylePreviewCard
-            label="E-ink"
-            subtitle={resolvedTheme === "dark" ? "Night" : "Light"}
-            selected={appearanceStyleId === EINK_STYLE_ID}
-            bodyFontId={resolveStyleBodyFont(einkStyle)}
-            previewStyle={{
-              backgroundColor: einkPreview.page,
-              color: einkPreview.ink,
-            }}
-            onSelect={() => selectStyle(EINK_STYLE_ID)}
-          />
-          {customStyles.map((style) => {
-            const previewSource = editor?.id === style.id ? editor : style;
-            const palette = resolvedTheme === "dark" ? previewSource.dark : previewSource.light;
-            return (
-              <StylePreviewCard
-                key={style.id}
-                label={previewSource.name}
-                selected={appearanceStyleId === style.id}
-                bodyFontId={resolveStyleBodyFont(previewSource)}
-                previewStyle={{
-                  backgroundColor: palette.page,
-                  color: palette.ink,
-                }}
-                onSelect={() => selectStyle(style.id)}
-                onEdit={() => openEditStyle(style)}
+        <div className={`rounded-xl bg-mist px-3.5 ${SETTINGS_OUTLINE} ${SETTINGS_DIVIDE_Y}`}>
+          <div className="flex items-center justify-between gap-4 py-3">
+            <p className="text-[13px] font-medium text-ink">Style</p>
+            <SettingsSegmented
+              ariaLabel="Display style"
+              value={einkActive ? "eink" : "color"}
+              options={[
+                { id: "color", label: "Color" },
+                { id: "eink", label: "E-ink" },
+              ]}
+              onChange={(next) =>
+                selectStyle(next === "eink" ? EINK_STYLE_ID : readLastColorAppearanceStyleId())
+              }
+            />
+          </div>
+          {einkActive ? (
+            <div className="flex items-center justify-between gap-4 py-3">
+              <p className="text-[13px] font-medium text-ink">Mode</p>
+              <SettingsSegmented
+                ariaLabel="E-ink mode"
+                value={themeMode}
+                options={[
+                  { id: "system", label: "Auto" },
+                  { id: "light", label: "Light" },
+                  { id: "dark", label: "Dark" },
+                ]}
+                onChange={onThemeModeChange}
               />
-            );
-          })}
-          <button
-            type="button"
-            role="listitem"
-            onClick={openNewStyle}
-            className="group flex w-[5.25rem] flex-col items-center gap-1.5"
-            aria-label="Add new theme"
-          >
-            <span className="flex h-[4.75rem] w-[4.75rem] items-center justify-center rounded-xl bg-mist text-[1.75rem] font-light text-ink/70 transition-colors group-hover:text-ink">
-              +
-            </span>
-            <span className="text-center text-[12px] text-muted/80">Add New</span>
-          </button>
+            </div>
+          ) : null}
         </div>
       </div>
+
+      {!einkActive ? (
+        <div>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
+            Themes
+          </p>
+          <div className="flex flex-wrap gap-3" role="list">
+            <StylePreviewCard
+              label="Classic Light"
+              subtitle={!systemPrefersDark ? "(System)" : undefined}
+              selected={classicLightSelected}
+              bodyFontId="libre-baskerville"
+              previewStyle={{ backgroundColor: "#faf7f2", color: "#2a2622" }}
+              onSelect={selectClassicLight}
+              onEdit={openEditClassic}
+            />
+            <StylePreviewCard
+              label="Classic Dark"
+              subtitle={systemPrefersDark ? "(System)" : undefined}
+              selected={classicDarkSelected}
+              bodyFontId="libre-baskerville"
+              previewStyle={{ backgroundColor: "#191919", color: "#e5e5e5" }}
+              onSelect={selectClassicDark}
+              onEdit={openEditClassic}
+            />
+            {customStyles.map((style) => {
+              const previewSource = editor?.id === style.id ? editor : style;
+              const palette = resolvedTheme === "dark" ? previewSource.dark : previewSource.light;
+              return (
+                <StylePreviewCard
+                  key={style.id}
+                  label={previewSource.name}
+                  selected={appearanceStyleId === style.id}
+                  bodyFontId={resolveStyleBodyFont(previewSource)}
+                  previewStyle={{
+                    backgroundColor: palette.page,
+                    color: palette.ink,
+                  }}
+                  onSelect={() => selectStyle(style.id)}
+                  onEdit={() => openEditStyle(style)}
+                />
+              );
+            })}
+            <button
+              type="button"
+              role="listitem"
+              onClick={openNewStyle}
+              className="group flex w-[5.25rem] flex-col items-center gap-1.5"
+              aria-label="Add new theme"
+            >
+              <span className="flex h-[4.75rem] w-[4.75rem] items-center justify-center rounded-xl bg-mist text-[1.75rem] font-light text-ink/70 transition-colors group-hover:text-ink">
+                +
+              </span>
+              <span className="text-center text-[12px] text-muted/80">Add New</span>
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {editor ? (
         <StyleEditorForm
@@ -1270,6 +1298,46 @@ function AppearancePanel({
           }
         />
       ) : null}
+    </div>
+  );
+}
+
+function SettingsSegmented<T extends string>({
+  ariaLabel,
+  value,
+  options,
+  onChange,
+}: {
+  ariaLabel: string;
+  value: T;
+  options: { id: T; label: string }[];
+  onChange: (next: T) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      className="flex shrink-0 items-center gap-0.5 rounded-xl bg-canvas/55 p-1 ring-1 ring-line/20 dark:bg-black/35 dark:ring-white/10"
+    >
+      {options.map((option) => {
+        const active = option.id === value;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(option.id)}
+            className={
+              active
+                ? "rounded-lg bg-[color:color-mix(in_oklab,var(--color-ink)_12%,transparent)] px-3 py-1 text-[13px] font-medium text-ink"
+                : "rounded-lg px-3 py-1 text-[13px] text-muted/80 transition-colors hover:text-ink"
+            }
+          >
+            {option.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

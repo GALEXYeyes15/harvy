@@ -3496,15 +3496,6 @@ html.eink .harvy-outlier-thumb--cool {
   background-image: none !important;
 }
 
-html.eink .bg-ink\/\[0\.22\],
-html.eink .bg-black\/30,
-html.eink .backdrop-blur-\[1px\],
-html.eink .backdrop-blur-sm {
-  background-color: color-mix(in srgb, var(--color-canvas) 82%, var(--color-ink)) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
 html.eink .bg-white {
   background-color: var(--color-ink) !important;
 }
@@ -3591,6 +3582,17 @@ html.eink *::after {
   transition-timing-function: ease !important;
   animation-duration: 120ms !important;
   animation-timing-function: ease !important;
+}
+
+/* Keep the overlay backdrop blur from Color (the rule above strips backdrop filters). */
+html.eink .backdrop-blur-\[1px\] {
+  backdrop-filter: blur(1px) !important;
+  -webkit-backdrop-filter: blur(1px) !important;
+}
+
+html.eink .backdrop-blur-sm {
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
