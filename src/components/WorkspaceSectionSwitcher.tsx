@@ -124,13 +124,9 @@ export function WorkspaceSectionSwitcher({
             aria-current={active ? "page" : undefined}
             aria-label={label}
             title={label}
-            className={`flex h-8 w-8 items-center justify-center transition-colors ${
+            className={`flex h-8 w-8 items-center justify-center text-accent transition-opacity ${
               chromeHidden ? "pointer-events-none" : "pointer-events-auto"
-            } ${
-              active
-                ? "text-ink dark:text-white"
-                : "text-accent hover:text-ink dark:hover:text-white"
-            }`}
+            } ${active ? "opacity-100" : "opacity-60 hover:opacity-100"}`}
           >
             <Icon aria-hidden size={17} strokeWidth={1.5} />
           </button>

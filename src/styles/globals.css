@@ -387,7 +387,6 @@
   }
 
   .harvy-doc-subtitle {
-    margin-top: 0.55rem;
     font-size: 1.2rem;
     font-weight: 400;
     line-height: 1.35;
@@ -395,8 +394,53 @@
     color: color-mix(in oklab, var(--color-muted) 55%, var(--color-ink));
   }
 
-  .harvy-doc-subtitle--solo {
+  /* Title / Subtitle wrappers — hold the hover copy button. */
+  .harvy-doc-field {
+    position: relative;
+  }
+
+  .harvy-doc-field--subtitle {
+    margin-top: 0.55rem;
+  }
+
+  .harvy-doc-field--solo {
     margin-top: 0;
+  }
+
+  /* Copy button: an opaque chip over the field's top-left corner; appears on hover / focus. */
+  .harvy-doc-copy {
+    position: absolute;
+    top: -0.2rem;
+    left: -1.6rem;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 0.45rem;
+    color: color-mix(in oklab, var(--color-ink) 85%, transparent);
+    background: color-mix(in oklab, var(--color-ink) 7%, var(--color-page));
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease;
+  }
+
+  .harvy-doc-field:hover .harvy-doc-copy,
+  .harvy-doc-copy:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .harvy-doc-copy:hover {
+    color: var(--color-ink);
+    background: color-mix(in oklab, var(--color-ink) 13%, var(--color-page));
+  }
+
+  .harvy-doc-copy:disabled,
+  .harvy-doc-copy--typing {
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 
   html.dark .harvy-doc-subtitle {

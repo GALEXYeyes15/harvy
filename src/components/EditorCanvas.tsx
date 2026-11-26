@@ -16,6 +16,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { DocHeaderCopyButton } from "./DocHeaderCopyButton";
 import { handleBackspaceOnEmptyTextBlockKeyDown } from "../features/editor/emptyTextBlockDeletion";
 import { EmptyTextBlockBackspace } from "../features/editor/emptyTextBlockBackspace";
 import {
@@ -801,7 +802,8 @@ export function EditorCanvas({
           {showPostTitle || showSubtitle ? (
             <div className="harvy-doc-header shrink-0">
               {showPostTitle ? (
-                <>
+                <div className="harvy-doc-field">
+                  <DocHeaderCopyButton text={postTitle} label="Title" />
                   <label htmlFor="harvy-post-title" className="sr-only">
                     Title
                   </label>
@@ -841,10 +843,13 @@ export function EditorCanvas({
                     ref={autosizeTextarea}
                     className="harvy-doc-title"
                   />
-                </>
+                </div>
               ) : null}
               {showSubtitle ? (
-                <>
+                <div
+                  className={`harvy-doc-field harvy-doc-field--subtitle${showPostTitle ? "" : " harvy-doc-field--solo"}`}
+                >
+                  <DocHeaderCopyButton text={subtitle} label="Subtitle" />
                   <label htmlFor="harvy-post-subtitle" className="sr-only">
                     Subtitle
                   </label>
@@ -878,9 +883,9 @@ export function EditorCanvas({
                       el.style.height = `${el.scrollHeight}px`;
                     }}
                     ref={autosizeTextarea}
-                    className={`harvy-doc-subtitle${showPostTitle ? "" : " harvy-doc-subtitle--solo"}`}
+                    className="harvy-doc-subtitle"
                   />
-                </>
+                </div>
               ) : null}
             </div>
           ) : null}
