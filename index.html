@@ -12,15 +12,9 @@
         try {
           var theme = localStorage.getItem("harvy-theme");
           var style = localStorage.getItem("harvy-style") || "classic";
-          if (theme === "cyber") {
-            theme = "dark";
-            if (!localStorage.getItem("harvy-style")) {
-              style = "cyber";
-              localStorage.setItem("harvy-style", "cyber");
-            }
-            localStorage.setItem("harvy-theme", "dark");
-          }
-          if (style === "default") style = "classic";
+          // Cyber was removed; the app migrates saved Cyber edits after load.
+          if (theme === "cyber") theme = "dark";
+          if (style === "default" || style === "cyber") style = "classic";
           var systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
           var resolved =
             theme === "light" || theme === "dark" ? theme : systemDark ? "dark" : "light";
@@ -28,7 +22,6 @@
           root.dataset.theme = resolved;
           root.dataset.style = style;
           root.classList.toggle("dark", resolved === "dark");
-          root.classList.toggle("cyber", style === "cyber");
         } catch (_) {}
       })();
     </script>

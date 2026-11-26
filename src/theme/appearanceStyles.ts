@@ -2,7 +2,6 @@ import type { ResolvedTheme } from "./themeMode";
 import {
   appearanceBodyFontStack,
   bodyFontFromLegacyMono,
-  CYBER_BODY_FONT_ID,
   DEFAULT_BODY_FONT_ID,
   ensureAppearanceBodyFontLoaded,
   isAppearanceBodyFontId,
@@ -18,7 +17,9 @@ export type { AppearanceBodyFontId };
 
 const STYLE_ID_KEY = "harvy-style";
 const CUSTOM_STYLES_KEY = "harvy:appearance-styles:v1";
-const CYBER_STYLE_KEY = "harvy:cyber-style:v1";
+/** Saved edits to the removed Cyber theme; migrated into a custom theme. */
+const LEGACY_CYBER_STYLE_KEY = "harvy:cyber-style:v1";
+const LEGACY_CYBER_STYLE_ID = "cyber";
 const CLASSIC_TYPOGRAPHY_KEY = "harvy:classic-typography:v1";
 const LEGACY_THEME_KEY = "harvy-theme";
 
@@ -26,7 +27,6 @@ const LEGACY_THEME_KEY = "harvy-theme";
 export const CLASSIC_STYLE_ID = "classic";
 /** @deprecated Prefer `CLASSIC_STYLE_ID` — kept for call sites that meant “default style”. */
 export const DEFAULT_STYLE_ID = CLASSIC_STYLE_ID;
-export const CYBER_STYLE_ID = "cyber";
 /** Warm paper by day, amber/sepia at night. Follows the resolved light/dark theme. */
 export const EINK_STYLE_ID = "eink";
 
@@ -45,7 +45,7 @@ export type StylePalette = {
   focusRing: string;
 };
 
-/** Editor body typography stored on custom / cyber styles. */
+/** Editor body typography stored on custom styles. */
 export type StyleTypography = {
   fontSizePx: number;
   letterSpacingPx: number;
@@ -125,7 +125,7 @@ export function resolveStyleTypography(style: Pick<
 export function resolveStyleBodyFont(style: CustomAppearanceStyle): AppearanceBodyFontId {
   if (isAppearanceBodyFontId(style.bodyFont)) return style.bodyFont;
   if (style.monoContent !== undefined) return bodyFontFromLegacyMono(style.monoContent);
-  return style.id === CYBER_STYLE_ID ? CYBER_BODY_FONT_ID : DEFAULT_BODY_FONT_ID;
+  return DEFAULT_BODY_FONT_ID;
 }
 
 const TOKEN_VARS: Array<[keyof StylePalette, string]> = [
@@ -167,32 +167,6 @@ export const DEFAULT_DARK_PALETTE: StylePalette = {
   focusRing: "#787878",
 };
 
-export const CYBER_LIGHT_PALETTE: StylePalette = {
-  canvas: "#f2fbfb",
-  panel: "#f2fbfb",
-  stage: "#f2fbfb",
-  mist: "#e8f7f7",
-  page: "#ffffff",
-  ink: "#062828",
-  muted: "#3a7a7a",
-  accent: "#12b0b0",
-  line: "#7dfdfe66",
-  focusRing: "#12b0b0",
-};
-
-export const CYBER_DARK_PALETTE: StylePalette = {
-  canvas: "#000707",
-  panel: "#000707",
-  stage: "#000707",
-  mist: "#000c0c",
-  page: "#001010",
-  ink: "#e8ffff",
-  muted: "#7dfdfe",
-  accent: "#7dfdfe",
-  line: "#7dfdfe33",
-  focusRing: "#7dfdfe",
-};
-
 /** Light E-ink. Surfaces share one paper so chrome doesn’t stripe. Accent is the icon/caret color. */
 export const EINK_LIGHT_PALETTE: StylePalette = {
   canvas: "#F4F1EA",
@@ -223,23 +197,6 @@ export const EINK_DARK_PALETTE: StylePalette = {
   line: "#3A3328",
   focusRing: "#D9C9A8",
 };
-
-export function builtInCyberAppearanceStyle(): CustomAppearanceStyle {
-  const seeds: StyleBasics = {
-    canvas: CYBER_DARK_PALETTE.canvas,
-    ink: CYBER_DARK_PALETTE.ink,
-    muted: CYBER_DARK_PALETTE.mist,
-    accent: CYBER_DARK_PALETTE.accent,
-  };
-  return {
-    id: CYBER_STYLE_ID,
-    name: "Cyber",
-    seeds,
-    light: { ...CYBER_LIGHT_PALETTE },
-    dark: { ...CYBER_DARK_PALETTE },
-    bodyFont: CYBER_BODY_FONT_ID,
-  };
-}
 
 export function builtInEinkAppearanceStyle(): CustomAppearanceStyle {
   return {
@@ -348,100 +305,46 @@ export function styleWithSeeds(
   return { ...style, seeds: { ...seeds }, light, dark };
 }
 
-/** Cyber with any user edits applied (falls back to built-in palettes). */
-export function readCyberAppearanceStyle(): CustomAppearanceStyle {
-  const defaults = builtInCyberAppearanceStyle();
-  if (typeof window === "undefined") return defaults;
-  try {
-    const raw = localStorage.getItem(CYBER_STYLE_KEY);
-    if (!raw) return defaults;
-    const parsed = JSON.parse(raw) as Partial<CustomAppearanceStyle>;
-    if (isStyleBasics(parsed.seeds)) {
-      const typography = resolveStyleTypography(parsed);
-      return styleWithSeeds(
-        {
-          ...defaults,
-          name:
-            typeof parsed.name === "string" && parsed.name.trim()
-              ? parsed.name.trim()
-              : defaults.name,
-          bodyFont: isAppearanceBodyFontId(parsed.bodyFont)
-            ? parsed.bodyFont
-            : bodyFontFromLegacyMono(parsed.monoContent),
-          ...typography,
-        },
-        parsed.seeds,
-      );
-    }
-    if (!isStylePalette(parsed.light) || !isStylePalette(parsed.dark)) return defaults;
-    const light = normalizeStylePalette(parsed.light)!;
-    const dark = normalizeStylePalette(parsed.dark)!;
-    const typography = resolveStyleTypography(parsed);
-    return {
-      id: CYBER_STYLE_ID,
-      name:
-        typeof parsed.name === "string" && parsed.name.trim()
-          ? parsed.name.trim()
-          : "Cyber",
-      seeds: {
-        canvas: light.canvas,
-        ink: light.ink,
-        muted: light.mist !== light.canvas ? light.mist : light.muted,
-        accent: light.accent,
-      },
-      light,
-      dark,
-      bodyFont: isAppearanceBodyFontId(parsed.bodyFont)
-        ? parsed.bodyFont
-        : bodyFontFromLegacyMono(parsed.monoContent),
-      ...typography,
-    };
-  } catch {
-    return defaults;
-  }
-}
-
-export function writeCyberAppearanceStyle(style: CustomAppearanceStyle) {
-  if (typeof window === "undefined") return;
-  const seeds = seedsFromStyle(style);
-  const next = styleWithSeeds(style, seeds);
-  const typography = resolveStyleTypography(next);
-  localStorage.setItem(
-    CYBER_STYLE_KEY,
-    JSON.stringify({
-      name: next.name.trim() || "Cyber",
-      seeds: next.seeds,
-      light: next.light,
-      dark: next.dark,
-      bodyFont: resolveStyleBodyFont(next),
-      ...typography,
-    }),
-  );
-}
-
-/** Restore Cyber to built-in palettes. */
-export function resetCyberAppearanceStyle() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(CYBER_STYLE_KEY);
-}
-
-export function hasCyberAppearanceOverrides(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(CYBER_STYLE_KEY) != null;
-}
-
 let migratedLegacy = false;
 
-/** One-time: old ThemeMode `"cyber"` → theme dark + style cyber. */
-export function migrateLegacyCyberTheme() {
+/**
+ * One-time cleanup after Cyber was removed: the old `"cyber"` theme mode becomes dark,
+ * saved Cyber edits (for example a renamed copy) become a custom theme, and a selected
+ * Cyber falls back to that copy or to Classic.
+ */
+export function migrateRemovedCyberStyle() {
   if (typeof window === "undefined" || migratedLegacy) return;
   migratedLegacy = true;
   try {
-    if (localStorage.getItem(LEGACY_THEME_KEY) !== "cyber") return;
-    localStorage.setItem(LEGACY_THEME_KEY, "dark");
-    if (!localStorage.getItem(STYLE_ID_KEY)) {
-      localStorage.setItem(STYLE_ID_KEY, CYBER_STYLE_ID);
+    if (localStorage.getItem(LEGACY_THEME_KEY) === "cyber") {
+      localStorage.setItem(LEGACY_THEME_KEY, "dark");
     }
+    const selected = localStorage.getItem(STYLE_ID_KEY) === LEGACY_CYBER_STYLE_ID;
+    let replacementId: string | null = null;
+    const raw = localStorage.getItem(LEGACY_CYBER_STYLE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<CustomAppearanceStyle>;
+      const light = normalizeStylePalette(parsed.light);
+      const dark = normalizeStylePalette(parsed.dark);
+      if (light && dark) {
+        const style: CustomAppearanceStyle = {
+          id: `style-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name:
+            typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : "Cyber",
+          seeds: isStyleBasics(parsed.seeds) ? { ...parsed.seeds } : seedsFromPalette(light),
+          light,
+          dark,
+          bodyFont: isAppearanceBodyFontId(parsed.bodyFont)
+            ? parsed.bodyFont
+            : bodyFontFromLegacyMono(parsed.monoContent),
+          ...resolveStyleTypography(parsed),
+        };
+        upsertCustomAppearanceStyle(style);
+        replacementId = style.id;
+      }
+      localStorage.removeItem(LEGACY_CYBER_STYLE_KEY);
+    }
+    if (selected) localStorage.setItem(STYLE_ID_KEY, replacementId ?? CLASSIC_STYLE_ID);
   } catch {
     // ignore
   }
@@ -449,12 +352,11 @@ export function migrateLegacyCyberTheme() {
 
 export function readStoredAppearanceStyleId(): AppearanceStyleId {
   if (typeof window === "undefined") return CLASSIC_STYLE_ID;
-  migrateLegacyCyberTheme();
+  migrateRemovedCyberStyle();
   try {
     const raw = localStorage.getItem(STYLE_ID_KEY);
     // Legacy id from before Classic was named.
     if (!raw || raw === "default" || raw === CLASSIC_STYLE_ID) return CLASSIC_STYLE_ID;
-    if (raw === CYBER_STYLE_ID) return CYBER_STYLE_ID;
     if (raw === EINK_STYLE_ID) return EINK_STYLE_ID;
     const customs = readCustomAppearanceStyles();
     if (customs.some((s) => s.id === raw)) return raw;
@@ -583,7 +485,7 @@ function palettesMatchForDuplicate(a: StylePalette, b: StylePalette): boolean {
 
 /**
  * New custom theme cloned from the style currently on screen.
- * Classic / Cyber keep the visible light or dark look; custom themes copy their seeds.
+ * Built-in themes keep the visible light or dark look; custom themes copy their seeds.
  */
 export function duplicateAppearanceStyle(
   source: CustomAppearanceStyle,
@@ -659,12 +561,12 @@ export function setLiveAppearancePreview(
 }
 
 function isFixedAppearanceStyle(id: string): boolean {
-  return id === CLASSIC_STYLE_ID || id === CYBER_STYLE_ID || id === EINK_STYLE_ID;
+  return id === CLASSIC_STYLE_ID || id === EINK_STYLE_ID;
 }
 
 function markAppearanceStyle(root: HTMLElement, id: string) {
   root.dataset.style = id;
-  root.classList.toggle("cyber", id === CYBER_STYLE_ID);
+  root.classList.remove("cyber");
   root.classList.toggle("eink", id === EINK_STYLE_ID);
   root.classList.toggle("harvy-custom-style", !isFixedAppearanceStyle(id));
   root.classList.remove("harvy-mono-content");
@@ -689,7 +591,7 @@ function paintAppearanceStyle(style: CustomAppearanceStyle, resolvedTheme: Resol
     return;
   }
 
-  // Draft / custom / edited cyber: always paint the in-memory palette + body font.
+  // Draft / custom: always paint the in-memory palette + body font.
   const palette = resolvedTheme === "dark" ? style.dark : style.light;
   applyInlinePalette(root, palette, bodyFont, resolveStyleTypography(style));
   syncNativeWindowBackground(resolvedTheme, id);
@@ -697,7 +599,7 @@ function paintAppearanceStyle(style: CustomAppearanceStyle, resolvedTheme: Resol
 
 /**
  * Apply an appearance style on top of the resolved light/dark theme.
- * Classic uses CSS theme tokens. Cyber uses `.cyber` plus optional saved overrides.
+ * Classic uses CSS theme tokens.
  * E-ink uses `.eink` CSS tokens (light, or night when `.dark` is set).
  * Custom styles set CSS variables inline.
  * If a live preview draft is active, that wins until cleared.
@@ -729,21 +631,6 @@ export function applyAppearanceStyle(styleId: AppearanceStyleId, resolvedTheme: 
     return;
   }
 
-  if (id === CYBER_STYLE_ID) {
-    const cyber = readCyberAppearanceStyle();
-    const bodyFont = resolveStyleBodyFont(cyber);
-    ensureAppearanceBodyFontLoaded(bodyFont);
-    if (hasCyberAppearanceOverrides()) {
-      const palette = resolvedTheme === "dark" ? cyber.dark : cyber.light;
-      applyInlinePalette(root, palette, bodyFont, resolveStyleTypography(cyber));
-    } else {
-      clearInlineStyleTokens(root);
-      root.style.setProperty("--font-content", appearanceBodyFontStack(bodyFont));
-    }
-    syncNativeWindowBackground(resolvedTheme, id);
-    return;
-  }
-
   const custom = readCustomAppearanceStyles().find((s) => s.id === id);
   if (!custom) {
     clearInlineStyleTokens(root);
@@ -764,11 +651,6 @@ export function stageBackgroundRgb(
   resolvedTheme: ResolvedTheme,
   styleId: AppearanceStyleId,
 ): [number, number, number] {
-  if (styleId === CYBER_STYLE_ID) {
-    const cyber = readCyberAppearanceStyle();
-    const hex = resolvedTheme === "dark" ? cyber.dark.stage : cyber.light.stage;
-    return hexToRgb(hex) ?? (resolvedTheme === "dark" ? [0, 7, 7] : [242, 251, 251]);
-  }
   if (styleId === EINK_STYLE_ID) {
     const hex = resolvedTheme === "dark" ? EINK_DARK_PALETTE.stage : EINK_LIGHT_PALETTE.stage;
     return hexToRgb(hex) ?? (resolvedTheme === "dark" ? [30, 26, 20] : [244, 241, 234]);

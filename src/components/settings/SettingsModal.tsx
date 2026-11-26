@@ -34,18 +34,14 @@ import {
 import { listenFontsCatalogChanged, openAddFontsWindow } from "../../features/fonts/addFontsPopout";
 import {
   applyAppearanceStyle,
-  CYBER_STYLE_ID,
   CLASSIC_STYLE_ID,
   EINK_STYLE_ID,
   duplicateAppearanceStyle,
   deleteCustomAppearanceStyle,
-  hasCyberAppearanceOverrides,
   builtInClassicAppearanceStyle,
   builtInEinkAppearanceStyle,
-  readCyberAppearanceStyle,
   readCustomAppearanceStyles,
   resetClassicTypography,
-  resetCyberAppearanceStyle,
   resolveStyleBodyFont,
   resolveStyleTypography,
   seedsFromStyle,
@@ -54,7 +50,6 @@ import {
   styleWithSeeds,
   upsertCustomAppearanceStyle,
   writeClassicTypography,
-  writeCyberAppearanceStyle,
   type AppearanceStyleId,
   type CustomAppearanceStyle,
   type StyleBasics,
@@ -997,7 +992,6 @@ function AppearancePanel({
   systemPrefersDark: boolean;
 }) {
   const [customStyles, setCustomStyles] = useState(() => readCustomAppearanceStyles());
-  const [cyberStyle, setCyberStyle] = useState(() => readCyberAppearanceStyle());
   const [editor, setEditor] = useState<CustomAppearanceStyle | null>(null);
   const [systemTypography, setSystemTypography] = useState(readSystemTypography);
 
@@ -1041,7 +1035,6 @@ function AppearancePanel({
 
   function currentAppearanceStyle(): CustomAppearanceStyle {
     if (editor) return editor;
-    if (appearanceStyleId === CYBER_STYLE_ID) return cyberStyle;
     if (appearanceStyleId === EINK_STYLE_ID) return builtInEinkAppearanceStyle();
     if (appearanceStyleId === CLASSIC_STYLE_ID) return builtInClassicAppearanceStyle();
     return (
@@ -1058,12 +1051,6 @@ function AppearancePanel({
     beginEditing(style);
   }
 
-  function openEditCyber() {
-    const current = readCyberAppearanceStyle();
-    setCyberStyle(current);
-    beginEditing(current);
-  }
-
   function openEditClassic() {
     beginEditing(builtInClassicAppearanceStyle());
   }
@@ -1078,21 +1065,6 @@ function AppearancePanel({
       applyAppearanceStyle(CLASSIC_STYLE_ID, resolvedTheme);
       return;
     }
-    if (editor.id === CYBER_STYLE_ID) {
-      writeCyberAppearanceStyle({
-        ...editor,
-        id: CYBER_STYLE_ID,
-        name: editor.name.trim() || "Cyber",
-      });
-      const next = readCyberAppearanceStyle();
-      setCyberStyle(next);
-      setEditor(null);
-      setLiveAppearancePreview(null, resolvedTheme);
-      onAppearanceStyleIdChange(CYBER_STYLE_ID);
-      applyAppearanceStyle(CYBER_STYLE_ID, resolvedTheme);
-      return;
-    }
-
     const named = {
       ...editor,
       name: editor.name.trim() || "New theme",
@@ -1114,14 +1086,6 @@ function AppearancePanel({
     if (!editor) return;
     if (editor.id === CLASSIC_STYLE_ID) {
       resetClassicTypography();
-      setEditor(null);
-      setLiveAppearancePreview(null, resolvedTheme);
-      applyAppearanceStyle(appearanceStyleId, resolvedTheme);
-      return;
-    }
-    if (editor.id === CYBER_STYLE_ID) {
-      resetCyberAppearanceStyle();
-      setCyberStyle(readCyberAppearanceStyle());
       setEditor(null);
       setLiveAppearancePreview(null, resolvedTheme);
       applyAppearanceStyle(appearanceStyleId, resolvedTheme);
@@ -1157,9 +1121,6 @@ function AppearancePanel({
     };
   }, []);
 
-  const cyberPreviewSource = editor?.id === CYBER_STYLE_ID ? editor : cyberStyle;
-  const cyberPreview =
-    resolvedTheme === "dark" ? cyberPreviewSource.dark : cyberPreviewSource.light;
   const einkStyle = builtInEinkAppearanceStyle();
   const einkPreview = resolvedTheme === "dark" ? einkStyle.dark : einkStyle.light;
 
@@ -1231,21 +1192,6 @@ function AppearancePanel({
             onEdit={openEditClassic}
           />
           <StylePreviewCard
-            label={
-              editor?.id === CYBER_STYLE_ID ? editor.name : cyberStyle.name
-            }
-            selected={appearanceStyleId === CYBER_STYLE_ID}
-            bodyFontId={resolveStyleBodyFont(
-              editor?.id === CYBER_STYLE_ID ? editor : cyberStyle,
-            )}
-            previewStyle={{
-              backgroundColor: cyberPreview.page,
-              color: cyberPreview.ink,
-            }}
-            onSelect={() => selectStyle(CYBER_STYLE_ID)}
-            onEdit={openEditCyber}
-          />
-          <StylePreviewCard
             label="E-ink"
             subtitle={resolvedTheme === "dark" ? "Night" : "Light"}
             selected={appearanceStyleId === EINK_STYLE_ID}
@@ -1299,16 +1245,12 @@ function AppearancePanel({
           onDelete={
             editor.id === CLASSIC_STYLE_ID
               ? removeEditorStyle
-              : editor.id === CYBER_STYLE_ID
-                ? hasCyberAppearanceOverrides()
-                  ? removeEditorStyle
-                  : undefined
-                : customStyles.some((s) => s.id === editor.id)
-                  ? removeEditorStyle
-                  : undefined
+              : customStyles.some((s) => s.id === editor.id)
+                ? removeEditorStyle
+                : undefined
           }
           deleteLabel={
-            editor.id === CLASSIC_STYLE_ID || editor.id === CYBER_STYLE_ID ? "Reset" : "Delete"
+            editor.id === CLASSIC_STYLE_ID ? "Reset" : "Delete"
           }
         />
       ) : null}

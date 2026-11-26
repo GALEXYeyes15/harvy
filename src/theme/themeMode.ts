@@ -1,7 +1,7 @@
 import { ensureAllUserAppearanceFontsLoaded } from "./appearanceFonts";
 import {
   applyAppearanceStyle,
-  migrateLegacyCyberTheme,
+  migrateRemovedCyberStyle,
   readStoredAppearanceStyleId,
 } from "./appearanceStyles";
 import { applySystemTypography } from "./systemTypography";
@@ -14,7 +14,7 @@ const STORAGE_KEY = "harvy-theme";
 
 export function readStoredThemeMode(): ThemeMode {
   if (typeof window === "undefined") return "system";
-  migrateLegacyCyberTheme();
+  migrateRemovedCyberStyle();
   const v = localStorage.getItem(STORAGE_KEY);
   if (v === "light" || v === "dark" || v === "system") return v;
   return "system";
@@ -42,7 +42,7 @@ export function applyResolvedTheme(resolved: ResolvedTheme) {
 /** Restore theme + style before React paints (avoids a light/dark flash). */
 export function bootStoredTheme() {
   if (typeof window === "undefined") return;
-  migrateLegacyCyberTheme();
+  migrateRemovedCyberStyle();
   const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const resolved = resolveTheme(readStoredThemeMode(), systemDark);
   applyResolvedTheme(resolved);

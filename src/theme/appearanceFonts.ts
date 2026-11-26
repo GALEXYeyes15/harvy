@@ -85,7 +85,7 @@ export const APPEARANCE_BODY_FONTS: AppearanceBodyFontOption[] = [
 ];
 
 export const DEFAULT_BODY_FONT_ID: AppearanceBodyFontId = "libre-baskerville";
-export const CYBER_BODY_FONT_ID: AppearanceBodyFontId = "ibm-plex-mono";
+export const MONO_BODY_FONT_ID: AppearanceBodyFontId = "ibm-plex-mono";
 
 export const APPEARANCE_FONTS_CHANGED_EVENT = "harvy-appearance-fonts-changed";
 
@@ -165,7 +165,7 @@ export function isUserAppearanceFontsStorageKey(key: string | null): boolean {
 
 /** Migrate legacy `monoContent` boolean into a body font id. */
 export function bodyFontFromLegacyMono(monoContent: unknown): AppearanceBodyFontId {
-  return monoContent === true ? CYBER_BODY_FONT_ID : DEFAULT_BODY_FONT_ID;
+  return monoContent === true ? MONO_BODY_FONT_ID : DEFAULT_BODY_FONT_ID;
 }
 
 export type { UserAppearanceFont };

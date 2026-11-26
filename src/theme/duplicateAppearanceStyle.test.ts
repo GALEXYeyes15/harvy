@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CYBER_BODY_FONT_ID } from "./appearanceFonts";
 import {
   builtInClassicAppearanceStyle,
-  builtInCyberAppearanceStyle,
   builtInEinkAppearanceStyle,
   DEFAULT_DARK_PALETTE,
   DEFAULT_LIGHT_PALETTE,
@@ -59,14 +57,6 @@ describe("duplicateAppearanceStyle", () => {
     const copy = duplicateAppearanceStyle(builtInClassicAppearanceStyle(), "light");
     expect(copy.light.canvas).toBe(DEFAULT_LIGHT_PALETTE.canvas);
     expect(copy.light.ink).toBe(DEFAULT_LIGHT_PALETTE.ink);
-  });
-
-  it("copies Cyber’s visible look and body font", () => {
-    const cyber = builtInCyberAppearanceStyle();
-    const copy = duplicateAppearanceStyle(cyber, "dark");
-    expect(copy.bodyFont).toBe(CYBER_BODY_FONT_ID);
-    expect(copy.light.canvas).toBe(cyber.dark.canvas);
-    expect(copy.dark.accent).toBe(cyber.dark.accent);
   });
 
   it("keeps the E-ink night palette when duplicating E-ink in dark mode", () => {
