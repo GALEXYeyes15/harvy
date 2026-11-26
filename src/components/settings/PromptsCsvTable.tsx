@@ -20,7 +20,7 @@ export function PromptsCsvTable({
 }: PromptsCsvTableProps) {
   return (
     <div
-      className={`overflow-auto rounded-lg bg-mist/90 ring-1 ring-line/15 dark:bg-ink/[0.04] dark:ring-white/8 ${maxHeightClass ?? ""} ${fillHeight ? "flex flex-col" : ""}`}
+      className={`overflow-auto rounded-lg bg-mist/90 border border-[color:color-mix(in_oklab,var(--color-ink)_14%,transparent)] dark:bg-ink/[0.04] ${maxHeightClass ?? ""} ${fillHeight ? "flex flex-col" : ""}`}
     >
       <table className={`h-auto w-full table-fixed border-collapse text-left ${fillHeight ? "shrink-0" : ""}`}>
         <thead>
@@ -39,7 +39,7 @@ export function PromptsCsvTable({
             return (
               <tr
                 key={prompt.id}
-                className="border-b border-line/12 last:border-b-0 dark:border-white/[0.06]"
+                className="border-b border-[color:color-mix(in_oklab,var(--color-ink)_8%,transparent)] last:border-b-0 "
               >
                 <td className="align-top">
                   <input
@@ -55,7 +55,7 @@ export function PromptsCsvTable({
                     data-prompt-field="text"
                   />
                 </td>
-                <td className="align-middle border-l border-line/12 text-center dark:border-white/[0.06]">
+                <td className="align-middle border-l border-[color:color-mix(in_oklab,var(--color-ink)_8%,transparent)] text-center ">
                   {locked ? (
                     <span className="px-1.5 py-1 text-[12px] text-muted/40" aria-label="Default prompt cannot be removed">
                       —

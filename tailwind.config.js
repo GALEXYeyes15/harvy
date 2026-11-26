@@ -14,7 +14,12 @@ export default {
         ink: "var(--color-ink)",
         muted: "var(--color-muted)",
         accent: "var(--color-accent)",
-        line: "var(--color-line)",
+        // A plain `var()` can't take Tailwind's opacity modifier: `border-line/20` etc. generated
+        // nothing and fell back to Tailwind's default gray border / blue ring. Mix instead.
+        line: ({ opacityValue }) =>
+          opacityValue === undefined
+            ? "var(--color-line)"
+            : `color-mix(in srgb, var(--color-line) calc(${opacityValue} * 100%), transparent)`,
         panel: "var(--color-panel)",
         stage: "var(--color-stage)",
         mist: "var(--color-mist)",

@@ -120,13 +120,20 @@ const SETTINGS_PANEL_SIZE =
 const PHRASES_EXPAND_PANEL_SIZE =
   "h-[min(720px,88vh)] w-[min(960px,92vw)] max-h-[88vh] max-w-[92vw]";
 
-const SETTINGS_DIVIDE_X = "divide-x divide-line/[0.12] dark:divide-[#6f6f6f]";
-const SETTINGS_DIVIDE_Y = "divide-y divide-line/[0.12] dark:divide-white/[0.08]";
+/**
+ * Lines mix from the theme's ink so they stay faint in every theme. (`line/[opacity]`
+ * can't apply to the `var(--color-line)` token and fell back to Tailwind's light gray.)
+ */
+const SETTINGS_DIVIDE_Y =
+  "divide-y divide-[color:color-mix(in_oklab,var(--color-ink)_8%,transparent)]";
+/** Thin outline around each settings group. */
+const SETTINGS_OUTLINE =
+  "border border-[color:color-mix(in_oklab,var(--color-ink)_14%,transparent)]";
 /** Apple System Settings–style group: solid Boxes (mist) surface. */
-const SETTINGS_BOX = `overflow-hidden rounded-xl bg-mist ${SETTINGS_DIVIDE_Y}`;
+const SETTINGS_BOX = `overflow-hidden rounded-xl bg-mist ${SETTINGS_OUTLINE} ${SETTINGS_DIVIDE_Y}`;
 /** Expandable sidebar cards — no dividers between toggle, chevron, and body. */
-const SETTINGS_BOX_EXPANDABLE = "overflow-hidden rounded-xl bg-mist";
-const SETTINGS_BOX_PAD = "rounded-xl bg-mist px-3.5 py-3";
+const SETTINGS_BOX_EXPANDABLE = `overflow-hidden rounded-xl bg-mist ${SETTINGS_OUTLINE}`;
+const SETTINGS_BOX_PAD = `rounded-xl bg-mist px-3.5 py-3 ${SETTINGS_OUTLINE}`;
 const SETTINGS_INLINE_INPUT =
   "w-[4.5rem] shrink-0 rounded-md border-0 bg-page px-2 py-1.5 text-right text-[13px] text-ink outline-none ring-1 ring-line/15 focus:ring-[var(--color-focus-ring)]/45";
 const SETTINGS_FIELD_INPUT =
@@ -268,7 +275,7 @@ export function SettingsModal({
       panelSizeClassName={SETTINGS_PANEL_SIZE}
       bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
-      <div className={`flex min-h-0 min-w-0 flex-1 overflow-hidden ${SETTINGS_DIVIDE_X}`}>
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
           <nav
             className="flex w-[200px] shrink-0 flex-col gap-0.5 overflow-hidden p-2"
             aria-label="Settings sections"
@@ -630,7 +637,7 @@ function CollectSettingsPanel({
           <div className="pb-3">
             <ul
               ref={listRef}
-              className={`relative rounded-lg bg-page/70 ${SETTINGS_DIVIDE_Y} ${
+              className={`relative rounded-lg bg-page/70 ${SETTINGS_OUTLINE} ${SETTINGS_DIVIDE_Y} ${
                 drag ? "select-none overflow-visible" : "overflow-hidden"
               }`}
             >
@@ -1293,7 +1300,7 @@ function StylePreviewCard({
           title={subtitle ? `${label} ${subtitle}` : label}
           className={`flex h-[4.75rem] w-[4.75rem] items-center justify-center rounded-xl text-[1.35rem] font-medium tracking-tight transition-[box-shadow] ${
             selected
-              ? "ring-2 ring-ink/55 dark:ring-white/55"
+              ? "ring-2 ring-[color:color-mix(in_oklab,var(--color-ink)_55%,transparent)]"
               : "ring-1 ring-line/30 hover:ring-line/55 dark:ring-white/10"
           } ${previewClassName ?? ""}`}
           style={{ ...previewStyle, fontFamily: bodyFont.stack }}
@@ -1430,7 +1437,7 @@ function BodyFontPicker({
               );
             })}
           </ul>
-          <div className="border-t border-line/20 p-1">
+          <div className="border-t border-[color:color-mix(in_oklab,var(--color-ink)_8%,transparent)] p-1">
             <button
               type="button"
               onClick={() => {
@@ -1738,7 +1745,7 @@ function StyleEditorForm({
   const inkColor = normalizeHexColor(seeds.ink);
 
   return (
-    <div className="space-y-4 rounded-lg bg-stage/80 px-3.5 py-3 ring-1 ring-line/15 dark:bg-ink/[0.02]">
+    <div className={`space-y-4 rounded-lg bg-stage/80 px-3.5 py-3 dark:bg-ink/[0.02] ${SETTINGS_OUTLINE}`}>
       <div className="flex items-center justify-between gap-3">
         <p className="text-[13px] font-semibold text-ink">Edit theme</p>
         <div className="flex items-center gap-2">
@@ -2719,7 +2726,7 @@ function AiCheckExpandableSettings({
           initialConfig={aiConfig}
           onConfigChange={onAiConfigChange}
         />
-        <ul className={`overflow-hidden rounded-lg bg-page/70 ${SETTINGS_DIVIDE_Y}`}>
+        <ul className={`overflow-hidden rounded-lg bg-page/70 ${SETTINGS_OUTLINE} ${SETTINGS_DIVIDE_Y}`}>
           <ToggleRow
             id="enable-ai-check"
             label="Show AI Check"
@@ -2860,7 +2867,7 @@ function QuickLinksExpandableSettings({
           {links.length === 0 ? (
             <p className="pt-1 text-[12px] text-muted/65">No links yet.</p>
           ) : (
-            <ul className={`${SETTINGS_DIVIDE_Y} mt-2 overflow-hidden rounded-lg bg-page/70`}>
+            <ul className={`${SETTINGS_OUTLINE} ${SETTINGS_DIVIDE_Y} mt-2 overflow-hidden rounded-lg bg-page/70`}>
               {links.map((link) => (
                 <li key={link.id} className="flex items-center gap-2 px-2.5 py-2">
                   <div className="min-w-0 flex-1">

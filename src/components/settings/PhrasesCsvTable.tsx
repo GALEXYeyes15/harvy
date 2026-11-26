@@ -20,7 +20,7 @@ export function PhrasesCsvTable({
 }: PhrasesCsvTableProps) {
   return (
     <div
-      className={`overflow-auto rounded-lg bg-mist/90 ring-1 ring-line/15 dark:bg-ink/[0.04] dark:ring-white/8 ${maxHeightClass ?? ""} ${fillHeight ? "flex flex-col" : ""}`}
+      className={`overflow-auto rounded-lg bg-mist/90 border border-[color:color-mix(in_oklab,var(--color-ink)_14%,transparent)] dark:bg-ink/[0.04] ${maxHeightClass ?? ""} ${fillHeight ? "flex flex-col" : ""}`}
     >
       <table className={`h-auto w-full table-fixed border-collapse text-left ${fillHeight ? "shrink-0" : ""}`}>
         <thead>
@@ -47,7 +47,7 @@ export function PhrasesCsvTable({
             phrases.map((phrase) => (
               <tr
                 key={phrase.id}
-                className="border-b border-line/12 last:border-b-0 dark:border-white/[0.06]"
+                className="border-b border-[color:color-mix(in_oklab,var(--color-ink)_8%,transparent)] last:border-b-0 "
               >
                 <td className="align-top">
                   <input
@@ -61,7 +61,7 @@ export function PhrasesCsvTable({
                     data-phrase-field="quote"
                   />
                 </td>
-                <td className="align-top border-l border-line/12 dark:border-white/[0.06]">
+                <td className="align-top border-l border-[color:color-mix(in_oklab,var(--color-ink)_8%,transparent)] ">
                   <input
                     type="text"
                     value={phrase.author}
@@ -73,7 +73,7 @@ export function PhrasesCsvTable({
                     data-phrase-field="author"
                   />
                 </td>
-                <td className="align-middle border-l border-line/12 text-center dark:border-white/[0.06]">
+                <td className="align-middle border-l border-[color:color-mix(in_oklab,var(--color-ink)_8%,transparent)] text-center ">
                   <button
                     type="button"
                     onClick={() => onRemove(phrase.id)}
