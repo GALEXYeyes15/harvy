@@ -4386,14 +4386,8 @@ export function AppShell() {
     <>
       {hideFocusEditButtons ? null : (
         <FocusEditChromeButtons
-          editMarksOn={editAnalysisOpen}
-          editMarksDisabled={readabilityPanelOpen}
           showShortcutHints={false}
           onStartFocus={startFocusMode}
-          onToggleEditMarks={() => {
-            if (readabilityPanelOpen) return;
-            setEditAnalysisOpen((open) => !open);
-          }}
         />
       )}
       <ChromeSidebarToggleButton
@@ -4680,14 +4674,8 @@ export function AppShell() {
         inert={hideFocusEditButtons}
       >
         <FocusEditChromeButtons
-          editMarksOn={editAnalysisOpen}
-          editMarksDisabled={readabilityPanelOpen}
           showShortcutHints={!iosClient}
           onStartFocus={startFocusMode}
-          onToggleEditMarks={() => {
-            if (readabilityPanelOpen) return;
-            setEditAnalysisOpen((open) => !open);
-          }}
         />
       </div>
     </div>

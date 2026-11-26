@@ -3256,10 +3256,6 @@ html.harvy-ios .harvy-chrome-icon-btn:active {
   background: color-mix(in oklab, var(--color-ink) 8%, transparent);
 }
 
-html.harvy-ios .harvy-edit-mark {
-  font-size: 17px;
-}
-
 html.harvy-ios .harvy-workspace-row {
   min-height: 44px;
   font-size: 15px;
@@ -3541,10 +3537,6 @@ html.eink .harvy-settings-switch--off {
 
 html.eink .harvy-checkbox--checked .text-white {
   color: var(--color-canvas) !important;
-}
-
-html.eink .harvy-chrome-icon-btn.hover\:text-white:hover {
-  color: var(--color-ink) !important;
 }
 
 html.eink .harvy-chrome-icon-btn.bg-accent\/15 {

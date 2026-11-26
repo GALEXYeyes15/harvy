@@ -2335,8 +2335,8 @@ function EditorPanel({
         />
         <ToggleRow
           id="keep-focus-edit-visible-while-typing"
-          label="Focus and Edit"
-          description="Clock and edit-mark buttons beside the tools panel."
+          label="Focus Button"
+          description="Clock button beside the tools panel."
           checked={focusVisibilityPrefs.keepFocusEditVisibleWhileTyping}
           onChange={(v) => onFocusVisibilityPrefChange({ keepFocusEditVisibleWhileTyping: v })}
         />
