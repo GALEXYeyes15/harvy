@@ -274,12 +274,21 @@ export function SettingsModal({
       closeLabel="Close settings"
       panelSizeClassName={SETTINGS_PANEL_SIZE}
       bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden"
+      panelClassName="border border-[color:color-mix(in_oklab,var(--color-ink)_15%,transparent)]"
+      titleClassName="sr-only"
+      headerClassName="absolute right-3 top-3 z-10 flex items-center"
     >
       <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
           <nav
-            className="flex w-[200px] shrink-0 flex-col gap-0.5 overflow-hidden p-2"
+            className={`m-2 mr-0 flex w-[200px] shrink-0 flex-col gap-0.5 overflow-y-auto rounded-[10px] bg-mist p-2 ${SETTINGS_OUTLINE}`}
             aria-label="Settings sections"
           >
+            <p
+              className="px-2.5 pb-3 pt-1.5 text-[15px] font-semibold tracking-tight text-ink"
+              aria-hidden
+            >
+              Settings
+            </p>
             {SETTINGS_NAV.map((item) => {
               const active = activeSection === item.id;
               return (
@@ -1142,8 +1151,8 @@ function AppearancePanel({
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted/50">
           System
         </p>
-        <div className={`space-y-3 ${SETTINGS_BOX_PAD}`}>
-          <div className="flex items-center justify-between gap-4">
+        <div className={`rounded-xl bg-mist px-3.5 ${SETTINGS_OUTLINE} ${SETTINGS_DIVIDE_Y}`}>
+          <div className="flex items-center justify-between gap-4 py-3">
             <p className="text-[13px] font-medium text-ink">Body text</p>
             <TypographyStepper
               value={systemTypography.bodyFontSizePx}
@@ -1158,7 +1167,7 @@ function AppearancePanel({
               }}
             />
           </div>
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 py-3">
             <p className="text-[13px] font-medium text-ink">Line expansion</p>
             <TypographyStepper
               value={systemTypography.lineExpansionPx}
