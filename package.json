@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "tauri": "tauri",
+    "stop": "pkill -f \"$PWD/node_modules/.bin/tauri dev\" 2>/dev/null || true; pkill -f '^target/debug/harvy( |$)' 2>/dev/null || true; lsof -ti tcp:1420 -sTCP:LISTEN | xargs kill 2>/dev/null || true",
     "tauri:build": "tauri build",
     "ios:build": "tauri ios build --export-method debugging --ci",
     "ios:install": "rm -rf /tmp/harvy-ipa && mkdir -p /tmp/harvy-ipa && unzip -q src-tauri/gen/apple/build/arm64/*.ipa -d /tmp/harvy-ipa && xcrun devicectl device install app --device 00008130-0004516138EB8D3A /tmp/harvy-ipa/Payload/*.app",
